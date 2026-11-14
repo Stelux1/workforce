@@ -150,3 +150,11 @@ describe("dataError / plainError", () => {
     expect(describeError(e, "rs").key).toBe("noRows");
   });
 });
+
+describe("trošak projekta bez kursa (migracija 20261114220000)", () => {
+  it("poruka baze ostaje na srpskom, a na engleskom se prevodi", () => {
+    const e = { code: "23514", message: "Trošak u RSD mora imati kurs veći od 0 (koliko RSD vredi 1 EUR)" };
+    expect(describeError(e, "rs").text).toBe(e.message);
+    expect(describeError(e, "en").text).toBe("A cost in RSD needs an exchange rate greater than 0 (how many RSD is 1 EUR).");
+  });
+});

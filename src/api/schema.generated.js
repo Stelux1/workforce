@@ -323,7 +323,9 @@ export const TABLE_COLUMNS = {
     "notes",
     "created_date",
     "updated_date",
-    "created_by"
+    "created_by",
+    "eur_rsd_rate",
+    "eur_amount"
   ],
   "projects": [
     "id",

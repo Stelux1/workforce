@@ -14,17 +14,22 @@ import { Skeleton } from "@/components/ui/skeleton";
 import PageHeader from "@/components/shared/PageHeader";
 import { useT } from "@/lib/translations";
 import { useLang } from "@/lib/LanguageContext";
+import { costCurrency, costInEur, rsdToEur, sumCostsEur, validExchangeRate } from "@/lib/payroll/costs";
+import { round2 } from "@/lib/payroll/money";
 import { toast } from "sonner";
+
+const EMPTY_FORM = { amount: "", currency: "EUR", eur_rsd_rate: "", category: "", subcategory: "", notes: "", project_id: "" };
 
 export default function ProjectCostsPage() {
   const t = useT();
   const { lang } = useLang();
+  const l = (en, rs) => (lang === "rs" ? rs : en);
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [search, setSearch] = useState("");
   const [selectedProject, setSelectedProject] = useState("all");
-  const [formData, setFormData] = useState({ amount: "", currency: "EUR", category: "", subcategory: "", notes: "", project_id: "" });
+  const [formData, setFormData] = useState(EMPTY_FORM);
 
   const { data: projects = [] } = useQuery({
     queryKey: ["projects"],
@@ -46,7 +51,7 @@ export default function ProjectCostsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["project-costs-all"] });
       queryClient.invalidateQueries({ queryKey: ["project-costs"] });
-      setFormData({ amount: "", currency: "EUR", category: "", subcategory: "", notes: "", project_id: "" });
+      setFormData(EMPTY_FORM);
       setDialogOpen(false);
       toast.success(t("Cost added"));
     },
@@ -71,9 +76,18 @@ export default function ProjectCostsPage() {
       toast.error(t("Fill all required fields"));
       return;
     }
+    // D2: trošak van EUR mora imati kurs > 0 (isto pravilo kao baza, guard_project_cost); EUR iznos računa baza.
+    const isEur = formData.currency === "EUR";
+    const rate = isEur ? null : validExchangeRate(formData.eur_rsd_rate);
+    if (!isEur && rate === null) {
+      toast.error(l(`Enter the exchange rate greater than 0 (how many ${formData.currency} is 1 EUR).`,
+                    `Unesite kurs veći od 0 (koliko ${formData.currency} vredi 1 EUR).`));
+      return;
+    }
     createMutation.mutate({
       amount: parseFloat(formData.amount),
       currency: formData.currency,
+      eur_rsd_rate: rate,
       category: formData.category,
       subcategory: formData.subcategory || "",
       notes: formData.notes,
@@ -87,12 +101,17 @@ export default function ProjectCostsPage() {
     return matchSearch && matchProject;
   });
 
-  const totalEUR = filtered.filter(c => (c.currency || "EUR") === "EUR").reduce((sum, c) => sum + (c.amount || 0), 0);
-  const totalRSD = filtered.filter(c => c.currency === "RSD").reduce((sum, c) => sum + (c.amount || 0), 0);
+  // D2: zbir je u EUR i uključuje RSD troškove po kursu unetom uz trošak (src/lib/payroll/costs.js).
+  // RSD trošak bez kursa nije u zbiru (ni kao 0, ni kao RSD) — prikazuje se posebno kao „nedostaje kurs".
+  const sums = sumCostsEur(filtered);
+  const totalEUR = sums.total;
+  const fromRsd = sums.converted.RSD || { amount: 0, eur: 0 };
+  const missingRsd = sums.missingByCurrency.RSD || 0;
 
+  // Oba stuba su u EUR: troškovi uneti u EUR i troškovi uneti u RSD (preračunati).
   const chartData = [
-    { currency: "EUR", total: totalEUR },
-    { currency: "RSD", total: totalRSD },
+    { currency: "EUR", total: round2(totalEUR - fromRsd.eur) },
+    { currency: "RSD", total: fromRsd.eur },
   ].filter(d => d.total > 0);
 
   const getProjectName = (projectId) => {
@@ -152,16 +171,28 @@ export default function ProjectCostsPage() {
         <Card className="p-4">
           <div className="flex flex-col sm:flex-row gap-6 items-center">
             <div className="flex flex-col sm:flex-row gap-6 flex-1">
-              {totalEUR > 0 && (
-                <div className="flex-1 text-center p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
-                  <p className="text-xs text-muted-foreground mb-1">{lang === "rs" ? "Ukupno EUR" : "Total EUR"}</p>
-                  <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{totalEUR.toFixed(2)} €</p>
-                </div>
-              )}
-              {totalRSD > 0 && (
+              <div className="flex-1 text-center p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
+                <p className="text-xs text-muted-foreground mb-1">{lang === "rs" ? "Ukupno EUR" : "Total EUR"}</p>
+                <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{totalEUR.toFixed(2)} €</p>
+                {fromRsd.eur > 0 && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {l(`incl. RSD costs at the entered rate: ${fromRsd.eur.toFixed(2)} €`, `uključeni RSD troškovi po unetom kursu: ${fromRsd.eur.toFixed(2)} €`)}
+                  </p>
+                )}
+              </div>
+              {(fromRsd.amount > 0 || missingRsd > 0) && (
                 <div className="flex-1 text-center p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
                   <p className="text-xs text-muted-foreground mb-1">{lang === "rs" ? "Ukupno RSD" : "Total RSD"}</p>
-                  <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">{totalRSD.toFixed(2)} RSD</p>
+                  <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">{(fromRsd.amount + missingRsd).toFixed(2)} RSD</p>
+                  {fromRsd.amount > 0 && (
+                    <p className="text-xs text-muted-foreground mt-1">{fromRsd.amount.toFixed(2)} RSD = {fromRsd.eur.toFixed(2)} €</p>
+                  )}
+                  {missingRsd > 0 && (
+                    <p className="text-xs font-medium text-red-600 dark:text-red-400 mt-1">
+                      {l(`${missingRsd.toFixed(2)} RSD missing an exchange rate — not included in the EUR total (${sums.missingRate.length})`,
+                         `${missingRsd.toFixed(2)} RSD nedostaje kurs — nije uračunato u EUR zbir (${sums.missingRate.length})`)}
+                    </p>
+                  )}
                 </div>
               )}
             </div>
@@ -172,7 +203,7 @@ export default function ProjectCostsPage() {
                     <XAxis dataKey="currency" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
                     <YAxis hide />
                     <Tooltip
-                      formatter={(value, name, props) => [`${value.toFixed(2)} ${props.payload.currency}`, lang === "rs" ? "Ukupno" : "Total"]}
+                      formatter={(value, name, props) => [`${value.toFixed(2)} €`, props.payload.currency === "RSD" ? l("From RSD", "Iz RSD") : (lang === "rs" ? "Ukupno" : "Total")]}
                       contentStyle={{ fontSize: 12 }}
                     />
                     <Bar dataKey="total" radius={[6, 6, 0, 0]}>
@@ -213,7 +244,14 @@ export default function ProjectCostsPage() {
                 </div>
                 <div className="flex items-center gap-4 shrink-0">
                   <div className="text-right">
-                    <p className="text-lg font-semibold text-primary">{cost.amount.toFixed(2)} {cost.currency || "EUR"}</p>
+                    <p className="text-lg font-semibold text-primary">{Number(cost.amount).toFixed(2)} {costCurrency(cost)}</p>
+                    {costCurrency(cost) !== "EUR" && (costInEur(cost) === null ? (
+                      <p className="text-xs font-medium text-red-600 dark:text-red-400">{l("missing exchange rate", "nedostaje kurs")}</p>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        = {costInEur(cost).toFixed(2)} € · {l("rate", "kurs")} {Number(cost.eur_rsd_rate)}
+                      </p>
+                    ))}
                   </div>
                   <Button
                     variant="ghost"
@@ -276,6 +314,28 @@ export default function ProjectCostsPage() {
                 </Select>
               </div>
             </div>
+            {formData.currency !== "EUR" && (() => {
+              // Pregled EUR iznosa po istom pravilu kao baza (rsdToEur); sačuvan iznos računa baza.
+              const preview = formData.amount ? rsdToEur(formData.amount, formData.eur_rsd_rate) : null;
+              return (
+                <div className="space-y-2">
+                  <Label>{l(`Exchange rate (${formData.currency} for 1 EUR)`, `Kurs (${formData.currency} za 1 EUR)`)} *</Label>
+                  <Input
+                    type="number"
+                    step="0.0001"
+                    min="0"
+                    placeholder={l("e.g. 117.2", "npr. 117,2")}
+                    value={formData.eur_rsd_rate}
+                    onChange={(e) => setFormData({ ...formData, eur_rsd_rate: e.target.value })}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {preview === null
+                      ? l("The cost is counted in EUR at this rate. No default rate.", "Trošak se u EUR računa po ovom kursu. Nema podrazumevanog kursa.")
+                      : `= ${preview.toFixed(2)} €`}
+                  </p>
+                </div>
+              );
+            })()}
             <div className="space-y-2">
               <Label>{t("Category") || "Kategorija"}</Label>
               <Select value={formData.category} onValueChange={(v) => setFormData({ ...formData, category: v, subcategory: "" })}>

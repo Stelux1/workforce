@@ -12,7 +12,7 @@ import { useT } from "@/lib/translations";
 import { useLang } from "@/lib/LanguageContext";
 import { formatDate, shortDatePattern, longDatePattern } from "@/lib/dateFormat";
 import { TrendingUp, TrendingDown, DollarSign, Receipt, BarChart2, Clock } from "lucide-react";
-import { projectFinancials, projectSummary, timesheetTotals, totalsByClient, totalsByWorker } from "@/lib/payroll/reports";
+import { projectCostTotals, projectFinancials, projectSummary, timesheetTotals, totalsByClient, totalsByWorker } from "@/lib/payroll/reports";
 
 export default function PayrollReports() {
   const t = useT();
@@ -88,7 +88,7 @@ export default function PayrollReports() {
     : costs.filter((c) => c.project_id === selectedProject);
 
   const projApproved = filteredTimesheets.filter((ts) => ts.approval_status === "approved");
-  // D8: ostaje nama = prihod − trošak radnika − troškovi projekta (EUR; RSD nema kurs, D2) — projectFinancials.
+  // D8: ostaje nama = prihod − trošak radnika − troškovi projekta u EUR (RSD po kursu uz trošak, D19) — projectFinancials.
   const selectedFinancials = projectFinancials(projApproved, filteredCosts);
   const projRevenue = selectedFinancials.revenue;
   const projWorkerCost = selectedFinancials.workerCost;
@@ -100,12 +100,13 @@ export default function PayrollReports() {
 
   // Category breakdown
   const categoryTotals = {};
+  // Po kategoriji: EUR (sa preračunatim RSD) i RSD bez kursa, isti zbir kao gore (projectCostTotals).
+  const costsByCategory = {};
   filteredCosts.forEach((c) => {
     const key = c.category || rs("Uncategorized", "Nekategorisano");
-    if (!categoryTotals[key]) categoryTotals[key] = { eur: 0, rsd: 0 };
-    if ((c.currency || "EUR") === "EUR") categoryTotals[key].eur += c.amount || 0;
-    else categoryTotals[key].rsd += c.amount || 0;
+    (costsByCategory[key] ||= []).push(c);
   });
+  for (const [key, list] of Object.entries(costsByCategory)) categoryTotals[key] = projectCostTotals(list);
 
   // Per-project summary (for "all" view) — po project_id, satnice bez projekta u posebnom redu.
   const projectRows = projectSummary({ timesheets: approved, projects, costs }).map((p) => ({
@@ -238,7 +239,7 @@ export default function PayrollReports() {
                     <div>
                       <p className="text-xs text-muted-foreground mb-0.5">{rs("Project costs", "Projektni troškovi")}</p>
                       {costsEUR > 0 && <p className="text-base font-bold text-red-600">{costsEUR.toFixed(2)} €</p>}
-                      {costsRSD > 0 && <p className="text-sm font-semibold text-red-500">{costsRSD.toFixed(2)} RSD</p>}
+                      {costsRSD > 0 && <p className="text-xs text-amber-600">{costsRSD.toFixed(2)} RSD {rs("without exchange rate (not included)", "bez kursa (nije uračunato)")}</p>}
                       {costsEUR === 0 && costsRSD === 0 && <p className="text-base font-bold text-muted-foreground">—</p>}
                     </div>
                   </div>
@@ -297,7 +298,7 @@ export default function PayrollReports() {
                         <div className="text-right">
                           {vals.eur > 0 && <span className="text-sm font-semibold text-primary">{vals.eur.toFixed(2)} €</span>}
                           {vals.eur > 0 && vals.rsd > 0 && <span className="text-sm text-muted-foreground mx-1">·</span>}
-                          {vals.rsd > 0 && <span className="text-sm font-semibold text-amber-600">{vals.rsd.toFixed(2)} RSD</span>}
+                          {vals.rsd > 0 && <span className="text-sm font-semibold text-amber-600">{vals.rsd.toFixed(2)} RSD {rs("without rate", "bez kursa")}</span>}
                         </div>
                       </div>
                     ))}

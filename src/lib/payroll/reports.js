@@ -14,6 +14,7 @@
 
 import { round2, sum2 } from "./money.js";
 import { projectMargin } from "./monthly.js";
+import { sumCostsEur } from "./costs.js";
 
 /** React ključ / oznaka grupe bez ID-a („bez projekta / ručno uneto"). */
 export const UNASSIGNED_KEY = "bez-id";
@@ -92,15 +93,12 @@ export function totalsByClient(timesheets, projects, clients) {
 }
 
 /**
- * Ostali troškovi projekta po valuti. U „ostaje nama" (D8) ulazi samo EUR — RSD nema kurs (D2).
- * TODO(eur_amount): kada `project_costs` dobije `eur_amount`, ovde sabirati njega (jedino mesto za zbir troškova).
+ * Ostali troškovi projekta u EUR (D2, D19): EUR troškovi + troškovi u RSD preračunati po kursu unetom uz trošak
+ * (`sumCostsEur`). `rsd` = RSD troškovi BEZ kursa — nisu uračunati ni kao 0 ni kao RSD, ekran ih prikazuje posebno.
  */
 export function projectCostTotals(costs) {
-  const list = costs || [];
-  return {
-    eur: sum2(list.filter((c) => (c.currency || "EUR") === "EUR").map((c) => amount(c.amount))),
-    rsd: sum2(list.filter((c) => c.currency === "RSD").map((c) => amount(c.amount))),
-  };
+  const s = sumCostsEur(costs || []);
+  return { eur: s.total, rsd: s.missingByCurrency.RSD || 0 };
 }
 
 /** Finansije jednog skupa satnica i troškova: ostaje nama = prihod − trošak radnika − troškovi (EUR), D8. */
@@ -121,7 +119,7 @@ export function projectFinancials(timesheets, costs) {
 }
 
 /**
- * Pregled svih projekata (po `project_id`), sortiran po prihodu. Projekat bez sati i bez EUR troškova se ne
+ * Pregled svih projekata (po `project_id`), sortiran po prihodu. Projekat bez sati i bez troškova u EUR se ne
  * prikazuje. Satnice čiji projekat nije na listi dobijaju svoj red sa snimkom imena (samo prikaz), a satnice
  * bez projekta jedan red `unassigned` sa `snapshotNames`.
  */

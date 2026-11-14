@@ -230,6 +230,9 @@ const DB_MESSAGES_EN = [
   [/^Samo admin može da (zaključa|otključa) mesec$/, "Only an admin can lock or unlock a month."],
   [/^Mora da ostane bar jedan aktivan admin$/, "At least one active admin must remain."],
   [/^Obračun može da se napravi samo za zaključan mesec$/, "A payroll can only be created for a locked month."],
+  // Trošak projekta van EUR mora imati kurs (guard_project_cost, migracija 20261114220000).
+  [/^Trošak u (\S+) mora imati kurs veći od 0 \(koliko \S+ vredi 1 EUR\)$/,
+    "A cost in $1 needs an exchange rate greater than 0 (how many $1 is 1 EUR)."],
 ];
 function dbMessage(raw, lang) {
   if (lang !== "en") return raw;

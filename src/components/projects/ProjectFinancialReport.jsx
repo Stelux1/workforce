@@ -5,6 +5,7 @@ import { TrendingUp, TrendingDown, DollarSign, Receipt, BarChart2, Users } from 
 import { useLang } from "@/lib/LanguageContext";
 import { projectMargin } from "@/lib/payroll/monthly";
 import { sum2 } from "@/lib/payroll/money";
+import { sumCostsEur } from "@/lib/payroll/costs";
 
 export default function ProjectFinancialReport({ project }) {
   const { lang } = useLang();
@@ -36,12 +37,14 @@ export default function ProjectFinancialReport({ project }) {
   const totalWorkerCost = sum2(timesheets.map((ts) => ts.worker_cost || 0));
   const totalHours = timesheets.reduce((sum, ts) => sum + (ts.total_hours || 0), 0);
 
-  // Project costs per currency
-  const costsEUR = costs.filter(c => (c.currency || "EUR") === "EUR").reduce((sum, c) => sum + (c.amount || 0), 0);
-  const costsRSD = costs.filter(c => c.currency === "RSD").reduce((sum, c) => sum + (c.amount || 0), 0);
+  // Troškovi projekta u EUR (D2): RSD troškovi po kursu unetom uz trošak (src/lib/payroll/costs.js).
+  const costSums = sumCostsEur(costs);
+  const costsEUR = costSums.total;
+  const costsFromRsd = costSums.converted.RSD || { amount: 0, eur: 0 };
+  const costsMissingRsd = costSums.missingByCurrency.RSD || 0;
 
-  // D8: ostaje nama = prihod − trošak radnika − ostali troškovi projekta (EUR). RSD troškovi nemaju kurs (D2) i
-  // prikazuju se odvojeno, uz napomenu da nisu oduzeti.
+  // D8: ostaje nama = prihod − trošak radnika − ostali troškovi projekta (EUR, uključeni preračunati RSD).
+  // RSD trošak bez kursa (stari red) nije oduzet — ni kao 0 ni kao RSD — i prikazuje se uz napomenu „nedostaje kurs".
   const grossProfit = projectMargin({ revenue: totalRevenue, laborCost: totalWorkerCost, otherCosts: costsEUR }).remaining;
   const profitMargin = totalRevenue > 0 ? (grossProfit / totalRevenue) * 100 : 0;
   const laborProfit = totalRevenue - totalWorkerCost;
@@ -57,14 +60,16 @@ export default function ProjectFinancialReport({ project }) {
   });
   const employeeRows = Object.values(employeeMap).sort((a, b) => b.hours - a.hours);
 
-  // Cost breakdown by category
-  const categoryTotals = {};
+  // Cost breakdown by category — EUR zbir po kategoriji (isti helper), RSD bez kursa posebno.
+  const categoryCosts = {};
   costs.forEach((c) => {
     const key = c.category || t("Uncategorized", "Nekategorisano");
-    if (!categoryTotals[key]) categoryTotals[key] = { eur: 0, rsd: 0 };
-    if ((c.currency || "EUR") === "EUR") categoryTotals[key].eur += c.amount || 0;
-    else categoryTotals[key].rsd += c.amount || 0;
+    (categoryCosts[key] ||= []).push(c);
   });
+  const categoryTotals = Object.fromEntries(Object.entries(categoryCosts).map(([key, list]) => {
+    const s = sumCostsEur(list);
+    return [key, { eur: s.total, missingRsd: s.missingByCurrency.RSD || 0 }];
+  }));
 
   const getCategoryLabel = (key) => {
     const found = costCategories.find((c) => c.name.toLowerCase() === key?.toLowerCase());
@@ -115,9 +120,14 @@ export default function ProjectFinancialReport({ project }) {
             </div>
             <div>
               <p className="text-xs text-muted-foreground mb-0.5">{t("Project Costs", "Projektni troškovi")}</p>
-              {costsEUR > 0 && <p className="text-base font-bold text-red-600">{costsEUR.toFixed(2)} €</p>}
-              {costsRSD > 0 && <p className="text-sm font-semibold text-red-500">{costsRSD.toFixed(2)} RSD</p>}
-              {costsEUR === 0 && costsRSD === 0 && <p className="text-base font-bold text-muted-foreground">—</p>}
+              {costs.length > 0 && <p className="text-base font-bold text-red-600">{costsEUR.toFixed(2)} €</p>}
+              {costsFromRsd.amount > 0 && (
+                <p className="text-xs text-muted-foreground">{t("incl.", "uklj.")} {costsFromRsd.amount.toFixed(2)} RSD = {costsFromRsd.eur.toFixed(2)} €</p>
+              )}
+              {costsMissingRsd > 0 && (
+                <p className="text-xs font-semibold text-red-500">{costsMissingRsd.toFixed(2)} RSD · {t("missing exchange rate", "nedostaje kurs")}</p>
+              )}
+              {costs.length === 0 && <p className="text-base font-bold text-muted-foreground">—</p>}
             </div>
           </div>
         </Card>
@@ -135,8 +145,8 @@ export default function ProjectFinancialReport({ project }) {
               {totalRevenue > 0 && (
                 <p className="text-xs text-muted-foreground">{profitMargin.toFixed(1)}% · {t("before project costs", "pre troškova projekta")}: {laborProfit.toFixed(2)} €</p>
               )}
-              {costsRSD > 0 && (
-                <p className="text-xs text-amber-600">{t(`RSD costs (${costsRSD.toFixed(2)}) not deducted — no exchange rate`, `RSD troškovi (${costsRSD.toFixed(2)}) nisu oduzeti — nema kursa`)}</p>
+              {costsMissingRsd > 0 && (
+                <p className="text-xs text-amber-600">{t(`RSD costs (${costsMissingRsd.toFixed(2)}) not deducted — missing exchange rate`, `RSD troškovi (${costsMissingRsd.toFixed(2)}) nisu oduzeti — nedostaje kurs`)}</p>
               )}
             </div>
           </div>
@@ -220,9 +230,11 @@ export default function ProjectFinancialReport({ project }) {
               <div key={cat} className="flex items-center justify-between py-2 border-b last:border-0">
                 <span className="text-sm font-medium">{getCategoryLabel(cat)}</span>
                 <div className="text-right">
-                  {vals.eur > 0 && <span className="text-sm font-semibold text-primary">{vals.eur.toFixed(2)} €</span>}
-                  {vals.eur > 0 && vals.rsd > 0 && <span className="text-sm text-muted-foreground mx-1">·</span>}
-                  {vals.rsd > 0 && <span className="text-sm font-semibold text-amber-600">{vals.rsd.toFixed(2)} RSD</span>}
+                  <span className="text-sm font-semibold text-primary">{vals.eur.toFixed(2)} €</span>
+                  {vals.missingRsd > 0 && <span className="text-sm text-muted-foreground mx-1">·</span>}
+                  {vals.missingRsd > 0 && (
+                    <span className="text-sm font-semibold text-amber-600">{vals.missingRsd.toFixed(2)} RSD ({t("missing exchange rate", "nedostaje kurs")})</span>
+                  )}
                 </div>
               </div>
             ))}

@@ -6,6 +6,7 @@ import { computeWorkerMonth, MissingRateError, projectMargin } from "./monthly.j
 import { totalHours, validRate } from "./timesheet.js";
 import { RATE_SOURCES, RateUnitError, resolveRates, resolveSideRate } from "./rates.js";
 import { classifyWeek, HOUR_TYPES, MissingCoefficientError, timesheetAmountsByType } from "./hours.js";
+import { costInEur, rsdToEur, sumCostsEur, validExchangeRate } from "./costs.js";
 import {
   approvalPayload, dailyThresholdOf, dayHours, draftRates, hoursByTypeOf, isMoneyError, overtimeHours, previewAmounts,
 } from "./timesheetRow.js";
@@ -891,6 +892,10 @@ describe("izveštaji: grupisanje po project_id / client_id, ne po imenu", () => 
     const extra = projectSummary({ timesheets: [ts("t7", "E1", "QA-Marko", "P9", "QA-Nepoznat", null, 1, 10, 20)], projects, costs: [] });
     expect(extra.map((r) => [r.key, r.name, r.profit])).toEqual([["P9", "QA-Nepoznat", 10]]);
     expect(projectCostTotals(costs)).toEqual({ eur: 150.3, rsd: 5000 });
+    // RSD trošak sa kursom ulazi u EUR (D19); bez kursa ostaje posebno i ne ulazi u zbir.
+    expect(projectCostTotals([...costs, { project_id: "P1", amount: 11720, currency: "RSD", eur_rsd_rate: 117.2, eur_amount: 100 }]))
+      .toEqual({ eur: 250.3, rsd: 5000 });
+    expect(projectFinancials([], [])).toMatchObject({ hours: 0, revenue: 0, profit: 0, marginPct: null });
     expect(projectFinancials([], [])).toMatchObject({ hours: 0, revenue: 0, profit: 0, marginPct: null });
   });
 
@@ -901,5 +906,59 @@ describe("izveštaji: grupisanje po project_id / client_id, ne po imenu", () => 
       ["E2", "QA-Marko", 0.3, 0.3, 0.3, 0, 1],
       ["E3", "QA-Ana", 12, 144, 240, 96, 12],
     ]);
+  });
+});
+
+// Troškovi projekta u EUR (costs.js, D2). Isti primeri kao pgTAP 06 (supabase/tests/06_troskovi_kurs.test.sql):
+// 11.720 RSD po kursu 117,2 = 100 €; 131,85 RSD po 117,2 = tačno 1,125 € → 1,13 € (pola od nule); 131,84 RSD → 1,12 €;
+// 10.000 RSD po 117,1234 = 85,38 €. Ako se promeni jedan fajl, mora i drugi.
+describe("troškovi projekta u EUR (isti primer kao pgTAP 06)", () => {
+  it("RSD se preračunava po kursu kao baza: round(iznos / kurs, 2), pola od nule", () => {
+    expect(rsdToEur(11720, 117.2)).toBe(100);
+    expect(rsdToEur(131.85, 117.2)).toBe(1.13);
+    expect(rsdToEur(131.84, 117.2)).toBe(1.12);
+    expect(rsdToEur(10000, 117.1234)).toBe(85.38);
+    expect(rsdToEur(2500.5, "117.175")).toBe(21.34);
+  });
+  it("bez kursa > 0 nema EUR iznosa — null, nikad 0", () => {
+    for (const r of [null, undefined, "", 0, -117.2, "abc"]) expect(rsdToEur(1000, r)).toBeNull();
+    expect(validExchangeRate("117.2")).toBe(117.2);
+    expect(validExchangeRate(" 117,2 ")).toBe(117.2);
+    expect(validExchangeRate(0)).toBeNull();
+  });
+  it("costInEur: EUR je iznos, RSD je EUR iznos iz baze, a bez njega iz kursa", () => {
+    expect(costInEur({ amount: 250.5, currency: "EUR" })).toBe(250.5);
+    expect(costInEur({ amount: 40 })).toBe(40); // prazna valuta = EUR
+    expect(costInEur({ amount: 11720, currency: "RSD", eur_rsd_rate: 117.2, eur_amount: "100.00" })).toBe(100);
+    // Važi iznos koji je izračunala baza (ovde namerno drugačiji od iznos / kurs).
+    expect(costInEur({ amount: 11720, currency: "RSD", eur_rsd_rate: 117.2, eur_amount: 99.99 })).toBe(99.99);
+    expect(costInEur({ amount: 131.85, currency: "RSD", eur_rsd_rate: 117.2 })).toBe(1.13); // pregled u formi pre čuvanja
+    expect(costInEur({ amount: 12000, currency: "RSD", eur_rsd_rate: null, eur_amount: null })).toBeNull();
+  });
+  it("zbir u EUR uključuje RSD troškove po unetom kursu; RSD bez kursa se vraća posebno (ni kao 0, ni kao RSD u EUR)", () => {
+    const costs = [
+      { id: "1", amount: 300, currency: "EUR", eur_amount: 300 },
+      { id: "2", amount: 11720, currency: "RSD", eur_rsd_rate: 117.2, eur_amount: 100 },
+      { id: "3", amount: 131.85, currency: "RSD", eur_rsd_rate: 117.2, eur_amount: 1.13 },
+      { id: "4", amount: 12000, currency: "RSD", eur_rsd_rate: null, eur_amount: null },
+      { id: "5", amount: 0.1, currency: "EUR" },
+      { id: "6", amount: 0.2, currency: "EUR" },
+    ];
+    const s = sumCostsEur(costs);
+    expect(s.total).toBe(401.43); // 300 + 100 + 1,13 + 0,1 + 0,2 — bez 12.000 RSD
+    expect(s.counted).toBe(5);
+    expect(s.missingRate.map((c) => c.id)).toEqual(["4"]);
+    expect(s.missingByCurrency).toEqual({ RSD: 12000 });
+    expect(s.converted).toEqual({ RSD: { amount: 11851.85, eur: 101.13 } });
+  });
+  it("prazan spisak: zbir 0, ništa ne fali", () => {
+    expect(sumCostsEur([])).toEqual({ total: 0, counted: 0, missingRate: [], missingByCurrency: {}, converted: {} });
+  });
+  it("ostaje nama (D8) oduzima troškove u EUR, uključujući preračunate RSD", () => {
+    const s = sumCostsEur([
+      { amount: 300, currency: "EUR" },
+      { amount: 11720, currency: "RSD", eur_rsd_rate: 117.2, eur_amount: 100 },
+    ]);
+    expect(projectMargin({ revenue: 1000, laborCost: 450.5, otherCosts: s.total }).remaining).toBe(149.5);
   });
 });

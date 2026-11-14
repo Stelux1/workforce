@@ -41,7 +41,7 @@ Princip (D12): postojeće stranice ostaju iste; menja se izvor podataka i novča
 ## Phase 4 — Profitabilnost
 
 - [ ] [build] Finansijski izveštaj projekta (`ProjectFinancialReport`): satnice po `project_id`, samo odobrene; **ostaje nama = prihod − trošak radnika − troškovi projekta**; za mesece sa obračunom trošak radnika = bruto 2 iz obračuna, za otvorene meseci procena označena kao „procena". Accept: brojke se slažu sa `projectMargin`; preimenovanje projekta ne menja brojke.
-- [ ] [build] Troškovi projekta u RSD dobijaju kurs i EUR iznos. Accept: zbir troškova u EUR uključuje RSD troškove preračunate po unetom kursu.
+- [x] [build] Troškovi projekta u RSD dobijaju kurs i EUR iznos. Accept: zbir troškova u EUR uključuje RSD troškove preračunate po unetom kursu.
 - [ ] [build] Kontrolna tabla obračuna, Izveštaji o platama i Klijenti: po `project_id`/`client_id`, a ne po imenu; „Payroll Due" iz mesečnog obračuna. Accept: preimenovanje klijenta ne menja nijednu brojku.
 
 ## Phase 5 — Ostalo

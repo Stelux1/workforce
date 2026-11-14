@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
+import { costCurrency, sumCostsEur } from "@/lib/payroll/costs";
 
 const CATEGORIES = {
   materials: "Materijali",
@@ -62,7 +63,9 @@ export default function ProjectCosts({ projectId }) {
     });
   };
 
-  const totalCosts = costs.reduce((sum, cost) => sum + (cost.amount || 0), 0);
+  // Zbir u EUR (D2): RSD troškovi po svom kursu; RSD bez kursa nije u zbiru (src/lib/payroll/costs.js).
+  const costSums = sumCostsEur(costs);
+  const totalCosts = costSums.total;
 
   return (
     <div className="space-y-4">
@@ -102,7 +105,7 @@ export default function ProjectCosts({ projectId }) {
                 </div>
                 <div className="flex items-center gap-4 shrink-0">
                   <div className="text-right">
-                    <p className="text-lg font-semibold text-primary">{cost.amount.toFixed(2)}€</p>
+                    <p className="text-lg font-semibold text-primary">{Number(cost.amount).toFixed(2)} {costCurrency(cost) === "EUR" ? "€" : costCurrency(cost)}</p>
                   </div>
                   <Button
                     variant="ghost"
@@ -122,6 +125,11 @@ export default function ProjectCosts({ projectId }) {
               <span className="font-semibold">Ukupno Projektnih Troškova:</span>
               <span className="text-2xl font-bold text-primary">{totalCosts.toFixed(2)}€</span>
             </div>
+            {costSums.missingRate.length > 0 && (
+              <p className="text-xs text-amber-600 mt-1">
+                {(costSums.missingByCurrency.RSD || 0).toFixed(2)} RSD — nedostaje kurs, nije uračunato u zbir
+              </p>
+            )}
           </Card>
         </div>
       )}
