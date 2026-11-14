@@ -1,0 +1,64 @@
+{
+  "name": "PayrollRecord",
+  "type": "object",
+  "properties": {
+    "employee_id": {
+      "type": "string"
+    },
+    "employee_name": {
+      "type": "string"
+    },
+    "week_start": {
+      "type": "string",
+      "format": "date"
+    },
+    "week_end": {
+      "type": "string",
+      "format": "date"
+    },
+    "total_hours": {
+      "type": "number"
+    },
+    "overtime_hours": {
+      "type": "number",
+      "default": 0
+    },
+    "b2c_rate": {
+      "type": "number"
+    },
+    "total_worker_cost": {
+      "type": "number"
+    },
+    "total_client_revenue": {
+      "type": "number"
+    },
+    "total_profit": {
+      "type": "number"
+    },
+    "profit_margin": {
+      "type": "number"
+    },
+    "payment_status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "approved",
+        "paid",
+        "delayed",
+        "cancelled"
+      ],
+      "default": "pending"
+    },
+    "payment_due_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "employee_id",
+    "week_start"
+  ]
+}

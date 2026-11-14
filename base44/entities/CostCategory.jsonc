@@ -1,0 +1,38 @@
+{
+  "name": "CostCategory",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Category name (English)"
+    },
+    "translation": {
+      "type": "string",
+      "description": "Category name (Serbian)"
+    },
+    "subcategories": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Subcategory name (English)"
+          },
+          "translation": {
+            "type": "string",
+            "description": "Subcategory name (Serbian)"
+          }
+        }
+      },
+      "description": "List of subcategories with translations"
+    },
+    "color": {
+      "type": "string",
+      "description": "Optional color tag"
+    }
+  },
+  "required": [
+    "name"
+  ]
+}

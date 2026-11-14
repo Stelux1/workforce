@@ -1,0 +1,81 @@
+{
+  "name": "Task",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Task title"
+    },
+    "description": {
+      "type": "string",
+      "description": "Task description"
+    },
+    "assigned_to": {
+      "type": "string",
+      "description": "Employee record ID"
+    },
+    "assigned_to_name": {
+      "type": "string",
+      "description": "Employee name for display"
+    },
+    "due_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Due date"
+    },
+    "priority": {
+      "type": "string",
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "urgent"
+      ],
+      "default": "medium",
+      "description": "Priority"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "todo",
+        "in_progress",
+        "review",
+        "completed"
+      ],
+      "default": "todo",
+      "description": "Status"
+    },
+    "category": {
+      "type": "string",
+      "description": "Task category"
+    },
+    "attachments": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "File attachment URLs"
+    },
+    "comments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "author": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "Comments"
+    }
+  },
+  "required": [
+    "title"
+  ]
+}

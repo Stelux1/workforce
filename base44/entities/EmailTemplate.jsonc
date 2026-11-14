@@ -1,0 +1,39 @@
+{
+  "name": "EmailTemplate",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Template name"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "timesheet_reminder",
+        "payroll_notification",
+        "shift_schedule",
+        "document_expiry",
+        "general_announcement",
+        "payment_confirmation",
+        "contract_reminder"
+      ],
+      "description": "Template type"
+    },
+    "subject": {
+      "type": "string"
+    },
+    "body": {
+      "type": "string"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true
+    }
+  },
+  "required": [
+    "name",
+    "type",
+    "subject",
+    "body"
+  ]
+}

@@ -1,0 +1,124 @@
+{
+  "name": "Timesheet",
+  "type": "object",
+  "properties": {
+    "week_ref": {
+      "type": "string",
+      "description": "Traceable ID e.g. 2026W20-EMP001"
+    },
+    "employee_id": {
+      "type": "string",
+      "description": "Employee record ID"
+    },
+    "employee_name": {
+      "type": "string",
+      "description": "Employee full name"
+    },
+    "client_name": {
+      "type": "string",
+      "description": "Client name"
+    },
+    "project": {
+      "type": "string",
+      "description": "Project or worksite"
+    },
+    "week_start": {
+      "type": "string",
+      "format": "date",
+      "description": "Monday of the week (ISO)"
+    },
+    "mon_hours": {
+      "type": "number",
+      "default": 0
+    },
+    "tue_hours": {
+      "type": "number",
+      "default": 0
+    },
+    "wed_hours": {
+      "type": "number",
+      "default": 0
+    },
+    "thu_hours": {
+      "type": "number",
+      "default": 0
+    },
+    "fri_hours": {
+      "type": "number",
+      "default": 0
+    },
+    "sat_hours": {
+      "type": "number",
+      "default": 0
+    },
+    "sun_hours": {
+      "type": "number",
+      "default": 0
+    },
+    "total_hours": {
+      "type": "number",
+      "description": "Sum of all daily hours"
+    },
+    "overtime_hours": {
+      "type": "number",
+      "default": 0
+    },
+    "notes": {
+      "type": "string"
+    },
+    "attachment_url": {
+      "type": "string",
+      "description": "URL of uploaded PDF attachment"
+    },
+    "attachment_name": {
+      "type": "string",
+      "description": "Original file name of the attachment"
+    },
+    "approval_status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "submitted",
+        "approved",
+        "rejected"
+      ],
+      "default": "draft"
+    },
+    "b2c_rate": {
+      "type": "number",
+      "description": "Worker hourly rate at time of entry"
+    },
+    "b2b_rate": {
+      "type": "number",
+      "description": "Client billing rate at time of entry"
+    },
+    "worker_cost": {
+      "type": "number",
+      "description": "total_hours * b2c_rate"
+    },
+    "client_revenue": {
+      "type": "number",
+      "description": "total_hours * b2b_rate"
+    },
+    "profit": {
+      "type": "number",
+      "description": "client_revenue - worker_cost"
+    },
+    "affiliation_id": {
+      "type": "string",
+      "description": "EmploymentHistory record in force on the work week"
+    },
+    "vendor_id": {
+      "type": "string",
+      "description": "Vendor in force on the work week (snapshot)"
+    },
+    "vendor_name": {
+      "type": "string",
+      "description": "Vendor name snapshot used for historical vendor reporting"
+    }
+  },
+  "required": [
+    "employee_id",
+    "week_start"
+  ]
+}

@@ -1,0 +1,93 @@
+{
+  "name": "Vendor",
+  "type": "object",
+  "properties": {
+    "vendor_id": {
+      "type": "string",
+      "description": "Internal vendor code, e.g. VEN-001"
+    },
+    "name": {
+      "type": "string",
+      "description": "Trading / display name"
+    },
+    "legal_name": {
+      "type": "string",
+      "description": "Registered legal company name"
+    },
+    "registration_number": {
+      "type": "string",
+      "description": "Company registration number"
+    },
+    "tax_number": {
+      "type": "string",
+      "description": "Tax identification number (PIB)"
+    },
+    "vat_number": {
+      "type": "string",
+      "description": "VAT number"
+    },
+    "country": {
+      "type": "string"
+    },
+    "city": {
+      "type": "string"
+    },
+    "postal_code": {
+      "type": "string"
+    },
+    "address": {
+      "type": "string"
+    },
+    "contact_name": {
+      "type": "string"
+    },
+    "email": {
+      "type": "string"
+    },
+    "phone": {
+      "type": "string"
+    },
+    "default_currency": {
+      "type": "string",
+      "enum": [
+        "EUR",
+        "RSD",
+        "GBP",
+        "USD"
+      ],
+      "default": "EUR",
+      "description": "Contract currency with this vendor"
+    },
+    "payment_terms": {
+      "type": "string",
+      "description": "e.g. Net 15"
+    },
+    "payroll_cycle": {
+      "type": "string",
+      "enum": [
+        "weekly",
+        "biweekly",
+        "monthly"
+      ],
+      "description": "Agreed settlement cycle with this vendor"
+    },
+    "contract_reference": {
+      "type": "string",
+      "description": "Framework contract number / reference"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "inactive"
+      ],
+      "default": "active"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "name"
+  ]
+}

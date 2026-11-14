@@ -1,0 +1,27 @@
+{
+  "name": "Location",
+  "type": "object",
+  "properties": {
+    "country": {
+      "type": "string",
+      "description": "Dr\u017eava"
+    },
+    "city": {
+      "type": "string",
+      "description": "Grad"
+    },
+    "postal_code": {
+      "type": "string",
+      "description": "Po\u0161tanski kod"
+    },
+    "address": {
+      "type": "string",
+      "description": "Adresa (opciono)"
+    }
+  },
+  "required": [
+    "country",
+    "city",
+    "postal_code"
+  ]
+}

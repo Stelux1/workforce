@@ -1,0 +1,55 @@
+{
+  "name": "AttendanceRecord",
+  "type": "object",
+  "properties": {
+    "employee_id": {
+      "type": "string",
+      "description": "Reference to employee record ID"
+    },
+    "date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date"
+    },
+    "clock_in": {
+      "type": "string",
+      "description": "Clock in time (HH:MM)"
+    },
+    "clock_out": {
+      "type": "string",
+      "description": "Clock out time (HH:MM)"
+    },
+    "break_minutes": {
+      "type": "number",
+      "description": "Break time in minutes"
+    },
+    "total_hours": {
+      "type": "number",
+      "description": "Total working hours"
+    },
+    "overtime_hours": {
+      "type": "number",
+      "description": "Overtime hours"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "present",
+        "absent",
+        "late",
+        "half_day",
+        "holiday"
+      ],
+      "default": "present",
+      "description": "Attendance status"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Notes"
+    }
+  },
+  "required": [
+    "employee_id",
+    "date"
+  ]
+}

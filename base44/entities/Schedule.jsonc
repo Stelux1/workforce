@@ -1,0 +1,52 @@
+{
+  "name": "Schedule",
+  "type": "object",
+  "properties": {
+    "employee_id": {
+      "type": "string",
+      "description": "Reference to employee record ID"
+    },
+    "employee_name": {
+      "type": "string",
+      "description": "Employee full name for display"
+    },
+    "date": {
+      "type": "string",
+      "format": "date",
+      "description": "Shift date"
+    },
+    "shift_start": {
+      "type": "string",
+      "description": "Shift start time (HH:MM)"
+    },
+    "shift_end": {
+      "type": "string",
+      "description": "Shift end time (HH:MM)"
+    },
+    "shift_type": {
+      "type": "string",
+      "enum": [
+        "morning",
+        "afternoon",
+        "night",
+        "full_day",
+        "custom"
+      ],
+      "description": "Shift type"
+    },
+    "location": {
+      "type": "string",
+      "description": "Work location"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Notes"
+    }
+  },
+  "required": [
+    "employee_id",
+    "date",
+    "shift_start",
+    "shift_end"
+  ]
+}

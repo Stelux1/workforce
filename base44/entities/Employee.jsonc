@@ -1,0 +1,177 @@
+{
+  "name": "Employee",
+  "type": "object",
+  "properties": {
+    "first_name": {
+      "type": "string"
+    },
+    "last_name": {
+      "type": "string"
+    },
+    "date_of_birth": {
+      "type": "string",
+      "format": "date"
+    },
+    "gender": {
+      "type": "string",
+      "enum": [
+        "male",
+        "female",
+        "other"
+      ]
+    },
+    "nationality": {
+      "type": "string"
+    },
+    "profile_photo": {
+      "type": "string"
+    },
+    "phone": {
+      "type": "string"
+    },
+    "email": {
+      "type": "string"
+    },
+    "address": {
+      "type": "string"
+    },
+    "city": {
+      "type": "string"
+    },
+    "postal_code": {
+      "type": "string"
+    },
+    "country": {
+      "type": "string"
+    },
+    "employee_id": {
+      "type": "string"
+    },
+    "position": {
+      "type": "string"
+    },
+    "department": {
+      "type": "string"
+    },
+    "employment_type": {
+      "type": "string",
+      "enum": [
+        "full_time",
+        "part_time",
+        "temporary",
+        "contractor"
+      ]
+    },
+    "start_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "end_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "supervisor": {
+      "type": "string"
+    },
+    "work_location": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "suspended",
+        "on_leave",
+        "terminated"
+      ],
+      "default": "active"
+    },
+    "bank_name": {
+      "type": "string"
+    },
+    "iban": {
+      "type": "string"
+    },
+    "swift_bic": {
+      "type": "string"
+    },
+    "tax_number": {
+      "type": "string"
+    },
+    "salary": {
+      "type": "number"
+    },
+    "payment_frequency": {
+      "type": "string",
+      "enum": [
+        "monthly",
+        "bi_weekly",
+        "weekly"
+      ]
+    },
+    "emergency_contact_name": {
+      "type": "string"
+    },
+    "emergency_contact_relationship": {
+      "type": "string"
+    },
+    "emergency_contact_phone": {
+      "type": "string"
+    },
+    "emergency_contact_address": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "string"
+    },
+    "b2c_hourly_rate": {
+      "type": "number",
+      "description": "Worker hourly rate (what company pays)"
+    },
+    "b2b_hourly_rate": {
+      "type": "number",
+      "description": "Client billing rate (what client pays)"
+    },
+    "overtime_rate": {
+      "type": "number",
+      "description": "Overtime hourly rate"
+    },
+    "weekend_rate": {
+      "type": "number",
+      "description": "Weekend hourly rate"
+    },
+    "holiday_rate": {
+      "type": "number",
+      "description": "Holiday hourly rate"
+    },
+    "payment_type": {
+      "type": "string",
+      "enum": [
+        "hourly",
+        "daily",
+        "weekly",
+        "monthly"
+      ],
+      "default": "hourly"
+    },
+    "preferred_payment_method": {
+      "type": "string"
+    },
+    "vat_number": {
+      "type": "string"
+    },
+    "payroll_status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "on_hold",
+        "closed"
+      ],
+      "default": "active"
+    }
+  },
+  "required": [
+    "first_name",
+    "last_name"
+  ]
+}

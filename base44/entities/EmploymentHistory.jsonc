@@ -1,0 +1,57 @@
+{
+  "name": "EmploymentHistory",
+  "type": "object",
+  "properties": {
+    "employee_id": {
+      "type": "string",
+      "description": "Employee record ID"
+    },
+    "employee_name": {
+      "type": "string",
+      "description": "Snapshot of the employee name"
+    },
+    "engagement_type": {
+      "type": "string",
+      "enum": [
+        "direct_employee",
+        "subcontractor_worker"
+      ],
+      "default": "direct_employee",
+      "description": "Direct employee or subcontractor worker"
+    },
+    "vendor_id": {
+      "type": "string",
+      "description": "Vendor ID when engaged as subcontractor worker"
+    },
+    "vendor_name": {
+      "type": "string",
+      "description": "Vendor name snapshot"
+    },
+    "start_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Effective from (inclusive)"
+    },
+    "end_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Effective until (inclusive). Empty = open ended"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "ended"
+      ],
+      "default": "active"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "employee_id",
+    "engagement_type",
+    "start_date"
+  ]
+}
