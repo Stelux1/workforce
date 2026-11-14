@@ -523,3 +523,7 @@ Opseg: BACKLOG Faza 3 `[review]`. HEAD `0e50f7f` i ceo diff `011eba8..HEAD` za n
 - Presuda: **BLOCK** — minimum za ✅:
   1. P0: operater ne menja tarife u `projects.assigned_employees` / `job_roles` ni dodele koje imaju tarifu (`project_assignments`); `rates.assignment_id` / `project_id` na `on delete restrict`; polja tarife na projektu samo za admina; pgTAP za sva tri puta.
   2. Preporučeno u istom krugu, pre prve isplate: P1 angažman samo admin; P1 `payout < 0` blokira odobravanje; P1 kontrolna lista za server.
+
+### Popravke posle pregleda (14.11.2026, kasno veče)
+- **P0 operater određuje tarifu — POPRAVLJENO** (D22, migracija `20261114240000`, pgTAP 08 sa 68 provera). Ponovljeni scenariji iz pregleda: operaterova tarifa 99 €/h odbijena, odobrava se adminovih 12 €/h (96,00); prebacivanje i brisanje dodele sa tarifom odbijeni, tarife ostaju, radnik i dalje dobija 10,00; brisanje projekta sa tarifama zaustavljeno (`on delete restrict`).
+

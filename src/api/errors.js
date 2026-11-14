@@ -83,6 +83,15 @@ const M = {
     en: "The employee has project assignments (Rates & Assignments). Remove them first.",
     rs: "Radnik ima dodele na projektima (Tarife i dodele). Prvo ih uklonite.",
   },
+  // Tarife se ne brišu kaskadno (migracija 20261114240000): prvo se brišu tarife u Tarife i dodele (samo admin).
+  inUseAssignmentRates: {
+    en: "The assignment has rates (Rates & Assignments), so it can't be deleted. Delete those rates first.",
+    rs: "Dodela ima tarife (Tarife i dodele), pa ne može da se obriše. Prvo obrišite te tarife.",
+  },
+  inUseProjectRates: {
+    en: "The project has rates (Rates & Assignments), so it can't be deleted. An admin has to delete those rates first.",
+    rs: "Projekat ima tarife (Tarife i dodele), pa ne može da se obriše. Admin prvo briše te tarife.",
+  },
   inUseClientProjects: {
     en: "The client has projects, so it can't be deleted.",
     rs: "Klijent ima projekte, pa ne može da se obriše.",
@@ -183,6 +192,8 @@ const IN_USE_BY_CONSTRAINT = {
   payroll_records_employee_id_fkey: "inUseEmployeePayroll",
   payslips_employee_id_fkey: "inUseEmployeePayroll",
   project_assignments_employee_id_fkey: "inUseEmployeeAssignments",
+  rates_assignment_id_fkey: "inUseAssignmentRates",
+  rates_project_id_fkey: "inUseProjectRates",
   projects_client_id_fkey: "inUseClientProjects",
   employment_history_vendor_id_fkey: "inUseVendorEngagements",
 };
@@ -249,6 +260,17 @@ const DB_MESSAGES_EN = [
   // Trošak projekta van EUR mora imati kurs (guard_project_cost, migracija 20261114220000).
   [/^Trošak u (\S+) mora imati kurs veći od 0 \(koliko \S+ vredi 1 EUR\)$/,
     "A cost in $1 needs an exchange rate greater than 0 (how many $1 is 1 EUR)."],
+  // Tarife na projektu i u dodelama menja samo admin (guard_project_rates / guard_assignment_rates, migracija 20261114240000).
+  [/^Zanimanje sa tarifom na projektu dodaje, menja i briše samo admin$/,
+    "Only an admin can add, change or delete a job role that has a rate on the project."],
+  [/^Satnicu radnika na projektu \(B2C\/B2B tarifu\) upisuje samo admin$/,
+    "Only an admin can enter the employee's rate on the project (B2C/B2B)."],
+  [/^Radnika kome je admin odredio tarifu na projektu menja i uklanja samo admin$/,
+    "Only an admin can change or remove an employee whose rate on the project was set by an admin."],
+  [/^Pozicija „(.+)" ima tarifu na ovom projektu — radnika na nju raspoređuje samo admin$/,
+    "Position \"$1\" has a rate on this project — only an admin can assign employees to it."],
+  [/^Dodele radnika kome je admin odredio tarifu na ovom projektu menja i briše samo admin$/,
+    "Only an admin can change or delete the assignments of an employee whose rate on this project was set by an admin."],
 ];
 function dbMessage(raw, lang) {
   if (lang !== "en") return raw;

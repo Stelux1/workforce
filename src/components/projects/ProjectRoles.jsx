@@ -7,17 +7,21 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Briefcase, Plus, X, Pencil, Check } from "lucide-react";
+import { Briefcase, Plus, X, Pencil, Check, Lock } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 
 import { useL } from "@/lib/translations";
+import { useAuth } from "@/lib/AuthContext";
 
 const emptyRole = { title: "", b2b_rate: "" };
+// Zanimanje sa tarifom (b2b/b2c > 0) menja samo admin (baza: guard_project_rates); isto pravilo kao rate_value u bazi.
+const roleHasRate = (role) => [role?.b2b_rate, role?.b2c_rate].some((v) => v !== "" && v !== null && Number(v) > 0);
 
 export default function ProjectRoles({ project, onUpdated }) {
   const L = useL();
+  const { isAdmin } = useAuth();
   const [showAdd, setShowAdd] = useState(false);
   const [editIndex, setEditIndex] = useState(null);
   const [form, setForm] = useState(emptyRole);
@@ -62,6 +66,16 @@ export default function ProjectRoles({ project, onUpdated }) {
 
   const handleSave = () => {
     if (!form.title) return;
+    if (!isAdmin) {
+      // Operater dodaje i menja samo naziv zanimanja bez tarife; tarifu upisuje admin.
+      if (roles.some((r, i) => i !== editIndex && r.title === form.title)) {
+        toast.error(L("This job role already exists on the project.", "Ovo zanimanje već postoji na projektu."));
+        return;
+      }
+      const entry = { ...(editIndex !== null ? roles[editIndex] : {}), title: form.title };
+      updateMutation.mutate(editIndex !== null ? roles.map((r, i) => (i === editIndex ? entry : r)) : [...roles, entry]);
+      return;
+    }
     const b2b = parseFloat(form.b2b_rate);
     if (!(b2b > 0)) {
       toast.error(L("B2B rate must be greater than 0.", "B2B tarifa mora biti veća od 0."));
@@ -90,7 +104,7 @@ export default function ProjectRoles({ project, onUpdated }) {
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <Briefcase className="w-4 h-4 text-primary" />
-          <h2 className="font-semibold">{L("Job roles and rates", "Zanimanja i tarife")}</h2>
+          <h2 className="font-semibold">{isAdmin ? L("Job roles and rates", "Zanimanja i tarife") : L("Job roles", "Zanimanja")}</h2>
           <Badge variant="secondary">{roles.length}</Badge>
         </div>
         <Button size="sm" onClick={openAdd}>
@@ -108,13 +122,22 @@ export default function ProjectRoles({ project, onUpdated }) {
         <div className="space-y-2">
           <div className="grid grid-cols-3 gap-2 px-3 text-xs text-muted-foreground font-medium">
             <span>{L("Job role", "Zanimanje")}</span>
-            <span>{L("B2B rate (client)", "B2B tarifa (klijent)")}</span>
+            <span>{isAdmin ? L("B2B rate (client)", "B2B tarifa (klijent)") : ""}</span>
             <span></span>
           </div>
           {roles.map((role, idx) => (
             <div key={idx} className="grid grid-cols-3 gap-2 items-center p-3 rounded-lg bg-muted/40 border text-sm">
               <span className="font-medium">{role.title}</span>
-              <span className="text-muted-foreground">€{role.b2b_rate}/h</span>
+              <span className="text-muted-foreground">{isAdmin ? (role.b2b_rate ? `€${role.b2b_rate}/h` : "—") : ""}</span>
+              {!isAdmin && roleHasRate(role) ? (
+                <span
+                  className="flex items-center justify-end px-2 text-muted-foreground"
+                  title={L("This job role has a rate — only an admin can change or delete it.", "Zanimanje ima tarifu — menja ga i briše samo admin.")}
+                >
+                  <Lock className="w-3.5 h-3.5" aria-hidden="true" />
+                  <span className="sr-only">{L("Only an admin can change this job role", "Ovo zanimanje menja samo admin")}</span>
+                </span>
+              ) : (
               <div className="flex items-center gap-1 justify-end">
                 <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(idx)}>
                   <Pencil className="w-3.5 h-3.5" />
@@ -128,6 +151,7 @@ export default function ProjectRoles({ project, onUpdated }) {
                   <X className="w-3.5 h-3.5" />
                 </Button>
               </div>
+              )}
             </div>
           ))}
         </div>
@@ -154,6 +178,7 @@ export default function ProjectRoles({ project, onUpdated }) {
                 ))}
               </select>
             </div>
+            {isAdmin ? (
             <div>
               <Label>{L("B2B rate (€/h) *", "B2B tarifa (€/h) *")}</Label>
               <Input
@@ -167,10 +192,13 @@ export default function ProjectRoles({ project, onUpdated }) {
               />
               <p className="text-xs text-muted-foreground mt-1">{L("Rate charged to the client", "Tarifa prema klijentu")}</p>
             </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">{L("The rate for the job role is entered by an admin.", "Tarifu zanimanja upisuje admin.")}</p>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => { setShowAdd(false); setEditIndex(null); }}>{L("Cancel", "Odustani")}</Button>
-            <Button onClick={handleSave} disabled={!form.title || !form.b2b_rate || updateMutation.isPending}>
+            <Button onClick={handleSave} disabled={!form.title || (isAdmin && !form.b2b_rate) || updateMutation.isPending}>
               <Check className="w-4 h-4 mr-1" />
               {editIndex !== null ? L("Save", "Sačuvaj") : L("Add", "Dodaj")}
             </Button>

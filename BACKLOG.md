@@ -36,7 +36,7 @@ Princip (D12): postojeće stranice ostaju iste; menja se izvor podataka i novča
 - [x] [build] Platni listić PDF (postojeći PDF stil iz satnica) i Excel spisak isplata za banku. Accept: iznosi isti kao u bazi; logo firme umesto Base44 slike.
 - [x] [build] Podešavanja → „Podaci firme" (`company_settings`, D18): polja prazna dok ih Luka ne unese. Accept: operater ne može da menja; neispravan PIB odbijen (pgTAP 07).
 - [ ] NEEDS-USER: logo i podaci firme (naziv, PIB, adresa) za platni listić i PDF satnice.
-- [ ] [build] *(opus)* P0 iz pregleda 14.11. veče: operater ne sme da menja tarife — `projects.assigned_employees`/`job_roles` b2c/b2b, `project_assignments` sa tarifom (radnik, projekat, pozicija, datumi, status, brisanje), `rates` FK `on delete restrict`; polja tarife na stranici projekta samo za admina. Accept: pgTAP — operater ne može ni jednim od tri puta da promeni tarifu koju baza bira pri odobravanju.
+- [x] [build] *(opus)* P0 iz pregleda 14.11. veče: operater ne sme da menja tarife — `projects.assigned_employees`/`job_roles` b2c/b2b, `project_assignments` sa tarifom (radnik, projekat, pozicija, datumi, status, brisanje), `rates` FK `on delete restrict`; polja tarife na stranici projekta samo za admina. Accept: pgTAP — operater ne može ni jednim od tri puta da promeni tarifu koju baza bira pri odobravanju.
 - [ ] [build] *(opus)* P1 iz pregleda: `employment_history` menja samo admin; obračun odbija isplatu < 0 i bruto tarifu ispod minimalne osnovice (dok knjigovođa ne potvrdi pravilo); novi nalog je neaktivan osim prvog admina. Accept: pgTAP za sva tri; postojeći nalozi ne menjaju ulogu ni status.
 - [ ] [review] Pregled novčane logike, RLS-a i zaključavanja pre prve prave isplate. Accept: nalazi u `QA-FINDINGS.md`; nema otvorenih P0.
 

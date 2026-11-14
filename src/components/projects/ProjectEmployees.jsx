@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Users, Plus, X, Pencil } from "lucide-react";
+import { Users, Plus, X, Pencil, Lock } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
@@ -14,9 +14,15 @@ import {
 } from "@/components/ui/select";
 
 import { useL } from "@/lib/translations";
+import { useAuth } from "@/lib/AuthContext";
+
+// Satnica radnika na projektu je tarifa (2. nivo izbora tarife, D4) — upisuje je samo admin (baza: guard_project_rates).
+// Isto pravilo kao rate_value u bazi: broj (ili tekst broja) > 0.
+const hasRate = (entry) => [entry?.b2c_rate, entry?.b2b_rate].some((v) => v !== "" && v !== null && Number(v) > 0);
 
 export default function ProjectEmployees({ project, onUpdated }) {
   const L = useL();
+  const { isAdmin } = useAuth();
   const [showAdd, setShowAdd] = useState(false);
   const [editEntry, setEditEntry] = useState(null); // for editing existing assigned employee
   const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
@@ -58,6 +64,15 @@ export default function ProjectEmployees({ project, onUpdated }) {
   const handleAdd = () => {
     if (!selectedEmployee) return;
     const position = selectedRoleTitle === "__custom" ? customPosition : selectedRoleTitle;
+    if (!isAdmin) {
+      // Operater raspoređuje radnika bez tarife; tarife zanimanja se ne prepisuju u unos (to je adminov izbor).
+      updateMutation.mutate([...assigned, {
+        employee_id: selectedEmployee.id,
+        employee_name: `${selectedEmployee.last_name} ${selectedEmployee.first_name}`,
+        position,
+      }]);
+      return;
+    }
     let b2c_rate = resolvedRole?.b2c_rate;
     let b2b_rate = resolvedRole?.b2b_rate;
     
@@ -81,6 +96,11 @@ export default function ProjectEmployees({ project, onUpdated }) {
   const handleEditSave = () => {
     if (!editEntry) return;
     const position = selectedRoleTitle === "__custom" ? customPosition : selectedRoleTitle;
+    if (!isAdmin) {
+      // Operater menja samo poziciju radnika bez tarife.
+      updateMutation.mutate(assigned.map((e) => (e.employee_id === editEntry.employee_id ? { ...e, position } : e)));
+      return;
+    }
     let b2c_rate = resolvedRole?.b2c_rate ?? editEntry.b2c_rate;
     let b2b_rate = resolvedRole?.b2b_rate ?? editEntry.b2b_rate;
     
@@ -146,12 +166,21 @@ export default function ProjectEmployees({ project, onUpdated }) {
                 {emp.position && (
                   <p className="text-xs text-muted-foreground mt-0.5">{emp.position}</p>
                 )}
-                {(emp.b2c_rate || emp.b2b_rate) && (
+                {isAdmin && (emp.b2c_rate || emp.b2b_rate) && (
                    <p className="text-xs text-muted-foreground mt-0.5">
                      B2B: €{emp.b2b_rate ?? "—"}/h · B2C: €{emp.b2c_rate ?? "—"}/h
                    </p>
                  )}
               </div>
+              {!isAdmin && hasRate(emp) ? (
+                <span
+                  className="flex items-center px-2 text-muted-foreground"
+                  title={L("The rate for this employee was set by an admin — only an admin can change or remove them.", "Tarifu ovog radnika je odredio admin — menja ga i uklanja samo admin.")}
+                >
+                  <Lock className="w-3.5 h-3.5" aria-hidden="true" />
+                  <span className="sr-only">{L("Only an admin can change this employee", "Ovog radnika menja samo admin")}</span>
+                </span>
+              ) : (
               <div className="flex items-center gap-1">
                 <Button
                   variant="ghost"
@@ -170,6 +199,7 @@ export default function ProjectEmployees({ project, onUpdated }) {
                   <X className="w-3.5 h-3.5" />
                 </Button>
               </div>
+              )}
             </div>
           ))}
         </div>
@@ -218,7 +248,9 @@ export default function ProjectEmployees({ project, onUpdated }) {
                     <SelectContent>
                       {jobRoles.map((r) => (
                         <SelectItem key={r.title} value={r.title}>
-                          {r.title} (B2B: €{r.b2b_rate}/h{r.b2c_rate ? ` · B2C: €${r.b2c_rate}/h` : ""})
+                          {isAdmin
+                            ? `${r.title} (B2B: €${r.b2b_rate}/h${r.b2c_rate ? ` · B2C: €${r.b2c_rate}/h` : ""})`
+                            : r.title}
                         </SelectItem>
                       ))}
                       <SelectItem value="__custom">{L("Other (enter manually)", "Ostalo (unesi ručno)")}</SelectItem>
@@ -243,8 +275,14 @@ export default function ProjectEmployees({ project, onUpdated }) {
                   )}
                   </div>
 
-                  {/* Manual B2C rate input */}
-                  {(resolvedRole || selectedRoleTitle) && (
+                  {!isAdmin && (
+                    <p className="text-xs text-muted-foreground">
+                      {L("The employee's rate on the project is entered by an admin. Until then the project, job role and employee rates apply.", "Satnicu radnika na projektu upisuje admin. Do tada važe tarife projekta, zanimanja i radnika.")}
+                    </p>
+                  )}
+
+                  {/* Manual B2C rate input — samo admin (tarifa, D3/D4) */}
+                  {isAdmin && (resolvedRole || selectedRoleTitle) && (
                   <div>
                   <Label>{L("B2C rate - manual entry (€/h)", "B2C tarifa - ručni unos (€/h)")}</Label>
                   <Input
@@ -262,8 +300,8 @@ export default function ProjectEmployees({ project, onUpdated }) {
                   </div>
                   )}
 
-                  {/* Show profit calculation */}
-                  {(resolvedRole || selectedRoleTitle) && (
+                  {/* Show profit calculation — samo admin */}
+                  {isAdmin && (resolvedRole || selectedRoleTitle) && (
                     <div className="rounded-lg bg-muted/60 px-4 py-2 text-sm grid grid-cols-3 gap-2 text-center">
                       <div>
                         <p className="text-xs text-muted-foreground">B2B</p>

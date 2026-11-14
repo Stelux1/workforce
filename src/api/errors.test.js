@@ -169,3 +169,33 @@ describe("mesečni obračun (migracija 20261114200000)", () => {
     expect(describeError({ code: "42501", message: "Samo admin može da odobri obračun" }, "en").text).toBe("Only an admin can manage payroll.");
   });
 });
+
+describe("tarife samo admin (migracija 20261114240000)", () => {
+  it("odbijena izmena tarife na projektu / u dodeli: srpski ostaje, engleski se prevodi", () => {
+    const cases = [
+      ["Zanimanje sa tarifom na projektu dodaje, menja i briše samo admin",
+        "Only an admin can add, change or delete a job role that has a rate on the project."],
+      ["Satnicu radnika na projektu (B2C/B2B tarifu) upisuje samo admin",
+        "Only an admin can enter the employee's rate on the project (B2C/B2B)."],
+      ["Radnika kome je admin odredio tarifu na projektu menja i uklanja samo admin",
+        "Only an admin can change or remove an employee whose rate on the project was set by an admin."],
+      ["Pozicija „QA Poslovođa\" ima tarifu na ovom projektu — radnika na nju raspoređuje samo admin",
+        "Position \"QA Poslovođa\" has a rate on this project — only an admin can assign employees to it."],
+      ["Dodele radnika kome je admin odredio tarifu na ovom projektu menja i briše samo admin",
+        "Only an admin can change or delete the assignments of an employee whose rate on this project was set by an admin."],
+    ];
+    for (const [message, en] of cases) {
+      const e = { code: "42501", message };
+      expect(describeError(e, "rs")).toEqual({ key: "db", text: message });
+      expect(describeError(e, "en").text).toBe(en);
+    }
+  });
+
+  it("brisanje dodele ili projekta koji imaju tarife (on delete restrict) kaže šta smeta", () => {
+    const fk = (table, c) => ({ code: "23503", message: `update or delete on table "${table}" violates foreign key constraint "${c}" on table "rates"` });
+    expect(rs(fk("project_assignments", "rates_assignment_id_fkey")).key).toBe("inUseAssignmentRates");
+    expect(rs(fk("project_assignments", "rates_assignment_id_fkey")).text).toBe("Dodela ima tarife (Tarife i dodele), pa ne može da se obriše. Prvo obrišite te tarife.");
+    expect(rs(fk("projects", "rates_project_id_fkey")).key).toBe("inUseProjectRates");
+    expect(describeError(fk("projects", "rates_project_id_fkey"), "en").text).toBe("The project has rates (Rates & Assignments), so it can't be deleted. An admin has to delete those rates first.");
+  });
+});
