@@ -3,9 +3,12 @@ import { allocate, round2, sum2 } from "./money.js";
 import { PARAMS_2026_RSD, paramsInEur } from "./params.js";
 import { fromGross, fromNet } from "./serbianPayroll.js";
 import { computeWorkerMonth, MissingRateError, projectMargin } from "./monthly.js";
-import { resolveTimesheetRates, timesheetAmounts, totalHours, validRate } from "./timesheet.js";
+import { totalHours, validRate } from "./timesheet.js";
 import { RATE_SOURCES, RateUnitError, resolveRates, resolveSideRate } from "./rates.js";
 import { classifyWeek, HOUR_TYPES, MissingCoefficientError, timesheetAmountsByType } from "./hours.js";
+import {
+  approvalPayload, dailyThresholdOf, dayHours, draftRates, hoursByTypeOf, isMoneyError, overtimeHours, previewAmounts,
+} from "./timesheetRow.js";
 
 // Primeri u RSD su izračunati ručno (vidi komentare) — ne iz ovog koda.
 const P = PARAMS_2026_RSD;
@@ -163,32 +166,19 @@ describe("marža projekta", () => {
   });
 });
 
-// Satnica po današnjem pravilu ekrana (QA 14.11.2026): iste brojke kao baza (guard_timesheet).
-describe("satnica (iznosi i tarife)", () => {
-  it("46 h × 12/20 = 552 / 920 / 368, prekovremeno 6 (primer iz QA tabele)", () => {
+// Osnovni pomoćnici reda satnice (zbir i tarifa > 0). Iznosi su od Faze 2 po vrsti sati (hours.js, timesheetRow.js).
+describe("satnica (zbir sati i tarifa)", () => {
+  it("zbir sati po danima; prazno polje = 0", () => {
     const row = { mon_hours: 8, tue_hours: 8, wed_hours: 8, thu_hours: 8, fri_hours: 8, sat_hours: 6, sun_hours: "" };
-    const h = totalHours(row);
-    expect(h).toBe(46);
-    expect(timesheetAmounts(h, 12, 20)).toEqual({ worker_cost: 552, client_revenue: 920, profit: 368, overtime_hours: 6 });
+    expect(totalHours(row)).toBe(46);
+    expect(totalHours({ mon_hours: "7.5", tue_hours: null })).toBe(7.5);
   });
 
-  it("tarifa koja fali daje null, nikad 0 (D4/D11)", () => {
-    expect(timesheetAmounts(8, null, 20)).toEqual({ worker_cost: null, client_revenue: 160, profit: null, overtime_hours: 0 });
-    expect(timesheetAmounts(8, 0, 20).worker_cost).toBeNull();
+  it("tarifa koja fali je null, nikad 0 (D4/D11)", () => {
     expect(validRate(0)).toBeNull();
     expect(validRate("")).toBeNull();
+    expect(validRate(null)).toBeNull();
     expect(validRate("12.5")).toBe(12.5);
-  });
-
-  it("tarifa: prvo dodela na projektu, pa profil radnika; bez obe → missing", () => {
-    expect(resolveTimesheetRates({ b2c_rate: 12, b2b_rate: 20 }, { b2c_hourly_rate: 10 })).toEqual({ b2c: 12, b2b: 20, missing: [] });
-    expect(resolveTimesheetRates({ b2b_rate: 20 }, { b2c_hourly_rate: 10 })).toEqual({ b2c: 10, b2b: 20, missing: [] });
-    expect(resolveTimesheetRates({ b2b_rate: 20 }, {})).toEqual({ b2c: null, b2b: 20, missing: ["b2c"] });
-    expect(resolveTimesheetRates(undefined, undefined).missing).toEqual(["b2c", "b2b"]);
-  });
-
-  it("decimalni sati se zaokružuju na cent", () => {
-    expect(timesheetAmounts(7.5, 12.35, 19.99)).toEqual({ worker_cost: 92.63, client_revenue: 149.93, profit: 57.3, overtime_hours: 0 });
   });
 });
 
@@ -594,5 +584,121 @@ describe("vrste sati (hours.js)", () => {
     // klijent: 149,93 + 0,25 × 19,99 × 1,5 = 7,49625 → 7,50
     expect(r.client_revenue).toBe(157.43);
     expect(r.profit).toBe(1.2);
+  });
+});
+
+// Red satnice na ekranu Satnice (timesheetRow.js). Brojevi su isti kao u supabase/tests/03_vrste_sati.test.sql —
+// ekran i baza (guard_timesheet) moraju da daju isti obračun.
+describe("red satnice (timesheetRow.js)", () => {
+  const MON = "2032-03-08"; // ponedeljak
+  const E = "emp-qa";
+  const PRJ = "prj-qa";
+  const project = { id: PRJ, job_roles: [], assigned_employees: [{ employee_id: E, b2c_rate: 12, b2b_rate: 20 }] };
+  const TYPES = [
+    { code: "redovni", worker_coef: 1, client_coef: 1 },
+    { code: "prekovremeni", worker_coef: 1.5, client_coef: 1.6 },
+    { code: "vikend", worker_coef: 1.3, client_coef: 1.4 },
+    { code: "praznik", worker_coef: 2, client_coef: 2.2 },
+  ];
+  const row = (o) => ({ employee_id: E, project_id: PRJ, week_start: MON, mon_hours: 10, sat_hours: 8, ...o });
+  const ulaz = (o) => ({ row: row(), project, assignments: [], rates: [], employeePrivate: {}, hourTypes: TYPES, holidays: [], dailyThreshold: 8, ...o });
+
+  it("prazno polje dana = 0 (ne NaN, ne null)", () => {
+    expect(dayHours({ mon_hours: "", tue_hours: null, wed_hours: "7.5", thu_hours: "abc", fri_hours: 8 })).toEqual({
+      mon_hours: 0, tue_hours: 0, wed_hours: 7.5, thu_hours: 0, fri_hours: 8, sat_hours: 0, sun_hours: 0,
+    });
+  });
+
+  it("dnevni prag iz work_rules, bez reda 8h", () => {
+    expect(dailyThresholdOf([{ daily_regular_hours: "7.50" }])).toBe(7.5);
+    expect(dailyThresholdOf([])).toBe(8);
+    expect(dailyThresholdOf(null)).toBe(8);
+  });
+
+  it("vrste sati: pon 10h + sub 8h = 8 + 2 prekovremeno + 8 vikend; neispravan unos → null (prikaz ne puca)", () => {
+    expect(hoursByTypeOf(row(), { holidays: [], dailyThreshold: 8 })).toEqual({ redovni: 8, prekovremeni: 2, vikend: 8, praznik: 0 });
+    expect(hoursByTypeOf(row({ mon_hours: 25 }), {})).toBeNull();
+  });
+
+  it("prekovremeno za prikaz: hours_by_type iz baze, odobren stari red zadržava broj, nacrt — pregled po danu (ne preko 40h)", () => {
+    const rules = { holidays: [], dailyThreshold: 8 };
+    // stari red po pravilu „preko 40h" (overtime_hours 4) koji je baza već preračunala
+    expect(overtimeHours({ ...row(), hours_by_type: { redovni: 8, prekovremeni: 2, vikend: 8, praznik: 0 }, overtime_hours: 4 }, rules)).toBe(2);
+    expect(overtimeHours({ ...row({ sat_hours: 0 }), approval_status: "approved", hours_by_type: null, overtime_hours: 4 }, rules)).toBe(4);
+    const week44 = row({ mon_hours: 8.8, tue_hours: 8.8, wed_hours: 8.8, thu_hours: 8.8, fri_hours: 8.8, sat_hours: 0 });
+    expect(overtimeHours({ ...week44, approval_status: "draft", hours_by_type: null }, rules)).toBe(4);
+    expect(overtimeHours({ ...row({ mon_hours: 9 }), approval_status: "draft", hours_by_type: null }, rules)).toBe(1);
+    expect(overtimeHours({ ...row({ mon_hours: 30 }), hours_by_type: null }, rules)).toBeNull();
+  });
+
+  it("tarife nacrta: svaka strana posebno; tarifa koja fali je null uz problem, nikad 0", () => {
+    const input = { date: MON, employeeId: E, project, assignments: [], rates: [], employeePrivate: null };
+    expect(draftRates(input)).toEqual({ b2c_rate: 12, b2b_rate: 20, problems: [] });
+    const bezRadnika = draftRates({ ...input, project: { ...project, assigned_employees: [{ employee_id: E, b2b_rate: 20 }] } });
+    expect(bezRadnika.b2c_rate).toBeNull();
+    expect(bezRadnika.b2b_rate).toBe(20);
+    expect(bezRadnika.problems).toHaveLength(1);
+    expect(bezRadnika.problems[0]).toBeInstanceOf(MissingRateError);
+    const rsd = draftRates({
+      ...input,
+      rates: [{ id: "r-rsd", scope: "employee", kind: "cost", unit: "hourly", amount: 1500, currency: "RSD", employee_id: E, effective_from: "2032-01-01", status: "active" }],
+      project: { ...project, assigned_employees: [{ employee_id: E, b2b_rate: 20 }] },
+    });
+    expect(rsd.b2c_rate).toBeNull();
+    expect(rsd.problems[0]).toBeInstanceOf(RateUnitError);
+  });
+
+  it("odobravanje: tarife iz jedinstvenog izbora, snimak izvora, iznos kao baza (256,80 / 448)", () => {
+    const r = approvalPayload(ulaz());
+    expect(r.data).toEqual({
+      approval_status: "approved",
+      b2c_rate: 12,
+      b2b_rate: 20,
+      rate_snapshot: {
+        worker: { rate: 12, source: RATE_SOURCES.PROJECT_EMPLOYEE, ref: `project:${PRJ}:employee:${E}` },
+        client: { rate: 20, source: RATE_SOURCES.PROJECT_EMPLOYEE, ref: `project:${PRJ}:employee:${E}` },
+      },
+    });
+    expect(r.hoursByType).toEqual({ redovni: 8, prekovremeni: 2, vikend: 8, praznik: 0 });
+    expect([r.amounts.worker_cost, r.amounts.client_revenue, r.amounts.profit]).toEqual([256.8, 448, 191.2]);
+  });
+
+  it("odobravanje: posebna satnica za prekovremeni ima prednost (126 / 224, kao baza)", () => {
+    const r = approvalPayload(ulaz({ row: row({ sat_hours: 0 }), employeePrivate: { overtime_rate: 15 } }));
+    expect([r.amounts.worker_cost, r.amounts.client_revenue, r.amounts.profit]).toEqual([126, 224, 98]);
+  });
+
+  it("odobravanje bez tarife, sa tarifom u RSD ili bez koeficijenta → greška (ništa se ne šalje)", () => {
+    const bezTarife = { ...project, assigned_employees: [] };
+    expect(() => approvalPayload(ulaz({ project: bezTarife }))).toThrow(MissingRateError);
+    const rsd = [{ id: "r-rsd", scope: "employee", kind: "cost", unit: "hourly", amount: 1500, currency: "RSD", employee_id: E, effective_from: "2032-01-01", status: "active" }];
+    expect(() => approvalPayload(ulaz({ project: { ...project, assigned_employees: [{ employee_id: E, b2b_rate: 20 }] }, rates: rsd }))).toThrow(RateUnitError);
+    const bezKoef = TYPES.map((t) => (t.code === "vikend" ? { ...t, worker_coef: null } : t));
+    let err;
+    try {
+      approvalPayload(ulaz({ hourTypes: bezKoef }));
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(MissingCoefficientError);
+    expect(isMoneyError(err)).toBe(true);
+    expect(isMoneyError(new Error("x"))).toBe(false);
+  });
+
+  it("pregled iznosa ne baca: koeficijent koji fali je `error`; zaokruživanje isto kao baza (191,43 / 309,85)", () => {
+    const seed = TYPES.map((t) => (t.code === "redovni" ? t : { ...t, worker_coef: null, client_coef: null }));
+    const fali = previewAmounts({ row: row(), workerRate: 12, clientRate: 20, hourTypes: seed, holidays: [], dailyThreshold: 8 });
+    expect(fali.amounts).toBeNull();
+    expect(fali.error).toBeInstanceOf(MissingCoefficientError);
+    expect(fali.hoursByType.prekovremeni).toBe(2);
+
+    const ok = previewAmounts({
+      row: row({ mon_hours: 8, tue_hours: 7.5, sat_hours: 0 }), workerRate: 12.35, clientRate: 19.99, hourTypes: seed, holidays: [], dailyThreshold: 8,
+    });
+    expect([ok.amounts.worker_cost, ok.amounts.client_revenue, ok.amounts.profit]).toEqual([191.43, 309.85, 118.42]);
+
+    expect(previewAmounts({ row: row({ mon_hours: 25 }), workerRate: 12, clientRate: 20, hourTypes: TYPES })).toEqual({
+      hoursByType: null, amounts: null, error: null,
+    });
   });
 });

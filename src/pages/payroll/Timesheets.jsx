@@ -27,7 +27,14 @@ import { useT } from "@/lib/translations";
 import { useLang } from "@/lib/LanguageContext";
 import { formatDate } from "@/lib/dateFormat";
 import { useAuth } from "@/lib/AuthContext";
-import { resolveTimesheetRates, timesheetAmounts, totalHours as sumHours, validRate } from "@/lib/payroll/timesheet";
+import { totalHours as sumHours } from "@/lib/payroll/timesheet";
+import { MissingCoefficientError } from "@/lib/payroll/hours";
+import { MissingRateError } from "@/lib/payroll/monthly";
+import { RateUnitError } from "@/lib/payroll/rates";
+import {
+  approvalPayload, dailyThresholdOf, dayHours, draftRates, hoursByTypeOf, isMoneyError, overtimeHours, previewAmounts,
+} from "@/lib/payroll/timesheetRow";
+import { loadHourRules, loadRateInputs } from "@/lib/timesheetInputs";
 
 const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 const DAY_LABELS_EN = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -86,8 +93,19 @@ const UI = {
     selectEmployeeError: "Select an employee",
     selectStatusError: "Select a status to apply",
     cost: "Cost", revenue: "Revenue", rev: "Rev", margin: "Margin", totalShort: "Total",
-    missingRate: "No rate on the project for this employee — the row is saved without a rate and can't be approved until the rate is entered on the project.",
+    missingRate: "No rate for this employee at any level (Rates & Assignments, project, profile) — the row is saved without a rate and can't be approved until a rate is entered.",
     noRate: "no rate",
+    selectProjectError: "Select a project",
+    hourType: { redovni: "Regular", prekovremeni: "Overtime", vikend: "Weekend", praznik: "Holiday" },
+    sideWorker: "worker",
+    sideClient: "client",
+    rateOfWorker: "worker",
+    rateOfClient: "client",
+    missingCoef: (list) => `Missing coefficient for hour type: ${list} — an admin enters it in Settings → Coefficients & Holidays.`,
+    noRateFor: (sides) => `No ${sides} rate at any level for this week (Rates & Assignments, project, profile) — the timesheet can't be approved.`,
+    rateUnit: (amount, currency, unit) => `The chosen rate is ${amount} ${currency} / ${unit} — only EUR per hour can be used. Fix it in Rates & Assignments.`,
+    and: " and ",
+    skippedApproved: (n) => `${n} approved row(s) skipped — only an admin can change them.`,
   },
   rs: {
     title: "Nedeljni radni sati",
@@ -141,8 +159,19 @@ const UI = {
     selectEmployeeError: "Izaberite radnika",
     selectStatusError: "Izaberite status",
     cost: "Trošak", revenue: "Prihod", rev: "Prihod", margin: "Marža", totalShort: "Ukupno",
-    missingRate: "Radnik nema tarifu na projektu — unos se čuva bez tarife i ne može da se odobri dok se tarifa ne upiše na projektu.",
+    missingRate: "Radnik nema tarifu ni na jednom nivou (Tarife i angažmani, projekat, profil) — unos se čuva bez tarife i ne može da se odobri dok se tarifa ne upiše.",
     noRate: "nema tarife",
+    selectProjectError: "Izaberite projekat",
+    hourType: { redovni: "Redovni", prekovremeni: "Prekovremeni", vikend: "Vikend", praznik: "Praznik" },
+    sideWorker: "radnik",
+    sideClient: "klijent",
+    rateOfWorker: "radnika",
+    rateOfClient: "klijenta",
+    missingCoef: (list) => `Nedostaje koeficijent za vrstu sati: ${list} — admin ga upisuje u Podešavanja → Koeficijenti i praznici.`,
+    noRateFor: (sides) => `Nema tarife ${sides} ni na jednom nivou za ovu nedelju (Tarife i angažmani, projekat, profil) — satnica ne može da se odobri.`,
+    rateUnit: (amount, currency, unit) => `Izabrana tarifa je ${amount} ${currency} / ${unit} — obračun prima samo EUR po satu. Ispravite je u Tarifama i angažmanima.`,
+    and: " i ",
+    skippedApproved: (n) => `Preskočeno ${n} odobrenih unosa — njih može da menja samo admin.`,
   },
 };
 
@@ -150,13 +179,28 @@ function getWeekStart(date) {
   return startOfWeek(date, { weekStartsOn: 1 });
 }
 
-// Zbir i iznosi dolaze iz src/lib/payroll/timesheet.js (D11); baza ih ionako preračuna (guard_timesheet).
+// Zbir, vrste sati, tarife i iznosi dolaze iz src/lib/payroll (D11). Iznose, vrste sati i prekovremeno u bazi
+// računa guard_timesheet (D16) — ekran ih ne šalje, samo bira tarifu kroz jedinstveni izbor (rates.js).
 const calcTotals = sumHours;
-const calcFinancials = (hours, b2c, b2b) => {
-  const { worker_cost, client_revenue, profit } = timesheetAmounts(hours, b2c, b2b);
-  return { worker_cost, client_revenue, profit };
-};
 const money = (v) => (v === null || v === undefined ? "—" : `€${Number(v).toFixed(0)}`);
+const hoursText = (v) => (v === null || v === undefined ? "—" : Number(v).toFixed(1));
+
+// Greška izbora tarife / koeficijenta kao rečenica za korisnika (EN/RS). MissingCoefficientError je i MissingRateError.
+function moneyErrorText(error, T) {
+  if (error instanceof MissingCoefficientError) {
+    const list = (error.coefficients || [])
+      .map((c) => `${T.hourType[c.code] || c.code} (${c.side === "worker" ? T.sideWorker : T.sideClient})`)
+      .join(", ");
+    return T.missingCoef(list);
+  }
+  if (error instanceof RateUnitError) return T.rateUnit(error.amount, error.currency, error.unit);
+  if (error instanceof MissingRateError) {
+    const fields = new Set((error.missing || []).map((m) => m.field));
+    const sides = [fields.has("workerRate") && T.rateOfWorker, fields.has("clientRate") && T.rateOfClient].filter(Boolean);
+    return T.noRateFor(sides.join(T.and) || `${T.rateOfWorker}${T.and}${T.rateOfClient}`);
+  }
+  return error?.message || String(error);
+}
 
 // Generate the traceable week reference ID: e.g. 2026W20-EMP001
 // ISO godina (nedelja 29.12.2025 je 2026W01) i broj projekta, da dva projekta iste nedelje nemaju istu oznaku.
@@ -194,6 +238,8 @@ export default function Timesheets() {
   const [confirmMassDelete, setConfirmMassDelete] = useState(false);
   const [uploadingFile, setUploadingFile] = useState(false);
   const [manualProject, setManualProject] = useState(false);
+  const [resolvingRates, setResolvingRates] = useState(false);
+  const [approving, setApproving] = useState(false);
 
   const { isAdmin } = useAuth();
   const T = UI[lang] || UI.en;
@@ -235,12 +281,27 @@ export default function Timesheets() {
     queryFn: () => base44.entities.Project.list("-created_date", 200),
   });
 
+  // Pravila razvrstavanja sati (D5) — vidi ih i operater; isti ključevi kao Podešavanja → Koeficijenti i praznici.
+  const { data: hourTypes = [] } = useQuery({
+    queryKey: ["hour-types"],
+    queryFn: () => base44.entities.HourType.list("sort", 20),
+  });
+  const { data: workRules = [] } = useQuery({
+    queryKey: ["work-rules"],
+    queryFn: () => base44.entities.WorkRules.list(null, 1),
+  });
+  const { data: weekHolidays = [] } = useQuery({
+    queryKey: ["holidays", "week", weekStartStr],
+    queryFn: () => base44.entities.Holiday.filter({ date: { $gte: weekStartStr, $lte: format(weekEnd, "yyyy-MM-dd") } }, "date"),
+  });
+  const hourRules = { holidays: weekHolidays, dailyThreshold: dailyThresholdOf(workRules) };
+
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.Timesheet.create(data),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["timesheets"] }); toast.success(T.rowAdded); attachmentUpload.commit(); setDialogOpen(false); setNewRowForm({}); },
   });
   // Kreira se posle mutacije da bi znao da li čuvanje traje (odbacivanje se tada odlaže).
-  const attachmentUpload = useUnsavedUpload(createMutation.isPending);
+  const attachmentUpload = useUnsavedUpload(createMutation.isPending || resolvingRates);
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.Timesheet.update(id, data),
@@ -301,26 +362,32 @@ export default function Timesheets() {
     setInlineEdits((prev) => ({ ...prev, [tsId]: { ...(prev[tsId] || {}), [field]: value } }));
   };
 
-  const saveInlineRow = (ts) => {
-    const edits = inlineEdits[ts.id] || {};
-    const merged = { ...ts, ...edits };
-    const totalHours = calcTotals(merged);
-    const emp = employees.find((e) => e.id === merged.employee_id);
-    const b2cRate = validRate(merged.b2c_rate) ?? validRate(emp?.b2c_hourly_rate);
-    const b2bRate = validRate(merged.b2b_rate) ?? validRate(emp?.b2b_hourly_rate);
-    const fin = calcFinancials(totalHours, b2cRate, b2bRate);
-    updateMutation.mutate({
-      id: ts.id,
-      data: {
-        ...edits,
-        total_hours: totalHours,
-        overtime_hours: Math.max(0, totalHours - 40),
-        ...fin,
-        b2c_rate: b2cRate,
-        b2b_rate: b2bRate,
-        ...vendorSnapshot(merged.employee_id, merged.week_start),
-      },
-    });
+  // Tarife nacrta kroz jedinstveni izbor tarife (rates.js), sveže iz baze. Nacrt se čuva i bez tarife (null, nikad 0);
+  // upozorenje vidi samo admin — operateru baza ne vraća Tarife ni profil radnika, pa ono za njega ne bi bilo tačno.
+  const resolveDraftRates = async (row) => {
+    const inputFor = await loadRateInputs([row], { isAdmin });
+    const { b2c_rate, b2b_rate, problems } = draftRates(inputFor(row));
+    if (isAdmin && problems.length) {
+      const unit = problems.find((p) => p instanceof RateUnitError);
+      toast.warning(unit ? moneyErrorText(unit, T) : T.missingRate, { duration: 10000 });
+    }
+    return { b2c_rate, b2b_rate };
+  };
+
+  const saveInlineRow = async (ts) => {
+    const merged = { ...ts, ...(inlineEdits[ts.id] || {}) };
+    // Šalju se samo sati (prazno polje = 0); vrste sati, prekovremeno i iznose računa baza.
+    const data = { ...dayHours(merged), ...vendorSnapshot(merged.employee_id, merged.week_start) };
+    if (isAdmin) {
+      // Admin ponovo bira tarifu (Tarife su se možda promenile). Operater ne dira tarifu reda.
+      setResolvingRates(true);
+      try {
+        Object.assign(data, await resolveDraftRates(merged));
+      } finally {
+        setResolvingRates(false);
+      }
+    }
+    updateMutation.mutate({ id: ts.id, data });
   };
 
   const handleFileUpload = async (file) => {
@@ -335,35 +402,71 @@ export default function Timesheets() {
     }
   };
 
-  const handleAddRow = () => {
+  const handleAddRow = async () => {
     const emp = employees.find((e) => e.id === newRowForm.employee_id);
+    if (!manualProject && !newRowForm._project_id) { toast.error(T.selectProjectError); return; }
     if (!emp) { toast.error(T.selectEmployeeError); return; }
-    const totalHours = calcTotals(newRowForm);
-    // Use project-specific rates stored in form, fall back to employee defaults
     const selectedProject = projects.find((p) => p.id === newRowForm._project_id);
-    const assignment = selectedProject?.assigned_employees?.find((a) => a.employee_id === emp.id);
-    // Tarifa koja fali ostaje prazna (null), nikad 0 — takav red ne može da se odobri (D4/D11, baza).
-    const { b2c: b2cRate, b2b: b2bRate, missing } = resolveTimesheetRates(assignment, emp);
-    if (missing.length) toast.warning(T.missingRate, { duration: 10000 });
-    const fin = calcFinancials(totalHours, b2cRate, b2bRate);
     const weekRef = makeWeekRef(weekDate, emp, selectedProject?.project_number);
     // Strip internal _fields before saving
-    const { _project_id, _b2c_rate, _b2b_rate, ...formData } = newRowForm;
-    createMutation.mutate({
-      ...formData,
-      // Veza po ID-u (ranije samo po imenu — dva projekta istog imena su mešala satnice, QA 14.11.2026).
-      project_id: manualProject ? null : _project_id || null,
-      employee_name: `${emp.first_name} ${emp.last_name}`,
-      week_start: weekStartStr,
-      week_ref: weekRef,
-      total_hours: totalHours,
-      overtime_hours: Math.max(0, totalHours - 40),
-      b2c_rate: b2cRate,
-      b2b_rate: b2bRate,
-      ...fin,
-      approval_status: "draft",
-      ...vendorSnapshot(emp.id, weekStartStr),
-    });
+    const { _project_id, _rates, ...formData } = newRowForm;
+    // Veza po ID-u (ranije samo po imenu — dva projekta istog imena su mešala satnice, QA 14.11.2026).
+    const projectId = manualProject ? null : _project_id || null;
+    setResolvingRates(true);
+    try {
+      // Tarifa koja fali ostaje prazna (null), nikad 0 — takav red ne može da se odobri (D4/D11, baza).
+      const rates = await resolveDraftRates({ employee_id: emp.id, project_id: projectId, week_start: weekStartStr });
+      createMutation.mutate({
+        ...formData,
+        ...dayHours(newRowForm), // prazno polje = 0
+        project_id: projectId,
+        employee_name: `${emp.first_name} ${emp.last_name}`,
+        week_start: weekStartStr,
+        week_ref: weekRef,
+        ...rates,
+        approval_status: "draft",
+        ...vendorSnapshot(emp.id, weekStartStr),
+      });
+    } finally {
+      setResolvingRates(false);
+    }
+  };
+
+  // Pregled tarifa u dijalogu (samo admin): isti izbor tarife kao pri čuvanju. Stigne li odgovor za radnika koji
+  // više nije izabran, odbacuje se.
+  const previewDialogRates = async (employeeId, projectId) => {
+    const row = { employee_id: employeeId, project_id: projectId, week_start: weekStartStr };
+    const input = (await loadRateInputs([row], { isAdmin }))(row);
+    const { b2c_rate, b2b_rate } = draftRates(input);
+    const p = input.employeePrivate || {};
+    const special = { overtime_rate: p.overtime_rate, weekend_rate: p.weekend_rate, holiday_rate: p.holiday_rate };
+    setNewRowForm((f) => (f.employee_id === employeeId ? { ...f, _rates: { b2c_rate, b2b_rate, special } } : f));
+  };
+
+  // Odobravanje (samo admin, baza to i sprovodi): tarifa iz jedinstvenog izbora za nedelju reda, sveži koeficijenti,
+  // prag i praznici. Red kome fali tarifa ili koeficijent se ne šalje — admin dobija poruku šta tačno fali.
+  // Snimak koeficijenata i iznose upisuje baza; posle odobravanja promena tarife više ne menja red (D10).
+  const approveRows = async (rows) => {
+    if (!isAdmin) return 0;
+    const todo = rows.filter((r) => r.approval_status !== "approved");
+    if (!todo.length) return 0;
+    setApproving(true);
+    try {
+      const [inputFor, rules] = await Promise.all([loadRateInputs(todo, { isAdmin }), loadHourRules(todo)]);
+      const ready = [];
+      for (const ts of todo) {
+        try {
+          ready.push({ id: ts.id, data: approvalPayload({ ...inputFor(ts), ...rules, row: ts }).data });
+        } catch (error) {
+          if (!isMoneyError(error)) throw error;
+          toast.error(`${ts.employee_name || ts.week_ref || ""}: ${moneyErrorText(error, T)}`, { duration: 12000 });
+        }
+      }
+      await Promise.all(ready.map((p) => updateMutation.mutateAsync(p)));
+      return ready.length;
+    } finally {
+      setApproving(false);
+    }
   };
 
   // Totals
@@ -401,9 +504,21 @@ export default function Timesheets() {
 
   const handleMassEditTs = async () => {
     if (!massStatus) { toast.error(T.selectStatusError); return; }
-    await Promise.all([...selected].map((id) => updateMutation.mutateAsync({ id, data: { approval_status: massStatus } })));
+    // Odobravanje i odbijanje sme samo admin (baza); odobravanje ide kroz isti izbor tarife kao dugme u redu.
+    if (!isAdmin && (massStatus === "approved" || massStatus === "rejected")) return;
+    const rows = weekTimesheets.filter((t) => selected.has(t.id));
+    let count;
+    if (massStatus === "approved") {
+      count = await approveRows(rows);
+    } else {
+      // Operater ne menja odobrene redove (baza to odbija) — preskaču se uz poruku.
+      const editable = isAdmin ? rows : rows.filter((t) => t.approval_status !== "approved");
+      if (editable.length < rows.length) toast.warning(T.skippedApproved(rows.length - editable.length));
+      await Promise.all(editable.map((t) => updateMutation.mutateAsync({ id: t.id, data: { approval_status: massStatus } })));
+      count = editable.length;
+    }
     queryClient.invalidateQueries({ queryKey: ["timesheets"] });
-    toast.success(T.updated(selected.size, massStatus));
+    toast.success(T.updated(count, T[massStatus] || massStatus));
     setSelected(new Set());
     setMassEditOpen(false);
     setMassStatus("");
@@ -475,9 +590,14 @@ export default function Timesheets() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
           { label: T.totalHours, value: grandTotal.toFixed(1) + "h" },
-          { label: T.workerCost, value: "€" + totalCost.toFixed(0) },
-          { label: T.clientRevenue, value: "€" + totalRevenue.toFixed(0) },
-          { label: T.profit, value: "€" + totalProfit.toFixed(0), green: true },
+          // Novac vidi samo admin (D3); operater unosi sate.
+          ...(isAdmin
+            ? [
+                { label: T.workerCost, value: "€" + totalCost.toFixed(0) },
+                { label: T.clientRevenue, value: "€" + totalRevenue.toFixed(0) },
+                { label: T.profit, value: "€" + totalProfit.toFixed(0), green: true },
+              ]
+            : []),
         ].map((k) => (
           <Card key={k.label}>
             <CardContent className="p-4">
@@ -556,11 +676,11 @@ export default function Timesheets() {
                       <div className="flex items-center gap-1 text-sm font-bold">
                           <Clock className="w-3.5 h-3.5 text-muted-foreground" />
                           {(ts.total_hours || 0).toFixed(1)}h
-                          {(ts.overtime_hours || 0) > 0 && (
-                            <span className="text-xs text-amber-600 font-normal ml-1">+{(ts.overtime_hours || 0).toFixed(1)}{T.ot}</span>
+                          {(overtimeHours(ts, hourRules) || 0) > 0 && (
+                            <span className="text-xs text-amber-600 font-normal ml-1">+{hoursText(overtimeHours(ts, hourRules))}{T.ot}</span>
                           )}
                         </div>
-                        {ts.profit > 0 && (
+                        {isAdmin && ts.profit > 0 && (
                           <span className="text-xs text-emerald-600 font-semibold">€{ts.profit.toFixed(0)} {T.profit.toLowerCase()}</span>
                         )}
                     </div>
@@ -578,7 +698,7 @@ export default function Timesheets() {
                       {isAdmin && ts.approval_status === "submitted" && (
                         <>
                           <Button size="icon" variant="outline" className="h-7 w-7 text-emerald-600 border-emerald-200"
-                            onClick={() => updateMutation.mutate({ id: ts.id, data: { approval_status: "approved" } })}>
+                            disabled={approving} onClick={() => approveRows([ts])}>
                             <Check className="w-3 h-3" />
                           </Button>
                           <Button size="icon" variant="outline" className="h-7 w-7 text-red-500 border-red-200"
@@ -643,6 +763,10 @@ export default function Timesheets() {
                   weekTimesheets.map((ts) => {
                     const isEditing = editRow === ts.id;
                     const rowTotal = DAYS.reduce((s, d) => s + (parseFloat(getInlineValue(ts, `${d}_hours`)) || 0), 0);
+                    // Prekovremeno: preko dnevnog praga po danu (D5), ne „preko 40h"; tokom izmene — pregled iz unetih sati.
+                    const rowOvertime = isEditing
+                      ? hoursByTypeOf({ ...ts, ...(inlineEdits[ts.id] || {}) }, hourRules)?.prekovremeni ?? null
+                      : overtimeHours(ts, hourRules);
                     const isApproved = ts.approval_status === "approved";
                     const emp = employees.find((e) => e.id === ts.employee_id);
                     const ref = ts.week_ref || makeWeekRef(weekDate, emp);
@@ -686,7 +810,7 @@ export default function Timesheets() {
                           {isEditing ? rowTotal.toFixed(1) : (ts.total_hours || 0).toFixed(1)}
                         </td>
                         <td className="px-2 py-2 text-center text-xs text-amber-600">
-                          {isEditing ? Math.max(0, rowTotal - 40).toFixed(1) : (ts.overtime_hours || 0).toFixed(1)}
+                          {hoursText(rowOvertime)}
                         </td>
                         <td className="px-2 py-2 text-center">
                           <Badge className={`${statusColor[ts.approval_status]} border-0 capitalize text-[10px] px-1.5`}>
@@ -701,7 +825,7 @@ export default function Timesheets() {
                             </Button>
                             {isEditing ? (
                               <>
-                                <Button size="icon" className="h-7 w-7 bg-emerald-500 hover:bg-emerald-600" onClick={() => saveInlineRow(ts)}>
+                                <Button size="icon" className="h-7 w-7 bg-emerald-500 hover:bg-emerald-600" disabled={resolvingRates || updateMutation.isPending} onClick={() => saveInlineRow(ts)}>
                                   <Check className="w-3 h-3" />
                                 </Button>
                                 <Button size="icon" variant="outline" className="h-7 w-7" onClick={() => { setEditRow(null); setInlineEdits((p) => { const n = { ...p }; delete n[ts.id]; return n; }); }}>
@@ -722,7 +846,7 @@ export default function Timesheets() {
                                 {isAdmin && ts.approval_status === "submitted" && (
                                   <>
                                     <Button size="icon" variant="outline" className="h-7 w-7 text-emerald-600 border-emerald-200"
-                                      onClick={() => updateMutation.mutate({ id: ts.id, data: { approval_status: "approved" } })}>
+                                      disabled={approving} onClick={() => approveRows([ts])}>
                                       <Check className="w-3 h-3" />
                                     </Button>
                                     <Button size="icon" variant="outline" className="h-7 w-7 text-red-500 border-red-200"
@@ -751,14 +875,16 @@ export default function Timesheets() {
                 )}
                 {weekTimesheets.length > 0 && (
                   <tr className="border-t-2 bg-muted/40 font-semibold">
-                    <td className="px-3 py-2 text-xs uppercase tracking-wide text-muted-foreground" colSpan={3}>{T.weeklyTotals}</td>
+                    <td className="px-3 py-2 text-xs uppercase tracking-wide text-muted-foreground" colSpan={4}>{T.weeklyTotals}</td>
                     {DAYS.map((d) => (
                       <td key={d} className="px-1 py-2 text-center text-sm">{colTotals[d] || 0}</td>
                     ))}
                     <td className="px-2 py-2 text-center text-sm">{grandTotal.toFixed(1)}</td>
-                    <td className="px-2 py-2 text-center text-xs text-amber-600">{weekTimesheets.reduce((s, t) => s + (t.overtime_hours || 0), 0).toFixed(1)}</td>
+                    <td className="px-2 py-2 text-center text-xs text-amber-600">{weekTimesheets.reduce((s, t) => s + (overtimeHours(t, hourRules) || 0), 0).toFixed(1)}</td>
                     <td colSpan={2} className="px-2 py-2 text-right text-xs text-muted-foreground pr-4">
-                      {T.cost}: €{totalCost.toFixed(0)} · {T.rev}: €{totalRevenue.toFixed(0)} · <span className="text-emerald-600">{T.profit}: €{totalProfit.toFixed(0)}</span>
+                      {isAdmin && (
+                        <>{T.cost}: €{totalCost.toFixed(0)} · {T.rev}: €{totalRevenue.toFixed(0)} · <span className="text-emerald-600">{T.profit}: €{totalProfit.toFixed(0)}</span></>
+                      )}
                     </td>
                   </tr>
                 )}
@@ -790,7 +916,7 @@ export default function Timesheets() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setMassEditOpen(false)}>{T.cancel}</Button>
-            <Button onClick={handleMassEditTs} disabled={updateMutation.isPending}>
+            <Button onClick={handleMassEditTs} disabled={updateMutation.isPending || approving}>
               <Check className="w-4 h-4 mr-1" /> {T.apply(selected.size)}
             </Button>
           </DialogFooter>
@@ -898,11 +1024,9 @@ export default function Timesheets() {
                     <Select
                       value={newRowForm.employee_id || ""}
                       onValueChange={(v) => {
-                        const emp = employees.find((e) => e.id === v);
-                        const projAssignment = assignedEmps.find((a) => a.employee_id === v);
-                        // Dodela na projektu, pa profil radnika; ako nema — prazno (ne 0).
-                        const { b2c, b2b } = resolveTimesheetRates(projAssignment, emp);
-                        setNewRowForm((p) => ({ ...p, employee_id: v, _b2c_rate: b2c, _b2b_rate: b2b }));
+                        setNewRowForm((p) => ({ ...p, employee_id: v, _rates: null }));
+                        // Tarife i novac u dijalogu vidi samo admin (D3); čuvanje tarifu ionako bira ponovo.
+                        if (isAdmin) previewDialogRates(v, manualProject ? null : newRowForm._project_id || null);
                       }}
                     >
                       <SelectTrigger><SelectValue placeholder={T.selectEmployee} /></SelectTrigger>
@@ -921,18 +1045,22 @@ export default function Timesheets() {
                     </Select>
                     {newRowForm.employee_id && (() => {
                       const emp = employees.find((e) => e.id === newRowForm.employee_id);
-                      const b2c = newRowForm._b2c_rate ?? null;
-                      const b2b = newRowForm._b2b_rate ?? null;
+                      // Tarife iz jedinstvenog izbora (rates.js) za ovu nedelju; dok se učitavaju (ili za operatera) — ništa.
+                      const r = newRowForm._rates;
+                      const b2c = r?.b2c_rate ?? null;
+                      const b2b = r?.b2b_rate ?? null;
                       return emp ? (
                         <div className="space-y-1">
                           <div className="font-mono text-xs bg-muted rounded px-2 py-1 text-primary">
                             Ref: {makeWeekRef(weekDate, emp, selectedProject?.project_number)}
                           </div>
-                          <div className="flex gap-3 text-xs text-muted-foreground bg-muted/50 rounded-lg p-2">
-                            <span className={b2c === null ? "text-red-600 font-medium" : ""}>B2C: {b2c === null ? T.noRate : `€${b2c}/h`}</span>
-                            <span className={b2b === null ? "text-red-600 font-medium" : ""}>B2B: {b2b === null ? T.noRate : `€${b2b}/h`}</span>
-                            {b2c !== null && b2b !== null && <span className="text-emerald-600">{T.margin}: €{(b2b - b2c).toFixed(2)}/h</span>}
-                          </div>
+                          {isAdmin && r && (
+                            <div className="flex gap-3 text-xs text-muted-foreground bg-muted/50 rounded-lg p-2">
+                              <span className={b2c === null ? "text-red-600 font-medium" : ""}>B2C: {b2c === null ? T.noRate : `€${b2c}/h`}</span>
+                              <span className={b2b === null ? "text-red-600 font-medium" : ""}>B2B: {b2b === null ? T.noRate : `€${b2b}/h`}</span>
+                              {b2c !== null && b2b !== null && <span className="text-emerald-600">{T.margin}: €{(b2b - b2c).toFixed(2)}/h</span>}
+                            </div>
+                          )}
                         </div>
                       ) : null;
                     })()}
@@ -972,17 +1100,35 @@ export default function Timesheets() {
               {(() => {
                 const total = calcTotals(newRowForm);
                 if (total === 0) return null;
-                const emp = employees.find((e) => e.id === newRowForm.employee_id);
-                const b2c = newRowForm._b2c_rate ?? (manualProject ? validRate(emp?.b2c_hourly_rate) : null);
-                const b2b = newRowForm._b2b_rate ?? (manualProject ? validRate(emp?.b2b_hourly_rate) : null);
-                const fin = calcFinancials(total, b2c, b2b);
+                // Vrste sati (D5) vidi svako; iznos po vrsti (sati × tarifa × koeficijent) samo admin.
+                const r = newRowForm._rates;
+                const preview = previewAmounts({
+                  row: { ...newRowForm, week_start: weekStartStr },
+                  workerRate: r?.b2c_rate,
+                  clientRate: r?.b2b_rate,
+                  hourTypes,
+                  ...hourRules,
+                  employeePrivate: r?.special,
+                });
+                const byType = preview.hoursByType;
+                const fin = preview.amounts;
+                const showMoney = isAdmin && !!r;
                 return (
-                  <div className="mt-3 flex flex-wrap gap-4 text-sm bg-muted/50 rounded-lg p-3">
-                    <span className="font-semibold">{T.totalShort}: {total.toFixed(1)}h</span>
-                    {total > 40 && <span className="text-amber-600">{T.ot}: {(total - 40).toFixed(1)}h</span>}
-                    <span>{T.cost}: {money(fin.worker_cost)}</span>
-                    <span>{T.revenue}: {money(fin.client_revenue)}</span>
-                    {fin.profit !== null && <span className="text-emerald-600 font-semibold">{T.profit}: {money(fin.profit)}</span>}
+                  <div className="mt-3 space-y-1 text-sm bg-muted/50 rounded-lg p-3">
+                    <div className="flex flex-wrap gap-4">
+                      <span className="font-semibold">{T.totalShort}: {total.toFixed(1)}h</span>
+                      {byType?.prekovremeni > 0 && <span className="text-amber-600">{T.ot}: {byType.prekovremeni.toFixed(1)}h</span>}
+                      {byType?.vikend > 0 && <span className="text-amber-600">{T.hourType.vikend}: {byType.vikend.toFixed(1)}h</span>}
+                      {byType?.praznik > 0 && <span className="text-amber-600">{T.hourType.praznik}: {byType.praznik.toFixed(1)}h</span>}
+                      {showMoney && fin && (
+                        <>
+                          <span>{T.cost}: {money(fin.worker_cost)}</span>
+                          <span>{T.revenue}: {money(fin.client_revenue)}</span>
+                          <span className="text-emerald-600 font-semibold">{T.profit}: {money(fin.profit)}</span>
+                        </>
+                      )}
+                    </div>
+                    {showMoney && preview.error && <p className="text-xs text-amber-700">{moneyErrorText(preview.error, T)}</p>}
                   </div>
                 );
               })()}
@@ -1030,7 +1176,7 @@ export default function Timesheets() {
             </div>
             <DialogFooter>
             <Button variant="outline" onClick={() => { attachmentUpload.discard(); setDialogOpen(false); setNewRowForm({}); setManualProject(false); }}>{T.cancel}</Button>
-            <Button onClick={handleAddRow} disabled={createMutation.isPending}>{T.addRow}</Button>
+            <Button onClick={handleAddRow} disabled={createMutation.isPending || resolvingRates}>{T.addRow}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

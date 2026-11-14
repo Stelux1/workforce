@@ -10,6 +10,9 @@ insert into auth.users (id, email, instance_id, aud, role) values
   ('32222222-2222-4222-8222-222222222222', 'qa2-operater@radnici.local', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated');
 update public.profiles set role = 'admin' where id = '31111111-1111-4111-8111-111111111111';
 update public.profiles set role = 'operater' where id = '32222222-2222-4222-8222-222222222222';
+-- Pravila razvrstavanja kao u šemi (prag 8h, redovni = 1), nezavisno od onoga što je admin upisao u lokalnu bazu.
+update public.work_rules set daily_regular_hours = 8;
+update public.hour_types set worker_coef = 1, client_coef = 1 where code = 'redovni';
 
 insert into public.clients (id, name) values
   ('c3000000-0000-4000-8000-0000000000c1', 'QA2 klijent A'),
@@ -29,12 +32,13 @@ values ('f3000000-0000-4000-8000-0000000000f1', 'd3000000-0000-4000-8000-0000000
   '2031-11-03', 8, 12, 25, 1, 9999, 9998, 77, 'submitted');
 
 select is((select (worker_cost, client_revenue, profit, overtime_hours)::text from public.timesheets where id = 'f3000000-0000-4000-8000-0000000000f1'),
-  '(96.00,200.00,104.00,0.00)', 'iznose satnice računa baza (sati × tarifa), upisani iznosi se ignorišu');
+  '(96.00,200.00,104.00,0.00)', 'iznose satnice računa baza (sati × tarifa × koeficijent), upisani iznosi se ignorišu');
 
 select throws_ok($$update public.timesheets set approval_status = 'rejected' where id = 'f3000000-0000-4000-8000-0000000000f1'$$,
   '42501', null, 'operater ne može da odbije satnicu');
 
-update public.timesheets set mon_hours = 10 where id = 'f3000000-0000-4000-8000-0000000000f1';
+-- 8h pon + 2h uto = 10h redovno (prekovremeni je od Faze 2 preko dnevnog praga, ne preko 40h nedeljno).
+update public.timesheets set tue_hours = 2 where id = 'f3000000-0000-4000-8000-0000000000f1';
 select is((select worker_cost from public.timesheets where id = 'f3000000-0000-4000-8000-0000000000f1'), 120.00::numeric,
   'izmena sati preračunava trošak');
 
@@ -62,7 +66,7 @@ select lives_ok($$update public.timesheets set approval_status = 'approved' wher
   'admin odobrava satnicu sa tarifom');
 update public.timesheets set worker_cost = 1 where id = 'f3000000-0000-4000-8000-0000000000f1';
 select is((select worker_cost from public.timesheets where id = 'f3000000-0000-4000-8000-0000000000f1'), 120.00::numeric,
-  'ni admin ne može da upiše iznos odobrene satnice mimo sati × tarifa');
+  'ni admin ne može da upiše iznos odobrene satnice mimo sati × tarifa × koeficijent');
 
 select lives_ok($$select public.lock_month('2031-12-01')$$, 'decembar 2031 se zaključava');
 select throws_like($$select public.lock_month('2031-12-15')$$, '%već zaključan%', 'ponovno zaključavanje daje jasnu poruku');

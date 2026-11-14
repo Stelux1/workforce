@@ -197,6 +197,10 @@ const DB_MESSAGES_EN = [
   [/^Odobrena satnica ne može da se obriše; prvo je vratite u nacrt$/, "An approved timesheet can't be deleted; set it back to draft first."],
   [/^Satnica nema tarifu radnika ili klijenta.*$/, "The timesheet has no worker or client rate (or it is 0), so it can't be approved."],
   [/^Satnica mora biti vezana za projekat sa liste da bi se odobrila$/, "The timesheet must be linked to a project from the list before it can be approved."],
+  // Faza 2 (vrste sati): spisak vrsta ostaje na srpskom, kao u bazi (npr. „vikend (radnik)").
+  [/^Nedostaje koeficijent za vrstu sati: (.+) — admin ga upisuje u Koeficijenti i praznici$/,
+    "Missing coefficient for hour type: $1 — an admin enters it in Settings → Coefficients & Holidays."],
+  [/^Satnica nema potpun obračun i ne može da se odobri$/, "The timesheet amounts are incomplete, so it can't be approved."],
   [/^Mesec (\S+) je već zaključan$/, "Month $1 is already locked."],
   [/^Mesec (\S+) je zaključan$/, "Month $1 is locked."],
   [/^Mesec ima (\d+) neodobrenih satnica$/, "The month has $1 unapproved timesheets."],

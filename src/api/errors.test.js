@@ -95,6 +95,14 @@ describe("poruke posle QA 14.11.2026", () => {
     expect(describeError({ code: "23514", message: "Mesec 03.2026 je već zaključan" }, "en").text).toBe("Month 03.2026 is already locked.");
     expect(describeError({ code: "23514", message: "Mesec 03.2026 je zaključan" }, "rs").text).toBe("Mesec 03.2026 je zaključan");
   });
+  it("koeficijent koji fali pri odobravanju (Faza 2): srpski prolazi, engleski kaže gde se upisuje", () => {
+    const e = { code: "23514", message: "Nedostaje koeficijent za vrstu sati: vikend (radnik), vikend (klijent) — admin ga upisuje u Koeficijenti i praznici" };
+    expect(rs(e).text).toBe(e.message);
+    expect(describeError(e, "en").text).toBe(
+      "Missing coefficient for hour type: vikend (radnik), vikend (klijent) — an admin enters it in Settings → Coefficients & Holidays."
+    );
+    expect(describeError({ code: "23514", message: "Satnica nema potpun obračun i ne može da se odobri" }, "en").text).toMatch(/incomplete/);
+  });
 });
 
 describe("dataError / plainError", () => {

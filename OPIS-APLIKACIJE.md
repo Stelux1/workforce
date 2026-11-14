@@ -465,7 +465,7 @@ Tester treba svaki nalaz da označi kao **poznat** (sa ove liste) ili **nov**.
 ### 9.1 Novac — poznato i planirano za popravku (BACKLOG Faza 2–4)
 
 1. ✅ *(rešeno: tarifa ostaje prazna uz upozorenje, baza traži tarifu > 0)* **Satnica bez tarife dobija 0 i može da se odobri.** Ekran upisuje 0 (`Timesheets.jsx:293-294, 324-325, 874-878`), a baza odbija samo praznu tarifu.
-2. **Prekovremeni rad:** preko 40 h nedeljno, računa se posebno za svaki red i plaća se kao redovan. Vikend i praznici se ne razlikuju.
+2. ✅ *(rešeno: baza razvrstava sate — praznik → vikend → preko dnevnog praga prekovremeno; iznos po vrsti × koeficijent; D16, migracija 20261114150000)* **Prekovremeni rad:** preko 40 h nedeljno, računa se posebno za svaki red i plaća se kao redovan. Vikend i praznici se ne razlikuju.
 3. **Tarife i dodele (`/rates`) se ne koriste u satnicama.** Postoje dva nepovezana modela dodele: radnici na projektu (`assigned_employees`) i dodele na `/rates`.
 4. **Satnica iz profila radnika ne može da se unese** jer polja nisu u formi. Satnica se zadaje samo na projektu.
 5. ✅ *(rešeno za satnice i izveštaje: `project_id`, klijent preko projekta; ime ostaje samo kao snimak za prikaz)* **Veze po imenu umesto po ID-u:**
