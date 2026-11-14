@@ -31,12 +31,12 @@ export default function AffiliationDialog({ open, onOpenChange, form, setForm, o
         <DialogHeader><DialogTitle>{form.id ? L.edit : L.add}</DialogTitle></DialogHeader>
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label>{L.type} *</Label>
+            <Label htmlFor="aff-type">{L.type} *</Label>
             <Select
               value={form.engagement_type || "direct_employee"}
               onValueChange={(v) => setForm((p) => ({ ...p, engagement_type: v, vendor_id: v === "direct_employee" ? "" : p.vendor_id }))}
             >
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger id="aff-type"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="direct_employee">{L.direct}</SelectItem>
                 <SelectItem value="subcontractor_worker">{L.subcontractor}</SelectItem>
@@ -46,9 +46,9 @@ export default function AffiliationDialog({ open, onOpenChange, form, setForm, o
 
           {isSubcontractor && (
             <div className="space-y-2">
-              <Label>{L.vendor} *</Label>
+              <Label htmlFor="aff-vendor">{L.vendor} *</Label>
               <Select value={form.vendor_id || ""} onValueChange={(v) => set("vendor_id", v)}>
-                <SelectTrigger><SelectValue placeholder={L.vendor} /></SelectTrigger>
+                <SelectTrigger id="aff-vendor"><SelectValue placeholder={L.vendor} /></SelectTrigger>
                 <SelectContent>
                   {vendors.map((v) => <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>)}
                 </SelectContent>
@@ -58,19 +58,19 @@ export default function AffiliationDialog({ open, onOpenChange, form, setForm, o
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>{L.start} *</Label>
-              <Input type="date" value={form.start_date || ""} onChange={(e) => set("start_date", e.target.value)} />
+              <Label htmlFor="aff-start">{L.start} *</Label>
+              <Input id="aff-start" type="date" value={form.start_date || ""} onChange={(e) => set("start_date", e.target.value)} />
             </div>
             <div className="space-y-2">
-              <Label>{L.end}</Label>
-              <Input type="date" value={form.end_date || ""} onChange={(e) => set("end_date", e.target.value)} placeholder={L.open} />
+              <Label htmlFor="aff-end">{L.end}</Label>
+              <Input id="aff-end" type="date" value={form.end_date || ""} onChange={(e) => set("end_date", e.target.value)} placeholder={L.open} />
             </div>
           </div>
 
           <div className="space-y-2">
-            <Label>{L.status}</Label>
+            <Label htmlFor="aff-status">{L.status}</Label>
             <Select value={form.status || "active"} onValueChange={(v) => set("status", v)}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger id="aff-status"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="active">{L.active}</SelectItem>
                 <SelectItem value="ended">{L.ended}</SelectItem>
@@ -79,8 +79,8 @@ export default function AffiliationDialog({ open, onOpenChange, form, setForm, o
           </div>
 
           <div className="space-y-2">
-            <Label>{L.notes}</Label>
-            <Textarea rows={2} value={form.notes || ""} onChange={(e) => set("notes", e.target.value)} />
+            <Label htmlFor="aff-notes">{L.notes}</Label>
+            <Textarea id="aff-notes" rows={2} value={form.notes || ""} onChange={(e) => set("notes", e.target.value)} />
           </div>
         </div>
         <DialogFooter>

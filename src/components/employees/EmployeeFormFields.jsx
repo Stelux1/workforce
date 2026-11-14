@@ -1,3 +1,4 @@
+import { useId } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -173,6 +174,7 @@ const COUNTRIES = [
 ];
 
 export function PersonalInfoFields({ form, setForm }) {
+  const uid = useId();
   const T = useT();
   const { lang } = useLang();
   const update = (field, value) => setForm((prev) => ({ ...prev, [field]: value }));
@@ -180,21 +182,21 @@ export function PersonalInfoFields({ form, setForm }) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       <div className="space-y-2">
-        <Label>{T("First Name *")}</Label>
-        <Input value={form.first_name || ""} onChange={(e) => update("first_name", e.target.value)} />
+        <Label htmlFor={`${uid}-first_name`}>{T("First Name *")}</Label>
+        <Input id={`${uid}-first_name`} value={form.first_name || ""} onChange={(e) => update("first_name", e.target.value)} />
       </div>
       <div className="space-y-2">
-        <Label>{T("Last Name *")}</Label>
-        <Input value={form.last_name || ""} onChange={(e) => update("last_name", e.target.value)} />
+        <Label htmlFor={`${uid}-last_name`}>{T("Last Name *")}</Label>
+        <Input id={`${uid}-last_name`} value={form.last_name || ""} onChange={(e) => update("last_name", e.target.value)} />
       </div>
       <div className="space-y-2">
-        <Label>{T("Date of Birth")}</Label>
-        <Input type="date" value={form.date_of_birth || ""} onChange={(e) => update("date_of_birth", e.target.value)} />
+        <Label htmlFor={`${uid}-date_of_birth`}>{T("Date of Birth")}</Label>
+        <Input id={`${uid}-date_of_birth`} type="date" value={form.date_of_birth || ""} onChange={(e) => update("date_of_birth", e.target.value)} />
       </div>
       <div className="space-y-2">
-        <Label>{T("Gender")}</Label>
+        <Label htmlFor={`${uid}-gender`}>{T("Gender")}</Label>
         <Select value={form.gender || ""} onValueChange={(v) => update("gender", v)}>
-          <SelectTrigger><SelectValue placeholder={T("Select gender")} /></SelectTrigger>
+          <SelectTrigger id={`${uid}-gender`}><SelectValue placeholder={T("Select gender")} /></SelectTrigger>
           <SelectContent>
             <SelectItem value="male">{T("Male")}</SelectItem>
             <SelectItem value="female">{T("Female")}</SelectItem>
@@ -203,9 +205,9 @@ export function PersonalInfoFields({ form, setForm }) {
         </Select>
       </div>
       <div className="space-y-2">
-        <Label>{T("Nationality")}</Label>
+        <Label htmlFor={`${uid}-nationality`}>{T("Nationality")}</Label>
         <Select value={form.nationality || ""} onValueChange={(v) => update("nationality", v)}>
-          <SelectTrigger><SelectValue placeholder={T("Select nationality")} /></SelectTrigger>
+          <SelectTrigger id={`${uid}-nationality`}><SelectValue placeholder={T("Select nationality")} /></SelectTrigger>
           <SelectContent className="max-h-64 overflow-y-auto">
             {NATIONALITIES.map((n) => (
               <SelectItem key={n.en} value={n.en}>
@@ -220,6 +222,7 @@ export function PersonalInfoFields({ form, setForm }) {
 }
 
 export function ContactInfoFields({ form, setForm }) {
+  const uid = useId();
   const T = useT();
   const { lang } = useLang();
   const update = (field, value) => setForm((prev) => ({ ...prev, [field]: value }));
@@ -227,29 +230,29 @@ export function ContactInfoFields({ form, setForm }) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       <div className="space-y-2">
-        <Label>{T("Phone")}</Label>
-        <Input value={form.phone || ""} onChange={(e) => update("phone", e.target.value)} />
+        <Label htmlFor={`${uid}-phone`}>{T("Phone")}</Label>
+        <Input id={`${uid}-phone`} value={form.phone || ""} onChange={(e) => update("phone", e.target.value)} />
       </div>
       <div className="space-y-2">
-        <Label>{T("Email")}</Label>
-        <Input type="email" value={form.email || ""} onChange={(e) => update("email", e.target.value)} />
+        <Label htmlFor={`${uid}-email`}>{T("Email")}</Label>
+        <Input id={`${uid}-email`} type="email" value={form.email || ""} onChange={(e) => update("email", e.target.value)} />
       </div>
       <div className="space-y-2 md:col-span-2">
-        <Label>{T("Address")}</Label>
-        <Input value={form.address || ""} onChange={(e) => update("address", e.target.value)} />
+        <Label htmlFor={`${uid}-address`}>{T("Address")}</Label>
+        <Input id={`${uid}-address`} value={form.address || ""} onChange={(e) => update("address", e.target.value)} />
       </div>
       <div className="space-y-2">
-        <Label>{T("City")}</Label>
-        <Input value={form.city || ""} onChange={(e) => update("city", e.target.value)} />
+        <Label htmlFor={`${uid}-city`}>{T("City")}</Label>
+        <Input id={`${uid}-city`} value={form.city || ""} onChange={(e) => update("city", e.target.value)} />
       </div>
       <div className="space-y-2">
-        <Label>{T("Postal Code")}</Label>
-        <Input value={form.postal_code || ""} onChange={(e) => update("postal_code", e.target.value)} />
+        <Label htmlFor={`${uid}-postal_code`}>{T("Postal Code")}</Label>
+        <Input id={`${uid}-postal_code`} value={form.postal_code || ""} onChange={(e) => update("postal_code", e.target.value)} />
       </div>
       <div className="space-y-2">
-        <Label>{T("Country")}</Label>
+        <Label htmlFor={`${uid}-country`}>{T("Country")}</Label>
         <Select value={form.country || ""} onValueChange={(v) => update("country", v)}>
-          <SelectTrigger><SelectValue placeholder={T("Select country")} /></SelectTrigger>
+          <SelectTrigger id={`${uid}-country`}><SelectValue placeholder={T("Select country")} /></SelectTrigger>
           <SelectContent className="max-h-64 overflow-y-auto">
             {COUNTRIES.map((c) => (
               <SelectItem key={c.en} value={c.en}>
@@ -264,6 +267,7 @@ export function ContactInfoFields({ form, setForm }) {
 }
 
 export function EmploymentInfoFields({ form, setForm }) {
+  const uid = useId();
   const T = useT();
   const { lang } = useLang();
   const update = (field, value) => setForm((prev) => ({ ...prev, [field]: value }));
@@ -286,14 +290,14 @@ export function EmploymentInfoFields({ form, setForm }) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       <div className="space-y-2">
-        <Label>{T("Employee ID")}</Label>
-        <Input value={form.employee_id || ""} onChange={(e) => update("employee_id", e.target.value)} />
+        <Label htmlFor={`${uid}-employee_id`}>{T("Employee ID")}</Label>
+        <Input id={`${uid}-employee_id`} value={form.employee_id || ""} onChange={(e) => update("employee_id", e.target.value)} />
       </div>
       <div className="space-y-2">
-        <Label>{T("Department")}</Label>
+        <Label htmlFor={`${uid}-department`}>{T("Department")}</Label>
         {deptConfigs.length > 0 ? (
           <Select value={form.department || ""} onValueChange={(v) => { update("department", v); update("position", ""); }}>
-            <SelectTrigger><SelectValue placeholder={T("Select department")} /></SelectTrigger>
+            <SelectTrigger id={`${uid}-department`}><SelectValue placeholder={T("Select department")} /></SelectTrigger>
             <SelectContent>
               {deptConfigs.map((d) => (
                 <SelectItem key={d.id} value={d.name}>{getDisplayName(d, true)}</SelectItem>
@@ -301,14 +305,14 @@ export function EmploymentInfoFields({ form, setForm }) {
             </SelectContent>
           </Select>
         ) : (
-          <Input value={form.department || ""} onChange={(e) => update("department", e.target.value)} placeholder={T("No departments configured yet")} />
+          <Input id={`${uid}-department`} value={form.department || ""} onChange={(e) => update("department", e.target.value)} placeholder={T("No departments configured yet")} />
         )}
       </div>
       <div className="space-y-2">
-        <Label>{T("Position")}</Label>
+        <Label htmlFor={`${uid}-position`}>{T("Position")}</Label>
         {positions.length > 0 ? (
           <Select value={form.position || ""} onValueChange={(v) => update("position", v)}>
-            <SelectTrigger><SelectValue placeholder={T("Select position")} /></SelectTrigger>
+            <SelectTrigger id={`${uid}-position`}><SelectValue placeholder={T("Select position")} /></SelectTrigger>
             <SelectContent>
               {positions.map((pos) => (
                 <SelectItem key={pos.name} value={pos.name}>{getDisplayName(pos, false)}</SelectItem>
@@ -316,13 +320,13 @@ export function EmploymentInfoFields({ form, setForm }) {
             </SelectContent>
           </Select>
         ) : (
-          <Input value={form.position || ""} onChange={(e) => update("position", e.target.value)} placeholder={form.department ? T("No positions in this department") : T("Select a department first")} />
+          <Input id={`${uid}-position`} value={form.position || ""} onChange={(e) => update("position", e.target.value)} placeholder={form.department ? T("No positions in this department") : T("Select a department first")} />
         )}
       </div>
       <div className="space-y-2">
-        <Label>{T("Employment Type")}</Label>
+        <Label htmlFor={`${uid}-employment_type`}>{T("Employment Type")}</Label>
         <Select value={form.employment_type || ""} onValueChange={(v) => update("employment_type", v)}>
-          <SelectTrigger><SelectValue placeholder={T("Select type")} /></SelectTrigger>
+          <SelectTrigger id={`${uid}-employment_type`}><SelectValue placeholder={T("Select type")} /></SelectTrigger>
           <SelectContent>
             <SelectItem value="full_time">{T("Full-time")}</SelectItem>
             <SelectItem value="part_time">{T("Part-time")}</SelectItem>
@@ -332,19 +336,19 @@ export function EmploymentInfoFields({ form, setForm }) {
         </Select>
       </div>
       <div className="space-y-2">
-        <Label>{T("Start Date")}</Label>
-        <Input type="date" value={form.start_date || ""} onChange={(e) => update("start_date", e.target.value)} />
+        <Label htmlFor={`${uid}-start_date`}>{T("Start Date")}</Label>
+        <Input id={`${uid}-start_date`} type="date" value={form.start_date || ""} onChange={(e) => update("start_date", e.target.value)} />
       </div>
       <div className="space-y-2">
-        <Label>{T("End Date")}</Label>
-        <Input type="date" value={form.end_date || ""} onChange={(e) => update("end_date", e.target.value)} />
+        <Label htmlFor={`${uid}-end_date`}>{T("End Date")}</Label>
+        <Input id={`${uid}-end_date`} type="date" value={form.end_date || ""} onChange={(e) => update("end_date", e.target.value)} />
       </div>
 
 
       <div className="space-y-2">
-        <Label>{T("Status")}</Label>
+        <Label htmlFor={`${uid}-status`}>{T("Status")}</Label>
         <Select value={form.status || "active"} onValueChange={(v) => update("status", v)}>
-          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectTrigger id={`${uid}-status`}><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="active">{T("Active")}</SelectItem>
             <SelectItem value="suspended">{T("Suspended")}</SelectItem>
@@ -358,35 +362,36 @@ export function EmploymentInfoFields({ form, setForm }) {
 }
 
 export function FinancialInfoFields({ form, setForm }) {
+  const uid = useId();
   const T = useT();
   const update = (field, value) => setForm((prev) => ({ ...prev, [field]: value }));
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       <div className="space-y-2">
-        <Label>{T("Bank Name")}</Label>
-        <Input value={form.bank_name || ""} onChange={(e) => update("bank_name", e.target.value)} />
+        <Label htmlFor={`${uid}-bank_name`}>{T("Bank Name")}</Label>
+        <Input id={`${uid}-bank_name`} value={form.bank_name || ""} onChange={(e) => update("bank_name", e.target.value)} />
       </div>
       <div className="space-y-2">
-        <Label>{T("IBAN")}</Label>
-        <Input value={form.iban || ""} onChange={(e) => update("iban", e.target.value)} />
+        <Label htmlFor={`${uid}-iban`}>{T("IBAN")}</Label>
+        <Input id={`${uid}-iban`} value={form.iban || ""} onChange={(e) => update("iban", e.target.value)} />
       </div>
       <div className="space-y-2">
-        <Label>{T("SWIFT/BIC")}</Label>
-        <Input value={form.swift_bic || ""} onChange={(e) => update("swift_bic", e.target.value)} />
+        <Label htmlFor={`${uid}-swift_bic`}>{T("SWIFT/BIC")}</Label>
+        <Input id={`${uid}-swift_bic`} value={form.swift_bic || ""} onChange={(e) => update("swift_bic", e.target.value)} />
       </div>
       <div className="space-y-2">
-        <Label>{T("Tax Number")}</Label>
-        <Input value={form.tax_number || ""} onChange={(e) => update("tax_number", e.target.value)} />
+        <Label htmlFor={`${uid}-tax_number`}>{T("Tax Number")}</Label>
+        <Input id={`${uid}-tax_number`} value={form.tax_number || ""} onChange={(e) => update("tax_number", e.target.value)} />
       </div>
       <div className="space-y-2">
-        <Label>{T("Salary")}</Label>
-        <Input type="number" value={form.salary || ""} onChange={(e) => update("salary", parseFloat(e.target.value) || 0)} />
+        <Label htmlFor={`${uid}-salary`}>{T("Salary")}</Label>
+        <Input id={`${uid}-salary`} type="number" value={form.salary || ""} onChange={(e) => update("salary", parseFloat(e.target.value) || 0)} />
       </div>
       <div className="space-y-2">
-        <Label>{T("Payment Frequency")}</Label>
+        <Label htmlFor={`${uid}-payment_frequency`}>{T("Payment Frequency")}</Label>
         <Select value={form.payment_frequency || ""} onValueChange={(v) => update("payment_frequency", v)}>
-          <SelectTrigger><SelectValue placeholder={T("Select frequency")} /></SelectTrigger>
+          <SelectTrigger id={`${uid}-payment_frequency`}><SelectValue placeholder={T("Select frequency")} /></SelectTrigger>
           <SelectContent>
             <SelectItem value="monthly">{T("Monthly")}</SelectItem>
             <SelectItem value="bi_weekly">{T("Bi-weekly")}</SelectItem>
@@ -399,12 +404,13 @@ export function FinancialInfoFields({ form, setForm }) {
 }
 
 export function PrivateInfoFields({ form, setForm }) {
+  const uid = useId();
   const T = useT();
   const update = (field, value) => setForm((prev) => ({ ...prev, [field]: value }));
   const num = (field, label, props = {}) => (
     <div className="space-y-2">
-      <Label>{T(label)}</Label>
-      <Input type="number" step="0.01" min="0" value={form[field] ?? ""} onChange={(e) => update(field, e.target.value)} {...props} />
+      <Label htmlFor={`${uid}-${field}`}>{T(label)}</Label>
+      <Input id={`${uid}-${field}`} type="number" step="0.01" min="0" value={form[field] ?? ""} onChange={(e) => update(field, e.target.value)} {...props} />
     </div>
   );
   const jmbgBad = !jmbgValid(String(form.jmbg ?? "").trim());
@@ -412,8 +418,9 @@ export function PrivateInfoFields({ form, setForm }) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       <div className="space-y-2">
-        <Label>{T("JMBG")}</Label>
+        <Label htmlFor={`${uid}-jmbg`}>{T("JMBG")}</Label>
         <Input
+          id={`${uid}-jmbg`}
           value={form.jmbg || ""}
           inputMode="numeric"
           maxLength={13}
@@ -425,25 +432,25 @@ export function PrivateInfoFields({ form, setForm }) {
       </div>
       <div />
       <div className="space-y-2">
-        <Label>{T("ID Card Number")}</Label>
-        <Input value={form.id_card_number || ""} onChange={(e) => update("id_card_number", e.target.value)} />
+        <Label htmlFor={`${uid}-id_card_number`}>{T("ID Card Number")}</Label>
+        <Input id={`${uid}-id_card_number`} value={form.id_card_number || ""} onChange={(e) => update("id_card_number", e.target.value)} />
       </div>
       <div className="space-y-2">
-        <Label>{T("ID Card Expiry")}</Label>
-        <Input type="date" value={form.id_card_expiry || ""} onChange={(e) => update("id_card_expiry", e.target.value)} />
+        <Label htmlFor={`${uid}-id_card_expiry`}>{T("ID Card Expiry")}</Label>
+        <Input id={`${uid}-id_card_expiry`} type="date" value={form.id_card_expiry || ""} onChange={(e) => update("id_card_expiry", e.target.value)} />
       </div>
       <div className="space-y-2">
-        <Label>{T("Passport Number")}</Label>
-        <Input value={form.passport_number || ""} onChange={(e) => update("passport_number", e.target.value)} />
+        <Label htmlFor={`${uid}-passport_number`}>{T("Passport Number")}</Label>
+        <Input id={`${uid}-passport_number`} value={form.passport_number || ""} onChange={(e) => update("passport_number", e.target.value)} />
       </div>
       <div className="space-y-2">
-        <Label>{T("Passport Expiry")}</Label>
-        <Input type="date" value={form.passport_expiry || ""} onChange={(e) => update("passport_expiry", e.target.value)} />
+        <Label htmlFor={`${uid}-passport_expiry`}>{T("Passport Expiry")}</Label>
+        <Input id={`${uid}-passport_expiry`} type="date" value={form.passport_expiry || ""} onChange={(e) => update("passport_expiry", e.target.value)} />
       </div>
       <div className="space-y-2">
-        <Label>{T("Rate Basis")}</Label>
+        <Label htmlFor={`${uid}-rate_basis`}>{T("Rate Basis")}</Label>
         <Select value={form.rate_basis || "neto"} onValueChange={(v) => update("rate_basis", v)}>
-          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectTrigger id={`${uid}-rate_basis`}><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="neto">{T("Net")}</SelectItem>
             <SelectItem value="bruto">{T("Gross")}</SelectItem>
@@ -461,18 +468,19 @@ export function PrivateInfoFields({ form, setForm }) {
 }
 
 export function PayrollInfoFields({ form, setForm }) {
+  const uid = useId();
   const T = useT();
   const update = (field, value) => setForm((prev) => ({ ...prev, [field]: value }));
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       <div className="space-y-2">
-        <Label>{T("B2C Hourly Rate (€) — Worker Pay")}</Label>
-        <Input type="number" step="0.01" value={form.b2c_hourly_rate || ""} onChange={(e) => update("b2c_hourly_rate", parseFloat(e.target.value) || 0)} placeholder={T("e.g. 20.00")} />
+        <Label htmlFor={`${uid}-b2c_hourly_rate`}>{T("B2C Hourly Rate (€) — Worker Pay")}</Label>
+        <Input id={`${uid}-b2c_hourly_rate`} type="number" step="0.01" value={form.b2c_hourly_rate || ""} onChange={(e) => update("b2c_hourly_rate", parseFloat(e.target.value) || 0)} placeholder={T("e.g. 20.00")} />
       </div>
       <div className="space-y-2">
-        <Label>{T("B2B Hourly Rate (€) — Client Billing")}</Label>
-        <Input type="number" step="0.01" value={form.b2b_hourly_rate || ""} onChange={(e) => update("b2b_hourly_rate", parseFloat(e.target.value) || 0)} placeholder={T("e.g. 35.00")} />
+        <Label htmlFor={`${uid}-b2b_hourly_rate`}>{T("B2B Hourly Rate (€) — Client Billing")}</Label>
+        <Input id={`${uid}-b2b_hourly_rate`} type="number" step="0.01" value={form.b2b_hourly_rate || ""} onChange={(e) => update("b2b_hourly_rate", parseFloat(e.target.value) || 0)} placeholder={T("e.g. 35.00")} />
       </div>
       {(form.b2c_hourly_rate || form.b2b_hourly_rate) ? (
         <div className="md:col-span-2 bg-muted/50 rounded-lg p-3 text-sm flex gap-6">
@@ -481,21 +489,21 @@ export function PayrollInfoFields({ form, setForm }) {
         </div>
       ) : null}
       <div className="space-y-2">
-        <Label>{T("Overtime Rate (€/h)")}</Label>
-        <Input type="number" step="0.01" value={form.overtime_rate || ""} onChange={(e) => update("overtime_rate", parseFloat(e.target.value) || 0)} />
+        <Label htmlFor={`${uid}-overtime_rate`}>{T("Overtime Rate (€/h)")}</Label>
+        <Input id={`${uid}-overtime_rate`} type="number" step="0.01" value={form.overtime_rate || ""} onChange={(e) => update("overtime_rate", parseFloat(e.target.value) || 0)} />
       </div>
       <div className="space-y-2">
-        <Label>{T("Weekend Rate (€/h)")}</Label>
-        <Input type="number" step="0.01" value={form.weekend_rate || ""} onChange={(e) => update("weekend_rate", parseFloat(e.target.value) || 0)} />
+        <Label htmlFor={`${uid}-weekend_rate`}>{T("Weekend Rate (€/h)")}</Label>
+        <Input id={`${uid}-weekend_rate`} type="number" step="0.01" value={form.weekend_rate || ""} onChange={(e) => update("weekend_rate", parseFloat(e.target.value) || 0)} />
       </div>
       <div className="space-y-2">
-        <Label>{T("Holiday Rate (€/h)")}</Label>
-        <Input type="number" step="0.01" value={form.holiday_rate || ""} onChange={(e) => update("holiday_rate", parseFloat(e.target.value) || 0)} />
+        <Label htmlFor={`${uid}-holiday_rate`}>{T("Holiday Rate (€/h)")}</Label>
+        <Input id={`${uid}-holiday_rate`} type="number" step="0.01" value={form.holiday_rate || ""} onChange={(e) => update("holiday_rate", parseFloat(e.target.value) || 0)} />
       </div>
       <div className="space-y-2">
-        <Label>{T("Payment Type")}</Label>
+        <Label htmlFor={`${uid}-payment_type`}>{T("Payment Type")}</Label>
         <Select value={form.payment_type || "hourly"} onValueChange={(v) => update("payment_type", v)}>
-          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectTrigger id={`${uid}-payment_type`}><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="hourly">{T("Hourly")}</SelectItem>
             <SelectItem value="daily">{T("Daily")}</SelectItem>
@@ -505,9 +513,9 @@ export function PayrollInfoFields({ form, setForm }) {
         </Select>
       </div>
       <div className="space-y-2">
-        <Label>{T("Payroll Status")}</Label>
+        <Label htmlFor={`${uid}-payroll_status`}>{T("Payroll Status")}</Label>
         <Select value={form.payroll_status || "active"} onValueChange={(v) => update("payroll_status", v)}>
-          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectTrigger id={`${uid}-payroll_status`}><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="active">{T("Active")}</SelectItem>
             <SelectItem value="on_hold">{T("On Hold")}</SelectItem>
@@ -516,38 +524,39 @@ export function PayrollInfoFields({ form, setForm }) {
         </Select>
       </div>
       <div className="space-y-2">
-        <Label>{T("Preferred Payment Method")}</Label>
-        <Input value={form.preferred_payment_method || ""} onChange={(e) => update("preferred_payment_method", e.target.value)} placeholder={T("e.g. Bank Transfer")} />
+        <Label htmlFor={`${uid}-preferred_payment_method`}>{T("Preferred Payment Method")}</Label>
+        <Input id={`${uid}-preferred_payment_method`} value={form.preferred_payment_method || ""} onChange={(e) => update("preferred_payment_method", e.target.value)} placeholder={T("e.g. Bank Transfer")} />
       </div>
       <div className="space-y-2">
-        <Label>{T("VAT Number")}</Label>
-        <Input value={form.vat_number || ""} onChange={(e) => update("vat_number", e.target.value)} />
+        <Label htmlFor={`${uid}-vat_number`}>{T("VAT Number")}</Label>
+        <Input id={`${uid}-vat_number`} value={form.vat_number || ""} onChange={(e) => update("vat_number", e.target.value)} />
       </div>
     </div>
   );
 }
 
 export function EmergencyContactFields({ form, setForm }) {
+  const uid = useId();
   const T = useT();
   const update = (field, value) => setForm((prev) => ({ ...prev, [field]: value }));
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       <div className="space-y-2">
-        <Label>{T("Contact Name")}</Label>
-        <Input value={form.emergency_contact_name || ""} onChange={(e) => update("emergency_contact_name", e.target.value)} />
+        <Label htmlFor={`${uid}-emergency_contact_name`}>{T("Contact Name")}</Label>
+        <Input id={`${uid}-emergency_contact_name`} value={form.emergency_contact_name || ""} onChange={(e) => update("emergency_contact_name", e.target.value)} />
       </div>
       <div className="space-y-2">
-        <Label>{T("Relationship")}</Label>
-        <Input value={form.emergency_contact_relationship || ""} onChange={(e) => update("emergency_contact_relationship", e.target.value)} />
+        <Label htmlFor={`${uid}-emergency_contact_relationship`}>{T("Relationship")}</Label>
+        <Input id={`${uid}-emergency_contact_relationship`} value={form.emergency_contact_relationship || ""} onChange={(e) => update("emergency_contact_relationship", e.target.value)} />
       </div>
       <div className="space-y-2">
-        <Label>{T("Phone")}</Label>
-        <Input value={form.emergency_contact_phone || ""} onChange={(e) => update("emergency_contact_phone", e.target.value)} />
+        <Label htmlFor={`${uid}-emergency_contact_phone`}>{T("Phone")}</Label>
+        <Input id={`${uid}-emergency_contact_phone`} value={form.emergency_contact_phone || ""} onChange={(e) => update("emergency_contact_phone", e.target.value)} />
       </div>
       <div className="space-y-2 md:col-span-2">
-        <Label>{T("Address")}</Label>
-        <Input value={form.emergency_contact_address || ""} onChange={(e) => update("emergency_contact_address", e.target.value)} />
+        <Label htmlFor={`${uid}-emergency_contact_address`}>{T("Address")}</Label>
+        <Input id={`${uid}-emergency_contact_address`} value={form.emergency_contact_address || ""} onChange={(e) => update("emergency_contact_address", e.target.value)} />
       </div>
     </div>
   );

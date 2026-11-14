@@ -144,7 +144,7 @@ export default function EmployeeForm() {
                     {uploading ? T("Uploading...") : T("Upload Photo")}
                   </span>
                 </Button>
-                <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
+                <input type="file" aria-label={T("Upload Photo")} accept="image/*" onChange={handlePhotoUpload} className="hidden" />
               </label>
               <p className="text-xs text-muted-foreground mt-1">{T("JPG, PNG. Max 5MB.")}</p>
             </div>

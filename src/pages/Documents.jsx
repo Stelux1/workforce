@@ -275,9 +275,9 @@ export default function Documents() {
           <DialogHeader><DialogTitle>{t("Upload Document")}</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>{t("Employee *")}</Label>
+              <Label htmlFor="doc-employee">{t("Employee *")}</Label>
               <Select value={form.employee_id || ""} onValueChange={(v) => setForm((p) => ({ ...p, employee_id: v }))}>
-                <SelectTrigger><SelectValue placeholder={t("Select employee")} /></SelectTrigger>
+                <SelectTrigger id="doc-employee"><SelectValue placeholder={t("Select employee")} /></SelectTrigger>
                 <SelectContent>
                   {employees.map((e) => (
                     <SelectItem key={e.id} value={e.id}>{e.first_name} {e.last_name}</SelectItem>
@@ -286,13 +286,13 @@ export default function Documents() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>{t("Title *")}</Label>
-              <Input value={form.title || ""} onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))} />
+              <Label htmlFor="doc-title">{t("Title *")}</Label>
+              <Input id="doc-title" value={form.title || ""} onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))} />
             </div>
             <div className="space-y-2">
-              <Label>{t("Category *")}</Label>
+              <Label htmlFor="doc-category">{t("Category *")}</Label>
               <Select value={form.category || ""} onValueChange={(v) => setForm((p) => ({ ...p, category: v }))}>
-                <SelectTrigger><SelectValue placeholder={t("Select category")} /></SelectTrigger>
+                <SelectTrigger id="doc-category"><SelectValue placeholder={t("Select category")} /></SelectTrigger>
                 <SelectContent>
                   {DOCUMENT_CATEGORIES.map((c) => (
                     <SelectItem key={c.value} value={c.value}>{documentCategoryLabel(c.value, lang)}</SelectItem>
@@ -301,18 +301,18 @@ export default function Documents() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>{t("Expiration Date")}</Label>
-              <Input type="date" value={form.expiration_date || ""} onChange={(e) => setForm((p) => ({ ...p, expiration_date: e.target.value }))} />
+              <Label htmlFor="doc-expiration">{t("Expiration Date")}</Label>
+              <Input id="doc-expiration" type="date" value={form.expiration_date || ""} onChange={(e) => setForm((p) => ({ ...p, expiration_date: e.target.value }))} />
             </div>
             <div className="space-y-2">
-              <Label>{t("File")}</Label>
+              <Label htmlFor="doc-file">{t("File")}</Label>
               <label className="cursor-pointer">
                 <div className="border-2 border-dashed rounded-lg p-6 text-center hover:border-primary/50 transition-colors">
                   <Upload className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
                   <p className="text-sm text-muted-foreground">{form.file_name || (uploading ? t("Uploading...") : t("Click to upload"))}</p>
                   <p className="text-xs text-muted-foreground mt-1">PDF, JPG, PNG, WEBP, HEIC · max 20 MB</p>
                 </div>
-                <input type="file" accept="application/pdf,image/jpeg,image/png,image/webp,image/heic" onChange={handleFileUpload} className="hidden" />
+                <input id="doc-file" type="file" aria-label={t("File")} accept="application/pdf,image/jpeg,image/png,image/webp,image/heic" onChange={handleFileUpload} className="hidden" />
               </label>
               {uploadFailed && (
                 <p className="text-xs text-red-600">

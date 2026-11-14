@@ -440,13 +440,13 @@ export default function EmployeeDetail() {
               <DialogHeader><DialogTitle>{t("Upload Document")}</DialogTitle></DialogHeader>
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <Label>{t("Title *")}</Label>
-                  <Input value={docForm.title || ""} onChange={(e) => setDocForm((p) => ({ ...p, title: e.target.value }))} />
+                  <Label htmlFor="empdoc-title">{t("Title *")}</Label>
+                  <Input id="empdoc-title" value={docForm.title || ""} onChange={(e) => setDocForm((p) => ({ ...p, title: e.target.value }))} />
                 </div>
                 <div className="space-y-2">
-                  <Label>{t("Category *")}</Label>
+                  <Label htmlFor="empdoc-category">{t("Category *")}</Label>
                   <Select value={docForm.category || ""} onValueChange={(v) => setDocForm((p) => ({ ...p, category: v }))}>
-                    <SelectTrigger><SelectValue placeholder={t("Select category")} /></SelectTrigger>
+                    <SelectTrigger id="empdoc-category"><SelectValue placeholder={t("Select category")} /></SelectTrigger>
                     <SelectContent>
                       {DOC_CATEGORIES.map((c) => (
                         <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
@@ -455,17 +455,17 @@ export default function EmployeeDetail() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>{t("Expiration Date")}</Label>
-                  <Input type="date" value={docForm.expiration_date || ""} onChange={(e) => setDocForm((p) => ({ ...p, expiration_date: e.target.value }))} />
+                  <Label htmlFor="empdoc-expiration">{t("Expiration Date")}</Label>
+                  <Input id="empdoc-expiration" type="date" value={docForm.expiration_date || ""} onChange={(e) => setDocForm((p) => ({ ...p, expiration_date: e.target.value }))} />
                 </div>
                 <div className="space-y-2">
-                  <Label>{t("File")}</Label>
+                  <Label htmlFor="empdoc-file">{t("File")}</Label>
                   <label className="cursor-pointer">
                     <div className="border-2 border-dashed rounded-lg p-6 text-center hover:border-primary/50 transition-colors">
                       <Upload className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
                       <p className="text-sm text-muted-foreground">{docForm.file_name || (uploading ? t("Uploading...") : t("Click to upload"))}</p>
                     </div>
-                    <input type="file" accept="application/pdf,image/jpeg,image/png,image/webp,image/heic" onChange={handleFileUpload} className="hidden" />
+                    <input id="empdoc-file" type="file" aria-label={t("File")} accept="application/pdf,image/jpeg,image/png,image/webp,image/heic" onChange={handleFileUpload} className="hidden" />
                   </label>
                   {uploadFailed && (
                     <p className="text-xs text-red-600">
