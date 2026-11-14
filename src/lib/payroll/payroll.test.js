@@ -5,6 +5,7 @@ import { fromGross, fromNet } from "./serbianPayroll.js";
 import { computeWorkerMonth, MissingRateError, projectMargin } from "./monthly.js";
 import { resolveTimesheetRates, timesheetAmounts, totalHours, validRate } from "./timesheet.js";
 import { RATE_SOURCES, RateUnitError, resolveRates, resolveSideRate } from "./rates.js";
+import { classifyWeek, HOUR_TYPES, MissingCoefficientError, timesheetAmountsByType } from "./hours.js";
 
 // Primeri u RSD su izračunati ručno (vidi komentare) — ne iz ovog koda.
 const P = PARAMS_2026_RSD;
@@ -424,5 +425,174 @@ describe("izbor tarife (rates.js)", () => {
   it("bez ispravnog datuma rada nema izbora tarife", () => {
     expect(() => resolveRates({ ...ulaz(), date: "" })).toThrow("datum");
     expect(() => resolveRates({ ...ulaz(), date: "10.11.2026." })).toThrow("datum");
+  });
+});
+
+describe("vrste sati (hours.js)", () => {
+  // 2026-11-09 je ponedeljak; 2026-11-11 (sreda) je Dan primirja; 2026-11-14 je subota.
+  const MON = "2026-11-09";
+  const week = (mon = 0, sat = 0, rest = {}) => ({ mon_hours: mon, sat_hours: sat, ...rest });
+  const TYPES = [
+    { code: "redovni", worker_coef: 1, client_coef: 1 },
+    { code: "prekovremeni", worker_coef: 1.26, client_coef: 1.5 },
+    { code: "vikend", worker_coef: 1.3, client_coef: 1.4 },
+    { code: "praznik", worker_coef: 2.1, client_coef: 2 },
+  ];
+
+  it("Accept: pon 10h + sub 8h uz prag 8h = 8 redovno + 2 prekovremeno + 8 vikend", () => {
+    expect(classifyWeek({ weekStart: MON, dayHours: week(10, 8), holidays: [], dailyThreshold: 8 })).toEqual({
+      redovni: 8,
+      prekovremeni: 2,
+      vikend: 8,
+      praznik: 0,
+    });
+  });
+
+  it("prima i niz od 7 dana; prag je podrazumevano 8h", () => {
+    expect(classifyWeek({ weekStart: MON, dayHours: [10, 0, 0, 0, 7.5, 8, 0] })).toEqual({
+      redovni: 15.5,
+      prekovremeni: 2,
+      vikend: 8,
+      praznik: 0,
+    });
+  });
+
+  it("praznik u subotu je praznik, ne vikend", () => {
+    const r = classifyWeek({ weekStart: MON, dayHours: week(0, 8, { sun_hours: 4 }), holidays: ["2026-11-14"], dailyThreshold: 8 });
+    expect(r).toEqual({ redovni: 0, prekovremeni: 0, vikend: 4, praznik: 8 });
+  });
+
+  it("praznik radnim danom: ceo dan je praznik, bez podele na prekovremeno", () => {
+    const r = classifyWeek({
+      weekStart: MON,
+      dayHours: week(9, 0, { wed_hours: 11 }),
+      holidays: [{ date: "2026-11-11", name: "Dan primirja" }],
+      dailyThreshold: 8,
+    });
+    expect(r).toEqual({ redovni: 8, prekovremeni: 1, vikend: 0, praznik: 11 });
+  });
+
+  it("odbija nedelju koja ne počinje ponedeljkom i neispravne sate", () => {
+    expect(() => classifyWeek({ weekStart: "2026-11-10", dayHours: week(8) })).toThrow(/ponedeljkom/);
+    expect(() => classifyWeek({ weekStart: MON, dayHours: week(-1) })).toThrow();
+    expect(() => classifyWeek({ weekStart: MON, dayHours: week(25) })).toThrow();
+  });
+
+  it("iznos = sati × tarifa × koeficijent, po vrsti pa zbir", () => {
+    const hoursByType = classifyWeek({ weekStart: MON, dayHours: week(10, 8), holidays: [], dailyThreshold: 8 });
+    const r = timesheetAmountsByType({ hoursByType, workerRate: 10, clientRate: 20, hourTypes: TYPES });
+    // radnik: 8×10 = 80; 2×10×1,26 = 25,20; 8×10×1,3 = 104 → 209,20
+    // klijent: 8×20 = 160; 2×20×1,5 = 60; 8×20×1,4 = 224 → 444
+    expect(r.lines.map((l) => [l.code, l.worker_cost, l.client_revenue])).toEqual([
+      ["redovni", 80, 160],
+      ["prekovremeni", 25.2, 60],
+      ["vikend", 104, 224],
+    ]);
+    expect(r.worker_cost).toBe(209.2);
+    expect(r.client_revenue).toBe(444);
+    expect(r.profit).toBe(234.8);
+  });
+
+  it("prima tarife iz resolveRates ({ rate }) i hour_types kao objekat po šifri", () => {
+    const byCode = Object.fromEntries(TYPES.map((t) => [t.code, t]));
+    const r = timesheetAmountsByType({
+      hoursByType: { redovni: 8 },
+      workerRate: { rate: 12.5, source: RATE_SOURCES.PROFILE },
+      clientRate: { rate: 18 },
+      hourTypes: byCode,
+    });
+    expect(r.worker_cost).toBe(100);
+    expect(r.client_revenue).toBe(144);
+  });
+
+  it("koeficijent koji fali za vrstu sa satima → MissingCoefficientError sa šifrom", () => {
+    const types = TYPES.map((t) => (t.code === "vikend" ? { ...t, worker_coef: null } : t));
+    let err;
+    try {
+      timesheetAmountsByType({ hoursByType: { redovni: 8, vikend: 8 }, workerRate: 10, clientRate: 20, hourTypes: types });
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(MissingCoefficientError);
+    expect(err).toBeInstanceOf(MissingRateError); // D11: i dalje „tarifa ili koeficijent koji fali"
+    expect(err.codes).toEqual([HOUR_TYPES.WEEKEND]);
+    expect(err.message).toMatch(/vikend \(radnik\)/);
+  });
+
+  it("vrsta bez reda u hour_types takođe blokira obračun (nema tihog 1,00)", () => {
+    expect(() =>
+      timesheetAmountsByType({ hoursByType: { praznik: 4 }, workerRate: 10, clientRate: 20, hourTypes: TYPES.slice(0, 3) })
+    ).toThrow(MissingCoefficientError);
+  });
+
+  it("koeficijent koji fali za vrstu sa 0 sati ne baca grešku", () => {
+    const seed = [
+      { code: "redovni", worker_coef: 1, client_coef: 1 },
+      { code: "prekovremeni", worker_coef: null, client_coef: null },
+      { code: "vikend", worker_coef: null, client_coef: null },
+      { code: "praznik", worker_coef: null, client_coef: null },
+    ];
+    const r = timesheetAmountsByType({
+      hoursByType: { redovni: 40, prekovremeni: 0, vikend: 0, praznik: 0 },
+      workerRate: 10,
+      clientRate: 20,
+      hourTypes: seed,
+    });
+    expect(r.lines.map((l) => l.code)).toEqual(["redovni"]);
+    expect(r.worker_cost).toBe(400);
+  });
+
+  it("posebna satnica radnika ima prednost nad koeficijentom i pokriva koeficijent radnika koji fali", () => {
+    const types = TYPES.map((t) => (t.code === "prekovremeni" ? { ...t, worker_coef: null } : t));
+    const r = timesheetAmountsByType({
+      hoursByType: { redovni: 8, prekovremeni: 2, vikend: 8 },
+      workerRate: 10,
+      clientRate: 20,
+      hourTypes: types,
+      employeePrivate: { overtime_rate: 15, weekend_rate: 14, holiday_rate: 0 },
+    });
+    const ot = r.lines.find((l) => l.code === "prekovremeni");
+    const we = r.lines.find((l) => l.code === "vikend");
+    expect(ot).toMatchObject({ worker_source: "special", worker_rate: 15, worker_coef: null, worker_cost: 30, client_revenue: 60 });
+    // vikend: 8 × 14 = 112 umesto 8 × 10 × 1,3 = 104; klijent i dalje 8 × 20 × 1,4
+    expect(we).toMatchObject({ worker_source: "special", worker_cost: 112, client_revenue: 224 });
+    expect(r.worker_cost).toBe(222);
+  });
+
+  it("posebna satnica ne pokriva koeficijent klijenta", () => {
+    const types = TYPES.map((t) => (t.code === "praznik" ? { ...t, client_coef: null } : t));
+    expect(() =>
+      timesheetAmountsByType({
+        hoursByType: { praznik: 8 },
+        workerRate: 10,
+        clientRate: 20,
+        hourTypes: types,
+        employeePrivate: { holiday_rate: 25 },
+      })
+    ).toThrow(/praznik \(klijent\)/);
+  });
+
+  it("tarifa koja fali → MissingRateError, ne 0", () => {
+    expect(() => timesheetAmountsByType({ hoursByType: { redovni: 8 }, workerRate: null, clientRate: 20, hourTypes: TYPES })).toThrow(
+      MissingRateError
+    );
+    expect(() => timesheetAmountsByType({ hoursByType: { redovni: 8 }, workerRate: 10, clientRate: 0, hourTypes: TYPES })).toThrow(
+      MissingRateError
+    );
+  });
+
+  it("zaokružuje po vrsti na cent (pola od nule), pa sabira", () => {
+    // redovni: 7,5 × 19,99 = 149,925 → 149,93; prekovremeni: 0,25 × 19,99 × 1,26 = 6,29685 → 6,30
+    const r = timesheetAmountsByType({
+      hoursByType: { redovni: 7.5, prekovremeni: 0.25 },
+      workerRate: 19.99,
+      clientRate: 19.99,
+      hourTypes: TYPES,
+    });
+    expect(r.lines.map((l) => l.worker_cost)).toEqual([149.93, 6.3]);
+    expect(r.worker_cost).toBe(156.23);
+    // klijent: 149,93 + 0,25 × 19,99 × 1,5 = 7,49625 → 7,50
+    expect(r.client_revenue).toBe(157.43);
+    expect(r.profit).toBe(1.2);
   });
 });
