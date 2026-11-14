@@ -4,7 +4,7 @@ import { isAdminOnlyPath, normalizePath, visibleNavItems } from "./access";
 describe("isAdminOnlyPath", () => {
   it("štiti novčane stranice", () => {
     for (const p of ["/payroll", "/payroll/monthly", "/payroll/weekly", "/payroll/reports", "/rates", "/project-costs",
-      "/timesheet-dashboard", "/email-notifications", "/settings/departments", "/settings/cost-categories"]) {
+      "/timesheet-dashboard", "/email-notifications", "/settings/departments", "/settings/cost-categories", "/settings/users"]) {
       expect(isAdminOnlyPath(p)).toBe(true);
     }
   });

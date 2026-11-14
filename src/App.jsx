@@ -39,6 +39,7 @@ import ProjectCostsPage from '@/pages/projects/ProjectCostsPage';
 import CostCategoriesSettings from '@/pages/CostCategoriesSettings';
 import CoefficientsSettings from '@/pages/CoefficientsSettings';
 import CompanySettings from '@/pages/CompanySettings';
+import UsersSettings from '@/pages/UsersSettings';
 import Vendors from '@/pages/Vendors';
 import RatesPage from '@/pages/rates/RatesPage';
 
@@ -106,6 +107,7 @@ const AuthenticatedApp = () => {
         <Route path="/settings/cost-categories" element={<CostCategoriesSettings />} />
         <Route path="/settings/coefficients" element={<CoefficientsSettings />} />
         <Route path="/settings/company" element={<CompanySettings />} />
+        <Route path="/settings/users" element={<UsersSettings />} />
       </Route>
       <Route path="*" element={<PageNotFound />} />
     </Routes>
