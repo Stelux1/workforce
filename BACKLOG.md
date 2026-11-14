@@ -20,7 +20,7 @@ Princip (D12): postojeće stranice ostaju iste; menja se izvor podataka i novča
 - [ ] [build] Forma radnika, isti stil (`EmployeeFormFields`): JMBG (13 cifara + kontrolna cifra), broj lične karte i važenje, broj pasoša i važenje, osnova satnice neto/bruto, udeo radnog vremena; sekcija vidljiva samo adminu. Accept: pogrešan JMBG odbijen i u formi i u bazi; operater ne vidi sekciju.
 - [ ] [build] Forma radnika: svaki `<Label>` povezan sa svojim poljem (`htmlFor`/`id`), i u dijalozima dokumenata/angažmana. Accept: u pregledaču svako polje forme radnika ima dostupno ime (accessibility tree), `npm run build && npm test` prolaze. (QA 14.11.2026, P3)
 - [ ] [build] Fajlovi otpremljeni u formu koja se zatvori bez čuvanja (fotografija, dokument, prilog satnice) se brišu iz bucketa `files`. Accept: otpremi pa Otkaži → objekat ne postoji u `storage.objects`; sačuvan zapis i dalje otvara svoj fajl. (QA 14.11.2026)
-- [ ] [build] Fajlovi (dokumenta, prilozi satnica, fotografija) preko privatnog Storage-a. Accept: fajl se otvara samo prijavljenom korisniku (potpisan link); izmena zapisa ne pretvara link u trajni URL koji ističe.
+- [x] [build] Fajlovi (dokumenta, prilozi satnica, fotografija) preko privatnog Storage-a. Accept: fajl se otvara samo prijavljenom korisniku (potpisan link); izmena zapisa ne pretvara link u trajni URL koji ističe.
 
 ## Phase 2 — Novac u satnicama
 
