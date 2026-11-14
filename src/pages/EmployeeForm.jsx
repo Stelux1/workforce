@@ -5,18 +5,21 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
-import { ArrowLeft, Save, Upload, User, Phone, Briefcase, Landmark, Heart } from "lucide-react";
+import { ArrowLeft, Save, Upload, User, Phone, Briefcase, Landmark, Heart, IdCard } from "lucide-react";
 import { toast } from "sonner";
 import { useT } from "@/lib/translations";
+import { useAuth } from "@/lib/AuthContext";
+import { privateFieldErrors, normalizePrivate } from "@/lib/employeePrivate";
 import {
   PersonalInfoFields, ContactInfoFields, EmploymentInfoFields,
-  FinancialInfoFields, EmergencyContactFields,
+  FinancialInfoFields, PrivateInfoFields, EmergencyContactFields,
 } from "@/components/employees/EmployeeFormFields";
 
 export default function EmployeeForm() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const T = useT();
+  const { isAdmin } = useAuth();
   const urlParams = new URLSearchParams(window.location.search);
   const editId = urlParams.get("id");
 
@@ -84,14 +87,26 @@ export default function EmployeeForm() {
       toast.error(T("Please fill in all required fields"));
       return;
     }
-    saveMutation.mutate(form);
+    if (!isAdmin) {
+      saveMutation.mutate(form);
+      return;
+    }
+    const errors = privateFieldErrors(form);
+    if (errors.length) {
+      toast.error(errors.map((e) => T(e)).join(" · "));
+      return;
+    }
+    saveMutation.mutate(normalizePrivate(form));
   };
 
   const sections = [
     { title: T("Personal Information"), icon: User, content: <PersonalInfoFields form={form} setForm={setForm} /> },
     { title: T("Contact Information"), icon: Phone, content: <ContactInfoFields form={form} setForm={setForm} /> },
     { title: T("Employment Information"), icon: Briefcase, content: <EmploymentInfoFields form={form} setForm={setForm} /> },
-    { title: T("Financial Information"), icon: Landmark, content: <FinancialInfoFields form={form} setForm={setForm} /> },
+    ...(isAdmin ? [
+      { title: T("Financial Information"), icon: Landmark, content: <FinancialInfoFields form={form} setForm={setForm} /> },
+      { title: T("ID Documents & Payroll Basis"), icon: IdCard, content: <PrivateInfoFields form={form} setForm={setForm} /> },
+    ] : []),
     { title: T("Emergency Contact"), icon: Heart, content: <EmergencyContactFields form={form} setForm={setForm} /> },
   ];
 

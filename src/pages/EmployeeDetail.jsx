@@ -350,6 +350,27 @@ export default function EmployeeDetail() {
               </div>
             </CardContent>
           </Card>
+          <Card className="mt-4">
+            <CardHeader className="pb-2"><CardTitle className="text-base flex items-center gap-2"><FileText className="w-4 h-4" /> {t("ID Documents & Payroll Basis")}</CardTitle></CardHeader>
+            <CardContent className="grid grid-cols-1 md:grid-cols-2">
+              <div className="divide-y pr-4">
+                <InfoRow label={t("JMBG")} value={emp.jmbg} />
+                <InfoRow label={t("ID Card Number")} value={emp.id_card_number} />
+                <InfoRow label={t("ID Card Expiry")} value={emp.id_card_expiry ? formatDate(parseISO(emp.id_card_expiry), longDatePattern(lang), lang) : null} />
+                <InfoRow label={t("Passport Number")} value={emp.passport_number} />
+                <InfoRow label={t("Passport Expiry")} value={emp.passport_expiry ? formatDate(parseISO(emp.passport_expiry), longDatePattern(lang), lang) : null} />
+                <InfoRow label={t("Rate Basis")} value={emp.rate_basis ? (emp.rate_basis === "bruto" ? t("Gross") : t("Net")) : null} />
+                <InfoRow label={t("Work Fraction")} value={emp.work_fraction != null ? String(emp.work_fraction) : null} />
+              </div>
+              <div className="divide-y pl-0 md:pl-4">
+                <InfoRow label={t("B2C Rate")} value={emp.b2c_hourly_rate != null ? `€${emp.b2c_hourly_rate}` : null} />
+                <InfoRow label={t("B2B Rate")} value={emp.b2b_hourly_rate != null ? `€${emp.b2b_hourly_rate}` : null} />
+                <InfoRow label={t("Overtime Rate")} value={emp.overtime_rate != null ? `€${emp.overtime_rate}` : null} />
+                <InfoRow label={t("Weekend Rate")} value={emp.weekend_rate != null ? `€${emp.weekend_rate}` : null} />
+                <InfoRow label={t("Holiday Rate")} value={emp.holiday_rate != null ? `€${emp.holiday_rate}` : null} />
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="emergency" className="mt-4">

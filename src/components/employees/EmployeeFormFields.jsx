@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { useT } from "@/lib/translations";
 import { useLang } from "@/lib/LanguageContext";
+import { jmbgValid } from "@/lib/jmbg";
 
 const NATIONALITIES = [
   { en: "Afghan", rs: "Afganistanog" },
@@ -393,6 +394,68 @@ export function FinancialInfoFields({ form, setForm }) {
           </SelectContent>
         </Select>
       </div>
+    </div>
+  );
+}
+
+export function PrivateInfoFields({ form, setForm }) {
+  const T = useT();
+  const update = (field, value) => setForm((prev) => ({ ...prev, [field]: value }));
+  const num = (field, label, props = {}) => (
+    <div className="space-y-2">
+      <Label>{T(label)}</Label>
+      <Input type="number" step="0.01" min="0" value={form[field] ?? ""} onChange={(e) => update(field, e.target.value)} {...props} />
+    </div>
+  );
+  const jmbgBad = !jmbgValid(String(form.jmbg ?? "").trim());
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="space-y-2">
+        <Label>{T("JMBG")}</Label>
+        <Input
+          value={form.jmbg || ""}
+          inputMode="numeric"
+          maxLength={13}
+          aria-invalid={jmbgBad}
+          className={jmbgBad ? "border-destructive" : ""}
+          onChange={(e) => update("jmbg", e.target.value)}
+        />
+        {jmbgBad && <p className="text-xs text-destructive">{T("JMBG must be 13 digits with a valid check digit")}</p>}
+      </div>
+      <div />
+      <div className="space-y-2">
+        <Label>{T("ID Card Number")}</Label>
+        <Input value={form.id_card_number || ""} onChange={(e) => update("id_card_number", e.target.value)} />
+      </div>
+      <div className="space-y-2">
+        <Label>{T("ID Card Expiry")}</Label>
+        <Input type="date" value={form.id_card_expiry || ""} onChange={(e) => update("id_card_expiry", e.target.value)} />
+      </div>
+      <div className="space-y-2">
+        <Label>{T("Passport Number")}</Label>
+        <Input value={form.passport_number || ""} onChange={(e) => update("passport_number", e.target.value)} />
+      </div>
+      <div className="space-y-2">
+        <Label>{T("Passport Expiry")}</Label>
+        <Input type="date" value={form.passport_expiry || ""} onChange={(e) => update("passport_expiry", e.target.value)} />
+      </div>
+      <div className="space-y-2">
+        <Label>{T("Rate Basis")}</Label>
+        <Select value={form.rate_basis || "neto"} onValueChange={(v) => update("rate_basis", v)}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="neto">{T("Net")}</SelectItem>
+            <SelectItem value="bruto">{T("Gross")}</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      {num("work_fraction", "Work Fraction (0.5 = half time)", { min: "0.01", max: "1", step: "0.01", placeholder: "1" })}
+      {num("b2c_hourly_rate", "B2C Hourly Rate (€) — Worker Pay")}
+      {num("b2b_hourly_rate", "B2B Hourly Rate (€) — Client Billing")}
+      {num("overtime_rate", "Overtime Rate (€/h)")}
+      {num("weekend_rate", "Weekend Rate (€/h)")}
+      {num("holiday_rate", "Holiday Rate (€/h)")}
     </div>
   );
 }
