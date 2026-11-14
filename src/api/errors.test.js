@@ -30,6 +30,7 @@ describe("describeError", () => {
     expect(rs(dup("employees_employee_id_key")).key).toBe("duplicateEmployeeId");
     expect(rs(dup("timesheets_one_per_week")).key).toBe("duplicateTimesheet");
     expect(rs(dup("payroll_runs_month_key")).key).toBe("duplicatePayrollMonth");
+    expect(rs(dup("holidays_pkey")).key).toBe("duplicateHoliday");
     expect(rs(dup("nesto_drugo")).key).toBe("duplicate");
   });
 

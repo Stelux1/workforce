@@ -11,6 +11,10 @@ const M = {
     rs: "Izmena nije sačuvana: zapis ne postoji ili nemate pravo da ga menjate.",
   },
   duplicate: { en: "Such a record already exists.", rs: "Takav zapis već postoji." },
+  duplicateHoliday: {
+    en: "A holiday for this date already exists.",
+    rs: "Praznik za ovaj datum već postoji.",
+  },
   duplicateEmployeeId: {
     en: "This employee ID is already taken. Enter a different one.",
     rs: "Ova šifra radnika već postoji. Upišite drugu šifru.",
@@ -231,6 +235,7 @@ export function describeError(error, lang = currentLang()) {
     return { key: "db", text: dbMessage(raw, lang) };
   }
   if (code === "23505") {
+    if (constraint === "holidays_pkey") return say("duplicateHoliday");
     if (constraint === "employees_employee_id_key") return say("duplicateEmployeeId");
     if (constraint === "timesheets_one_per_week" || constraint === "timesheets_one_per_week_manual") return say("duplicateTimesheet");
     if (constraint === "projects_name_client_key") return say("duplicateProject");

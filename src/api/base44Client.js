@@ -55,6 +55,9 @@ export const PAGE_SIZE = 1000;
 // Kolona po kojoj je redosled stabilan između delova (primarni ključ).
 const STABLE_ORDER = { hour_types: "code", holidays: "date", month_locks: "month", employee_private: "employee_id", payslip_projects: "payslip_id" };
 
+// Tabele čiji primarni ključ nije kolona `id` (get/update/delete/create idu preko njega).
+export const PRIMARY_KEY = { hour_types: "code", holidays: "date", work_rules: "id", month_locks: "month", employee_private: "employee_id" };
+
 const isDev = import.meta.env?.DEV;
 const warn = (...args) => {
   if (isDev) console.warn("[podaci]", ...args);
@@ -227,6 +230,7 @@ function makeEntity(name, table) {
   };
 
   const stableColumn = STABLE_ORDER[table] || "id";
+  const pk = PRIMARY_KEY[table] || "id";
 
   // Čita sve tražene redove u delovima od PAGE_SIZE (do `max`), uz stabilan redosled.
   const readPages = async (build, max, context) => {
@@ -284,7 +288,7 @@ function makeEntity(name, table) {
   };
 
   const getOne = async (id) => {
-    const { data, error } = await requireSupabase().from(table).select(selectCols).eq("id", id).maybeSingle();
+    const { data, error } = await requireSupabase().from(table).select(selectCols).eq(pk, id).maybeSingle();
     if (error) throw toError(error, `${name}.get`);
     if (!data) throw plainError("notFound", `${name}.get`);
     return (await finish([data]))[0];
@@ -296,23 +300,23 @@ function makeEntity(name, table) {
     get: getOne,
     async create(data) {
       const payload = preparePayload(table, data);
-      const { data: row, error } = await requireSupabase().from(table).insert(payload).select("id").single();
+      const { data: row, error } = await requireSupabase().from(table).insert(payload).select(pk).single();
       if (error) throw toError(error, `${name}.create`);
-      await writePrivate(row.id, data);
-      return getOne(row.id);
+      await writePrivate(row[pk], data);
+      return getOne(row[pk]);
     },
     async update(id, data) {
       const payload = preparePayload(table, data);
       const fileFields = (FILE_FIELDS[table] || []).filter((f) => f in payload);
       let oldFiles = [];
       if (fileFields.length) {
-        const { data: old } = await requireSupabase().from(table).select(fileFields.join(",")).eq("id", id).maybeSingle();
+        const { data: old } = await requireSupabase().from(table).select(fileFields.join(",")).eq(pk, id).maybeSingle();
         oldFiles = fileFields.filter((f) => old?.[f] && toStorageRef(old[f]) !== payload[f]).map((f) => old[f]);
       }
       if (Object.keys(payload).length) {
         // RLS ne baca grešku kad korisnik nema pravo da menja red — samo ne izmeni ništa. Zato tražimo nazad
         // izmenjen red: ako ga nema, izmena nije prošla i to mora da se kaže, a ne da izgleda kao uspeh.
-        const { data: changed, error } = await requireSupabase().from(table).update(payload).eq("id", id).select("id");
+        const { data: changed, error } = await requireSupabase().from(table).update(payload).eq(pk, id).select(pk);
         if (error) throw toError(error, `${name}.update`);
         if (!changed?.length) throw plainError("noRows", `${name}.update`);
       }
@@ -326,14 +330,14 @@ function makeEntity(name, table) {
       const files = [];
       const fileFields = FILE_FIELDS[table] || [];
       if (fileFields.length) {
-        const { data: row } = await sb.from(table).select(fileFields.join(",")).eq("id", id).maybeSingle();
+        const { data: row } = await sb.from(table).select(fileFields.join(",")).eq(pk, id).maybeSingle();
         fileFields.forEach((f) => row?.[f] && files.push(row[f]));
       }
       if (table === "employees") {
         const { data: docs } = await sb.from("documents").select("file_url").eq("employee_id", id);
         (docs || []).forEach((d) => d.file_url && files.push(d.file_url));
       }
-      const { data: removed, error } = await sb.from(table).delete().eq("id", id).select("id");
+      const { data: removed, error } = await sb.from(table).delete().eq(pk, id).select(pk);
       if (error) throw toError(error, `${name}.delete`);
       if (!removed?.length) throw plainError("noRows", `${name}.delete`);
       await removeFiles(storagePaths(files), `${name}.delete`);

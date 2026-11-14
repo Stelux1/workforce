@@ -1,10 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Simuliran Supabase: tabela sa N redova i PostgREST ograničenjem od 1000 redova po zahtevu.
-const state = { rows: [], ranges: [], uploads: [], removed: [] };
+const state = { rows: [], ranges: [], uploads: [], removed: [], calls: [], pkValue: null };
 function builder() {
   const q = {
-    select: () => q, order: () => q, eq: () => q, in: () => q, not: () => q, is: () => q,
+    select: (c) => { state.calls.push(["select", c]); return q; },
+    eq: (c, v) => { state.calls.push(["eq", c, v]); return q; },
+    insert: () => { state.calls.push(["insert"]); return q; },
+    update: () => { state.calls.push(["update"]); return q; },
+    delete: () => { state.calls.push(["delete"]); return q; },
+    single: () => Promise.resolve({ data: state.pkValue, error: null }),
+    maybeSingle: () => Promise.resolve({ data: state.pkValue, error: null }),
+    then: (res, rej) => Promise.resolve({ data: state.pkValue ? [state.pkValue] : [], error: null }).then(res, rej),
+    order: () => q, in: () => q, not: () => q, is: () => q,
     gte: () => q, lte: () => q, gt: () => q, lt: () => q, neq: () => q,
     range: (from, to) => {
       state.ranges.push([from, to]);
@@ -99,5 +107,45 @@ describe("potpisani linkovi se osvežavaju pre isteka", () => {
     const { SIGNED_URL_SECONDS } = await import("./base44Client");
     expect(SIGNED_URL_REFRESH_MS).toBeLessThan(SIGNED_URL_SECONDS * 1000);
     expect(STALE_AFTER_MS).toBeLessThan(SIGNED_URL_REFRESH_MS);
+  });
+});
+
+
+describe("tabele bez kolone id (primarni ključ code/date/id=true)", () => {
+  const eqs = () => state.calls.filter((c) => c[0] === "eq").map((c) => c.slice(1));
+  beforeEach(() => { state.calls = []; });
+
+  it("HourType.update menja po koloni code", async () => {
+    state.pkValue = { code: "vikend", worker_coef: 1.5 };
+    await base44.entities.HourType.update("vikend", { worker_coef: 1.5 });
+    expect(eqs()).toContainEqual(["code", "vikend"]);
+    expect(eqs().some(([c]) => c === "id")).toBe(false);
+    expect(state.calls).toContainEqual(["select", "code"]);
+  });
+
+  it("Holiday.delete briše po koloni date", async () => {
+    state.pkValue = { date: "2026-12-25" };
+    await base44.entities.Holiday.delete("2026-12-25");
+    expect(eqs()).toEqual([["date", "2026-12-25"]]);
+    expect(state.calls).toContainEqual(["select", "date"]);
+  });
+
+  it("Holiday.create vraća red preko date", async () => {
+    state.pkValue = { date: "2026-12-25", name: "Božić" };
+    const row = await base44.entities.Holiday.create({ date: "2026-12-25", name: "Božić" });
+    expect(row.date).toBe("2026-12-25");
+    expect(eqs()).toContainEqual(["date", "2026-12-25"]);
+  });
+
+  it("WorkRules.update(true, …) koristi id=true", async () => {
+    state.pkValue = { id: true, daily_regular_hours: 7.5 };
+    await base44.entities.WorkRules.update(true, { daily_regular_hours: 7.5 });
+    expect(eqs()).toContainEqual(["id", true]);
+  });
+
+  it("ostale tabele i dalje koriste id", async () => {
+    state.pkValue = { id: "p1" };
+    await base44.entities.Vendor.delete("p1");
+    expect(eqs()).toEqual([["id", "p1"]]);
   });
 });

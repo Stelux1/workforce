@@ -28,7 +28,7 @@ Princip (D12): postojeće stranice ostaju iste; menja se izvor podataka i novča
 - [ ] [build] *(opus)* Razvrstavanje sati iz nedeljne satnice: praznik (lista praznika) → vikend (subota, nedelja) → preko dnevnog praga prekovremeno → ostalo redovno; iznos = sati × tarifa × koeficijent (prekovremeni/vikend/praznik tarifa iz profila radnika ima prednost nad koeficijentom). Accept: test — pon 10h + sub 8h uz prag 8h = 8 redovno + 2 prekovremeno + 8 vikend; koeficijent koji fali → greška.
 - [ ] [build] Stranica Satnice: šalje `project_id`, računa preko gornja dva modula, čuva `hours_by_type` i `rate_snapshot`, odobrava samo admin (dugmad skrivena operateru), prazno polje = 0, prekovremeni više nije „preko 40h". Accept: odobrena satnica bez tarife nije moguća; promena tarife posle odobravanja ne menja odobrenu satnicu.
 - [ ] [build] *(opus)* Baza pri odobravanju proverava i samu tarifu satnice prema jedinstvenom izboru tarife (dodela/projekat), ne samo da je > 0 — operater preko API-ja trenutno može da upiše proizvoljnu tarifu u nacrt (D3, D16). Accept: pgTAP — satnica čija `b2c_rate`/`b2b_rate` ne odgovara važećoj tarifi ne može da se odobri.
-- [ ] [build] Podešavanja → „Koeficijenti i praznici" (nova stranica u istom stilu kao Odeljenja/Kategorije troškova): koeficijenti po vrsti sati za radnika i klijenta, dnevni prag, lista praznika. Accept: samo admin; prazan koeficijent prikazan crveno.
+- [x] [build] Podešavanja → „Koeficijenti i praznici" (nova stranica u istom stilu kao Odeljenja/Kategorije troškova): koeficijenti po vrsti sati za radnika i klijenta, dnevni prag, lista praznika. Accept: samo admin; prazan koeficijent prikazan crveno.
 
 ## Phase 3 — Mesečni obračun i isplata
 
