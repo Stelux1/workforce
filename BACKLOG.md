@@ -46,7 +46,7 @@ Princip (D12): postojeće stranice ostaju iste; menja se izvor podataka i novča
 ## Phase 5 — Ostalo
 
 - [ ] [build] Mejl obaveštenja: izabrati servis za slanje (npr. Resend) — do tada stranica jasno kaže da slanje nije podešeno. Accept: slanje radi ili jasna poruka, nikad tiho ništa.
-- [ ] [build] Konačno uklanjanje Base44 ostataka: `@base44/sdk`, `@base44/vite-plugin` iz package.json, folder `base44/`, `lib/app-params.js`, `pages/OAuthConsent.jsx`, Base44 logo URL, naslov „Base44 APP" u `index.html`. Accept: `grep -ri base44 src index.html package.json` vraća samo ime fajla sloja podataka; `npm run build` prolazi.
+- [x] [build] Konačno uklanjanje Base44 ostataka: `@base44/sdk`, `@base44/vite-plugin` iz package.json, folder `base44/`, `lib/app-params.js`, `pages/OAuthConsent.jsx`, Base44 logo URL, naslov „Base44 APP" u `index.html`. Accept: `grep -ri base44 src index.html package.json` vraća samo ime fajla sloja podataka; `npm run build` prolazi.
 
 ## Phase 6 — Opciono
 

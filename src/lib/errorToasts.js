@@ -1,5 +1,5 @@
 // Jedno mesto koje korisniku prikazuje svaku grešku sloja podataka (D15).
-// Stranice iz Base44 izvoza nemaju sopstvenu obradu grešaka, pa bez ovoga neuspelo čuvanje izgleda kao da se ništa nije desilo.
+// Stranice iz prve verzije nemaju sopstvenu obradu grešaka, pa bez ovoga neuspelo čuvanje izgleda kao da se ništa nije desilo.
 import { toast } from "sonner";
 import { describeError } from "@/api/errors";
 

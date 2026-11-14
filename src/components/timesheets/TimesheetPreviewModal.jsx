@@ -54,7 +54,6 @@ const LABELS = {
   },
 };
 
-const LOGO_URL = "https://media.base44.com/images/public/6a031d341853d58a773b91ac/daddf74c6_DarkGreenModernGradientWaveLinktreeBackground.png";
 const numRows = 6;
 
 const B = "#000000"; // border color — black
@@ -90,7 +89,7 @@ export default function TimesheetPreviewModal({ ts, employees, weekDate: pageWee
 
             {/* HEADER */}
             <div className="flex items-center justify-between mb-1">
-              <img src={LOGO_URL} alt="Stelux Logo" style={{ maxHeight: 50, maxWidth: 160, objectFit: "contain" }} />
+              <div />
               <div className="text-right">
                 <div style={{ fontSize: 13, fontWeight: "bold" }}>Stelux Construct DOO</div>
                 <div style={{ fontSize: 8.5, color: "#555" }}>Despota Stefana 39a, 11320 Velika Plana, Serbia</div>

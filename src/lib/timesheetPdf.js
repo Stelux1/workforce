@@ -50,23 +50,8 @@ const LABELS = {
   },
 };
 
-const LOGO_URL = "https://media.base44.com/images/public/6a031d341853d58a773b91ac/daddf74c6_DarkGreenModernGradientWaveLinktreeBackground.png";
-
-async function loadImageBase64(url) {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.onload = () => {
-      const canvas = document.createElement("canvas");
-      canvas.width = img.width;
-      canvas.height = img.height;
-      canvas.getContext("2d").drawImage(img, 0, 0);
-      resolve(canvas.toDataURL("image/jpeg"));
-    };
-    img.onerror = () => resolve(null);
-    img.src = url;
-  });
-}
+// Logo firme nije u repozitorijumu (stari je bio na spoljnom serveru) — dok se ne dostavi fajl, PDF ide bez logoa (NEEDS-USER).
+const LOGO_BASE64 = null;
 
 async function loadFontBase64(url) {
   try {
@@ -316,8 +301,8 @@ const DEJAVU_NORMAL_URL = "https://cdn.jsdelivr.net/npm/dejavu-fonts-ttf@2.37.3/
 const DEJAVU_BOLD_URL = "https://cdn.jsdelivr.net/npm/dejavu-fonts-ttf@2.37.3/ttf/DejaVuSans-Bold.ttf";
 
 export async function exportTimesheetPDF(rows, employees, weekDate, filename, lang = "en", projects = []) {
-  const [logoBase64, dejavuNormal, dejavuBold] = await Promise.all([
-    loadImageBase64(LOGO_URL),
+  const logoBase64 = LOGO_BASE64;
+  const [dejavuNormal, dejavuBold] = await Promise.all([
     loadFontBase64(DEJAVU_NORMAL_URL),
     loadFontBase64(DEJAVU_BOLD_URL),
   ]);

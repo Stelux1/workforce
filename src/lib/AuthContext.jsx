@@ -82,7 +82,7 @@ export const AuthProvider = ({ children }) => {
         isAdmin: profile?.role === "admin",
         isAuthenticated: Boolean(session && profile),
         isLoadingAuth,
-        // zadržano zbog postojećih komponenti iz Base44 verzije
+        // zadržano zbog postojećih komponenti iz prve verzije aplikacije
         isLoadingPublicSettings: false,
         authChecked: !isLoadingAuth,
         authError,
