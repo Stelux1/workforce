@@ -1,5 +1,6 @@
 import jsPDF from "jspdf";
 import { addDays, getISOWeek, getISOWeekYear, parseISO } from "date-fns";
+import { drawCompanyHeader, loadCompanyForPdf } from "@/lib/companyPdf";
 
 const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 
@@ -24,7 +25,6 @@ const LABELS = {
     client: "Client",
     signature: "Signature",
     signatureDate: "Signature / Date",
-    footer: "Stelux Construct DOO  ·  Despota Stefana 39a, 11320 Velika Plana  ·  info@stelux-construct.rs",
   },
   rs: {
     title: "NEDELJNI SATI",
@@ -46,12 +46,12 @@ const LABELS = {
     client: "Naručilac",
     signature: "Potpis",
     signatureDate: "Potpis / Datum",
-    footer: "Stelux Construct DOO  -  Despota Stefana 39a, 11320 Velika Plana  -  info@stelux-construct.rs",
   },
 };
 
-// Logo firme nije u repozitorijumu (stari je bio na spoljnom serveru) — dok se ne dostavi fajl, PDF ide bez logoa (NEEDS-USER).
-const LOGO_BASE64 = null;
+// Zaglavlje, potpis izvođača i podnožje: podaci firme i logo iz Podešavanja → Podaci firme (company_settings, D18),
+// isto kao platni listić (companyPdf.js). Ranije su bili upisani u kod (Stelux) sa Base44 slikom; prazni podaci
+// firme → PDF bez zaglavlja firme, bez izmišljenog teksta.
 
 async function loadFontBase64(url) {
   try {
@@ -66,7 +66,7 @@ async function loadFontBase64(url) {
   }
 }
 
-function renderTimesheetPage(doc, ts, emp, pageWeekDate, logoBase64, isFirstPage, lang = "en", hasDejaVu = false, projectNo = "") {
+function renderTimesheetPage(doc, ts, emp, pageWeekDate, company, isFirstPage, lang = "en", hasDejaVu = false, projectNo = "") {
   if (!isFirstPage) doc.addPage();
   // Datumi i oznaka nedelje dolaze iz samog reda, ne iz nedelje izabrane na stranici (QA 14.11.2026).
   const weekDate = ts.week_start ? parseISO(ts.week_start) : pageWeekDate;
@@ -122,23 +122,9 @@ function renderTimesheetPage(doc, ts, emp, pageWeekDate, logoBase64, isFirstPage
   let y = MT;
 
   // ── HEADER ──────────────────────────────────────────────────────────
-  // Logo
-  if (logoBase64) {
-    doc.addImage(logoBase64, "PNG", ML, y, 38, 18);
-  }
-
-  // Company info right
-  doc.setFontSize(12);
-  doc.setFont(fontName, "bold");
-  doc.setTextColor(30, 30, 30);
-  doc.text("Stelux Construct DOO", W - MR, y + 6, { align: "right" });
-  doc.setFontSize(8);
-  doc.setFont(fontName, "normal");
-  doc.setTextColor(100, 100, 100);
-  doc.text("Despota Stefana 39a, 11320 Velika Plana, Serbia", W - MR, y + 11.5, { align: "right" });
-  doc.text("info@stelux-construct.rs", W - MR, y + 16, { align: "right" });
-
-  y += 24;
+  // Logo levo, podaci firme desno (company_settings); bez podataka firme nema zaglavlja.
+  const headerH = drawCompanyHeader(doc, company, { x: ML, y, right: W - MR, font: fontName });
+  if (headerH) y += 24;
 
   // Title bar
   border(ML, y, CW, 9, 0.5);
@@ -283,7 +269,7 @@ function renderTimesheetPage(doc, ts, emp, pageWeekDate, logoBase64, isFirstPage
   };
 
   drawSig(ML, L.employee, ts.employee_name || "");
-  drawSig(ML + sigW + 3, L.contractor, "Stelux Construct DOO, Velika Plana");
+  drawSig(ML + sigW + 3, L.contractor, [company?.name, company?.city].filter(Boolean).join(", "));
   drawSig(ML + 2 * sigW + 6, L.client, ts.client_name || "");
 
   // ── FOOTER ───────────────────────────────────────────────────────────
@@ -293,7 +279,7 @@ function renderTimesheetPage(doc, ts, emp, pageWeekDate, logoBase64, isFirstPage
   doc.setFontSize(6.5);
   doc.setFont(fontName, "normal");
   doc.setTextColor(130, 130, 130);
-  doc.text(L.footer, W / 2, H - 4, { align: "center" });
+  if (company?.footer) doc.text(company.footer, W / 2, H - 4, { align: "center" });
   doc.text(`Ref: ${ref}`, W - MR, H - 4, { align: "right" });
 }
 
@@ -301,8 +287,8 @@ const DEJAVU_NORMAL_URL = "https://cdn.jsdelivr.net/npm/dejavu-fonts-ttf@2.37.3/
 const DEJAVU_BOLD_URL = "https://cdn.jsdelivr.net/npm/dejavu-fonts-ttf@2.37.3/ttf/DejaVuSans-Bold.ttf";
 
 export async function exportTimesheetPDF(rows, employees, weekDate, filename, lang = "en", projects = []) {
-  const logoBase64 = LOGO_BASE64;
-  const [dejavuNormal, dejavuBold] = await Promise.all([
+  const [company, dejavuNormal, dejavuBold] = await Promise.all([
+    loadCompanyForPdf(),
     loadFontBase64(DEJAVU_NORMAL_URL),
     loadFontBase64(DEJAVU_BOLD_URL),
   ]);
@@ -321,7 +307,7 @@ export async function exportTimesheetPDF(rows, employees, weekDate, filename, la
   rows.forEach((ts, idx) => {
     const emp = employees.find((e) => e.id === ts.employee_id);
     const project = projects.find((p) => p.id === ts.project_id);
-    renderTimesheetPage(doc, ts, emp, weekDate, logoBase64, idx === 0, lang, hasDejaVu, project?.project_number || "");
+    renderTimesheetPage(doc, ts, emp, weekDate, company, idx === 0, lang, hasDejaVu, project?.project_number || "");
   });
 
   doc.save(filename);

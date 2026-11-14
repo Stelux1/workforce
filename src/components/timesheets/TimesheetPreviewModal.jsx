@@ -2,7 +2,10 @@ import { Dialog, DialogContent, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Download } from "lucide-react";
 import { addDays, getISOWeek, getISOWeekYear, parseISO } from "date-fns";
+import { useQuery } from "@tanstack/react-query";
+import { base44 } from "@/api/base44Client";
 import { exportTimesheetPDF } from "@/lib/timesheetPdf";
+import { companyHeader } from "@/lib/companyDetails";
 import { toast } from "sonner";
 
 const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
@@ -60,6 +63,13 @@ const B = "#000000"; // border color — black
 const LABEL_BG = "#f5f5f5"; // light grey for label cells
 
 export default function TimesheetPreviewModal({ ts, employees, weekDate: pageWeekDate, open, onClose, lang = "en", projects = [] }) {
+  // Podaci firme i logo iz Podešavanja → Podaci firme (D18), isti izvor kao PDF; prazno → bez zaglavlja firme.
+  const companyQ = useQuery({
+    queryKey: ["company-settings"],
+    queryFn: () => base44.entities.CompanySettings.list(null, 1),
+    enabled: Boolean(open && ts),
+  });
+  const company = companyHeader((companyQ.data || [])[0]);
   if (!ts) return null;
   // Datumi iz samog reda, broj projekta iz projekta (ranije: nedelja sa stranice i ime klijenta).
   const weekDate = ts.week_start ? parseISO(ts.week_start) : pageWeekDate;
@@ -88,14 +98,17 @@ export default function TimesheetPreviewModal({ ts, employees, weekDate: pageWee
           <div className="p-5 space-y-3" style={{ fontSize: 10 }}>
 
             {/* HEADER */}
-            <div className="flex items-center justify-between mb-1">
-              <div />
-              <div className="text-right">
-                <div style={{ fontSize: 13, fontWeight: "bold" }}>Stelux Construct DOO</div>
-                <div style={{ fontSize: 8.5, color: "#555" }}>Despota Stefana 39a, 11320 Velika Plana, Serbia</div>
-                <div style={{ fontSize: 8.5, color: "#555" }}>info@stelux-construct.rs</div>
+            {company && (
+              <div className="flex items-center justify-between mb-1" data-testid="timesheet-company-header">
+                {company.logoUrl
+                  ? <img src={company.logoUrl} alt="" style={{ maxHeight: 50, maxWidth: 160, objectFit: "contain" }} />
+                  : <div />}
+                <div className="text-right">
+                  {company.name && <div style={{ fontSize: 13, fontWeight: "bold" }}>{company.name}</div>}
+                  {company.lines.map((line) => <div key={line} style={{ fontSize: 8.5, color: "#555" }}>{line}</div>)}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* TITLE */}
             <div style={{ border: `2px solid ${B}`, textAlign: "center", padding: "7px 0", fontWeight: "bold", fontSize: 13, letterSpacing: "0.12em" }}>
@@ -199,7 +212,7 @@ export default function TimesheetPreviewModal({ ts, employees, weekDate: pageWee
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
               {[
                 { label: L.employee, sub: ts.employee_name || "" },
-                { label: L.contractor, sub: "Stelux Construct DOO, Velika Plana" },
+                { label: L.contractor, sub: [company?.name, company?.city].filter(Boolean).join(", ") },
                 { label: L.client, sub: ts.client_name || "" },
               ].map((sig) => (
                 <div key={sig.label} style={{ border: `1px solid ${B}` }}>
@@ -212,7 +225,7 @@ export default function TimesheetPreviewModal({ ts, employees, weekDate: pageWee
 
             {/* FOOTER */}
             <div style={{ borderTop: `1px solid ${B}`, paddingTop: 4, fontSize: 7, color: "#888", display: "flex", justifyContent: "space-between" }}>
-              <span>Stelux Construct DOO · Despota Stefana 39a, 11320 Velika Plana · info@stelux-construct.rs</span>
+              <span>{company?.footer || ""}</span>
               <span>Ref: {ref}</span>
             </div>
 

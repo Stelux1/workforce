@@ -2,13 +2,17 @@
 // Tok: zaključaj mesec → unesi kurs EUR/RSD → Generiši obračun (nacrt, može ponovo) → Odobri → Označi kao isplaćeno.
 // Novac računa samo src/lib/payroll (payrollMonth.js → computeWorkerMonth); baza čuva nacrt atomski
 // (save_payroll_draft), proverava ga pre odobravanja (payroll_run_problems) i čuva odobren obračun nepromenljivim.
+// Platni listić (PDF, jedan ili svi) i spisak isplata za banku (Excel) prave se iz sačuvanih redova (payslips,
+// payslip_projects) — iznosi se ne računaju ponovo (payslipExport.js). Spisak za banku samo za odobren/isplaćen
+// obračun; PDF nacrta ima vodeni žig „NACRT — nije za isplatu".
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { addMonths, format, parseISO, startOfMonth } from "date-fns";
 import {
-  AlertTriangle, Banknote, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Lock, RefreshCw, Trash2, Unlock,
+  AlertTriangle, Banknote, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Download, FileSpreadsheet, FileText, Lock,
+  RefreshCw, Trash2, Unlock,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -31,6 +35,9 @@ import {
   buildMonthPayroll, collectMonth, draftPayload, monthStart, payrollTotals, problemMessage, projectTotals, staleEmployees,
   timesheetWeekRange, warningLabel,
 } from "@/lib/payroll/payrollMonth";
+import { payslipFileName, payslipsFileName, runIsDraft, runIsFinal } from "@/lib/payroll/payslipExport";
+import { exportPayslipsPDF } from "@/lib/payslipPdf";
+import { exportBankExcel } from "@/lib/payrollBankExport";
 
 const eur = (n) => (n === null || n === undefined ? "—" : `€${Number(n).toFixed(2)}`);
 const hrs = (n) => `${Number(n || 0).toFixed(1)}h`;
@@ -243,6 +250,59 @@ export default function MonthlyPayroll() {
     queryClient.removeQueries({ queryKey: ["payroll-run-problems", id] });
   }, L("Draft deleted", "Nacrt je obrisan"), { skipProblems: true });
 
+  // ───── platni listić (PDF) i spisak za banku (Excel) ─────
+  const [exporting, setExporting] = useState(null); // "pdf-all" | id listića | "bank"
+  const slipsReady = stored.length > 0 && !slipsQ.isFetching && !slipProjectsQ.isFetching;
+  const downloadPdf = async (slips, key) => {
+    if (!run || !slips.length) return;
+    setExporting(key);
+    try {
+      const employee = employees.find((e) => e.id === slips[0].employee_id);
+      const filename = slips.length === 1 ? payslipFileName({ run, slip: slips[0], employee }) : payslipsFileName(run);
+      await exportPayslipsPDF({ run, payslips: slips, employees, projects, vendorNames: vendorName, lang, filename });
+      toast.success(runIsDraft(run)
+        ? L("Draft PDF downloaded — watermarked, not for payment", "PDF nacrta je preuzet — sa vodenim žigom, nije za isplatu")
+        : L("Payslip PDF downloaded", "PDF platnog listića je preuzet"));
+    } catch (e) {
+      toast.error(e.message, { duration: 12000 });
+    } finally {
+      setExporting(null);
+    }
+  };
+  const downloadBank = async () => {
+    if (!runIsFinal(run)) {
+      toast.error(L("The bank list is made only for an approved or paid payroll.", "Spisak za banku se pravi samo za odobren ili isplaćen obračun."));
+      return;
+    }
+    setExporting("bank");
+    try {
+      // Sveži računi radnika (IBAN iz profila) neposredno pre izvoza.
+      const fresh = await employeesQ.refetch();
+      if (fresh.error) throw fresh.error;
+      const rows = exportBankExcel({ run, payslips: stored, employees: fresh.data || [], vendorNames: vendorName, lang });
+      toast.success(L(`Bank list downloaded — payments: ${rows.payments.length}`, `Spisak za banku je preuzet — isplata: ${rows.payments.length}`));
+      if (rows.invalidAmount.length) {
+        const names = rows.invalidAmount.map((r) => r.employeeName).join(", ");
+        toast.warning(L(`Amount to pay is not above 0 — NOT in the bank list (sheet "Iznos nije za isplatu"): ${names}`,
+          `Iznos za isplatu nije veći od 0 — NISU u spisku za banku (list „Iznos nije za isplatu"): ${names}`), { duration: 20000 });
+      }
+      if (rows.missingAccount.length) {
+        const names = rows.missingAccount.map((r) => r.employeeName).join(", ");
+        toast.warning(L(`No bank account — NOT in the bank list (sheet "Nedostaje račun"): ${names}`,
+          `Bez računa — NISU u spisku za banku (list „Nedostaje račun"): ${names}`), { duration: 20000 });
+      }
+      if (rows.subcontractors.length) {
+        const names = rows.subcontractors.map((r) => r.employeeName).join(", ");
+        toast.info(L(`Via a subcontractor — paid by the subcontractor's invoice, not in the salary list (sheet "Podizvođači"): ${names}`,
+          `Preko podizvođača — plaća se faktura podizvođača, nisu u spisku zarada (list „Podizvođači"): ${names}`), { duration: 20000 });
+      }
+    } catch (e) {
+      toast.error(e.message, { duration: 12000 });
+    } finally {
+      setExporting(null);
+    }
+  };
+
   const engagementLabel = (s) =>
     s.engagement_type === "subcontractor_worker"
       ? `${t("Subcontractor")}${vendorName.get(s.vendor_id) ? ` · ${vendorName.get(s.vendor_id)}` : ""}`
@@ -372,7 +432,28 @@ export default function MonthlyPayroll() {
       {/* Payslips Table */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">{t("Payslips")}</CardTitle>
+          <div className="flex flex-wrap items-center gap-2">
+            <CardTitle className="text-base">{t("Payslips")}</CardTitle>
+            {stored.length > 0 && (
+              <div className="flex flex-wrap gap-2 ml-auto">
+                <Button variant="outline" size="sm" className="gap-2" data-testid="payslips-pdf"
+                  onClick={() => downloadPdf(stored, "pdf-all")} disabled={!slipsReady || exporting !== null}>
+                  <FileText className="w-4 h-4" /> {t("Payslips PDF")}
+                </Button>
+                <Button variant="outline" size="sm" className="gap-2" data-testid="bank-excel"
+                  onClick={downloadBank} disabled={!slipsReady || exporting !== null || !runIsFinal(run)}
+                  title={runIsFinal(run) ? undefined : L("Only for an approved or paid payroll", "Samo za odobren ili isplaćen obračun")}>
+                  <FileSpreadsheet className="w-4 h-4" /> {t("Bank list (Excel)")}
+                </Button>
+              </div>
+            )}
+          </div>
+          {stored.length > 0 && runIsDraft(run) && (
+            <p className="text-xs text-amber-700">
+              {L("Draft: the payslip PDF carries the watermark “DRAFT — not for payment”; the bank list is available after approval.",
+                "Nacrt: PDF platnog listića ima vodeni žig „NACRT — nije za isplatu“; spisak za banku je dostupan posle odobravanja.")}
+            </p>
+          )}
         </CardHeader>
         <CardContent>
           {stored.length === 0 ? (
@@ -395,6 +476,7 @@ export default function MonthlyPayroll() {
                     <th className="text-right py-2 pr-4">{t("Employer contributions")}</th>
                     <th className="text-right py-2 pr-4">{t("Gross 2 (labour cost)")}</th>
                     <th className="text-right py-2">{t("To pay")}</th>
+                    <th className="relative py-2 pl-2 w-10"><span className="sr-only">PDF</span></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -423,6 +505,14 @@ export default function MonthlyPayroll() {
                           <td className="py-3 pr-4 text-right">{eur(erContrib)}</td>
                           <td className="py-3 pr-4 text-right font-medium">{eur(s.total_cost)}</td>
                           <td className="py-3 text-right text-emerald-600 font-medium">{eur(s.payout)}</td>
+                          <td className="py-1 pl-2 text-right">
+                            <Button variant="ghost" size="icon" className="h-8 w-8" data-testid={`payslip-pdf-${s.id}`}
+                              aria-label={`${t("Download payslip (PDF)")} — ${s.employee_name}`} title={t("Download payslip (PDF)")}
+                              disabled={!slipsReady || exporting !== null}
+                              onClick={(e) => { e.stopPropagation(); downloadPdf([s], s.id); }}>
+                              <Download className={`w-4 h-4 ${exporting === s.id ? "animate-pulse" : ""}`} />
+                            </Button>
+                          </td>
                         </tr>
                         {open && s.projects.map((p) => (
                           <tr key={`${s.id}-${p.project_id}`} className="bg-muted/20 text-xs text-muted-foreground">
@@ -430,6 +520,7 @@ export default function MonthlyPayroll() {
                             <td className="py-2 pr-4 text-right">{hrs(p.hours)}</td>
                             <td className="py-2 pr-4 text-right" colSpan={5}>{t("Worker earnings")}: {eur(p.worker_amount)} · {t("Client Revenue")}: {eur(p.revenue)}</td>
                             <td className="py-2 pr-4 text-right">{eur(p.labor_cost)}</td>
+                            <td />
                             <td />
                           </tr>
                         ))}
@@ -448,6 +539,7 @@ export default function MonthlyPayroll() {
                     <td className="py-3 pr-4 text-right">{eur(totals.employerContributions)}</td>
                     <td className="py-3 pr-4 text-right">{eur(totals.totalCost)}</td>
                     <td className="py-3 text-right">{eur(totals.payout)}</td>
+                    <td />
                   </tr>
                 </tfoot>
               </table>

@@ -39,13 +39,35 @@ export function companyIsEmpty(row) {
   return ![...COMPANY_FIELDS, "logo_url"].some((f) => clean(row?.[f]) !== "");
 }
 
-// Logotip: samo PNG ili JPG, prema sadržaju (prvi bajtovi), ne prema nazivu ni tipu koji javlja pregledač.
-export async function sniffLogoType(file) {
-  const b = new Uint8Array(await file.slice(0, 8).arrayBuffer());
-  if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "image/jpeg";
+// Zaglavlje firme za PDF (platni listić, satnica) — samo uneta polja, bez izmišljenih vrednosti (D18).
+// Prazni podaci firme → null: PDF tada nema zaglavlje firme.
+export function companyHeader(row) {
+  if (companyIsEmpty(row)) return null;
+  const name = clean(row.name);
+  const place = [clean(row.address), clean(row.city)].filter(Boolean).join(", ");
+  const ids = [clean(row.pib) && `PIB: ${clean(row.pib)}`, clean(row.registration_number) && `MB: ${clean(row.registration_number)}`]
+    .filter(Boolean)
+    .join("  ·  ");
+  return {
+    name,
+    city: clean(row.city),
+    lines: [place, ids].filter(Boolean),
+    footer: [name, place, ids].filter(Boolean).join("  ·  "),
+    logoUrl: clean(row.logo_url) || null,
+  };
+}
+
+// Tip slike po prvim bajtovima: "image/png" | "image/jpeg" | null.
+export function imageTypeOfBytes(b) {
+  if (b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "image/jpeg";
   const png = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
   if (b.length >= 8 && png.every((x, i) => b[i] === x)) return "image/png";
   return null;
+}
+
+// Logotip: samo PNG ili JPG, prema sadržaju (prvi bajtovi), ne prema nazivu ni tipu koji javlja pregledač.
+export async function sniffLogoType(file) {
+  return imageTypeOfBytes(new Uint8Array(await file.slice(0, 8).arrayBuffer()));
 }
 
 // Vraća null ako je logotip u redu, inače ključ greške: "tooBig" | "type".
