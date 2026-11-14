@@ -168,7 +168,7 @@ export default function PayrollDashboard() {
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <CardTitle className="text-base">{t("Pending Payroll")}</CardTitle>
-              <Link to="/payroll/weekly" className="text-xs text-primary hover:underline">{t("Manage")}</Link>
+              <Link to="/payroll/monthly" className="text-xs text-primary hover:underline">{t("Manage")}</Link>
             </div>
           </CardHeader>
           <CardContent className="space-y-2">

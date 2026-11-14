@@ -158,3 +158,14 @@ describe("trošak projekta bez kursa (migracija 20261114220000)", () => {
     expect(describeError(e, "en").text).toBe("A cost in RSD needs an exchange rate greater than 0 (how many RSD is 1 EUR).");
   });
 });
+
+describe("mesečni obračun (migracija 20261114200000)", () => {
+  it("poruke baze ostaju na srpskom, a na engleskom se prevode (spisak problema ostaje na srpskom)", () => {
+    const bezKursa = { code: "23514", message: "Bez kursa EUR/RSD nema obračuna — unesite kurs za mesec" };
+    expect(describeError(bezKursa, "rs").text).toBe(bezKursa.message);
+    expect(describeError(bezKursa, "en").text).toBe("No payroll without an EUR/RSD exchange rate — enter the rate for the month.");
+    const neusklađen = { code: "23514", message: "Obračun nije usklađen: QA Radnik: nema platnog listića" };
+    expect(describeError(neusklađen, "en").text).toBe("The payroll doesn't reconcile: QA Radnik: nema platnog listića");
+    expect(describeError({ code: "42501", message: "Samo admin može da odobri obračun" }, "en").text).toBe("Only an admin can manage payroll.");
+  });
+});

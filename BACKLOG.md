@@ -32,7 +32,7 @@ Princip (D12): postojeće stranice ostaju iste; menja se izvor podataka i novča
 
 ## Phase 3 — Mesečni obračun i isplata
 
-- [ ] [build] *(opus)* Stranica „Nedeljni obračun" postaje „Mesečni obračun" (isti izgled, mesec umesto nedelje): kurs EUR/RSD, zaključavanje meseca, generisanje platnih listića preko `computeWorkerMonth` (sati delova nedelje se dele po mesecima), neto/bruto/porez/doprinosi/bruto 2, raspodela po projektima, odobravanje i „isplaćeno". Accept: zbir troška po projektima = zbir bruto 2; odobren obračun nepromenljiv (baza); bez kursa nema obračuna.
+- [x] [build] *(opus)* Stranica „Nedeljni obračun" postaje „Mesečni obračun" (isti izgled, mesec umesto nedelje): kurs EUR/RSD, zaključavanje meseca, generisanje platnih listića preko `computeWorkerMonth` (sati delova nedelje se dele po mesecima), neto/bruto/porez/doprinosi/bruto 2, raspodela po projektima, odobravanje i „isplaćeno". Accept: zbir troška po projektima = zbir bruto 2; odobren obračun nepromenljiv (baza); bez kursa nema obračuna.
 - [ ] [build] Platni listić PDF (postojeći PDF stil iz satnica) i Excel spisak isplata za banku. Accept: iznosi isti kao u bazi; logo firme umesto Base44 slike.
 - [x] [build] Podešavanja → „Podaci firme" (`company_settings`, D18): polja prazna dok ih Luka ne unese. Accept: operater ne može da menja; neispravan PIB odbijen (pgTAP 07).
 - [ ] NEEDS-USER: logo i podaci firme (naziv, PIB, adresa) za platni listić i PDF satnice.

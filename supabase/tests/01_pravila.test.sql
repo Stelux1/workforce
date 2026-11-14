@@ -99,9 +99,12 @@ select lives_ok($$insert into public.timesheets (employee_id, project_id, week_s
 select throws_ok($$insert into public.payroll_runs (month, eur_rsd_rate, params) values ('2031-11-01', 117.2, '{}')$$,
   '23514', null, 'obračun za nezaključan mesec je odbijen');
 insert into public.payroll_runs (id, month, eur_rsd_rate, params) values ('a1000000-0000-4000-8000-0000000000a1', '2031-10-01', 117.2, '{}');
-insert into public.payslips (id, run_id, employee_id, engagement_type, rate_basis, work_fraction, total_hours, basis_amount, total_cost, payout)
+-- Od Faze 3 (20261114200000) odobravanje traži i usklađen listić: neto = bruto − doprinosi radnika − porez,
+-- bruto 2 = bruto + doprinosi poslodavca, isplata = neto = zarada po neto satnici (192).
+insert into public.payslips (id, run_id, employee_id, engagement_type, rate_basis, work_fraction, total_hours, basis_amount,
+                             bruto, neto, tax, emp_pio, emp_health, emp_unemployment, er_pio, er_health, total_cost, payout)
   values ('a2000000-0000-4000-8000-0000000000a2', 'a1000000-0000-4000-8000-0000000000a1', 'd0000000-0000-4000-8000-0000000000d1',
-          'direct_employee', 'neto', 1, 16, 192, 300, 192);
+          'direct_employee', 'neto', 1, 16, 192, 260, 192, 0, 50, 15, 3, 30, 10, 300, 192);
 insert into public.payslip_projects (payslip_id, project_id, hours, worker_amount, labor_cost, revenue)
   values ('a2000000-0000-4000-8000-0000000000a2', 'b0000000-0000-4000-8000-0000000000b1', 16, 192, 299.99, 320);
 select throws_like($$select public.approve_payroll_run('a1000000-0000-4000-8000-0000000000a1')$$,

@@ -1,0 +1,540 @@
+// Mesečni obračun iz odobrenih nedeljnih satnica (Faza 3, D17). Čiste funkcije — ništa se ne čita iz baze.
+//
+// Satnica je nedeljna (pon–ned, D5/D12), a obračun mesečni: nedelja koja prelazi u drugi mesec deli se PO DANU
+// (datum rada), pa svaki mesec dobija tačno svoje dane — i sate i iznose. Svaki dan se razvrstava istim pravilom
+// kao pri odobravanju (classifyWeek: praznik → vikend → preko dnevnog praga prekovremeno → redovno), ali sa pragom
+// i praznicima iz snimka odobrene satnice (rate_snapshot), a tarife, koeficijenti i posebne satnice po vrsti sati
+// takođe iz snimka — nikad trenutne tarife (D10). Kasnija promena tarife, koeficijenta, praga ili praznika zato ne
+// menja obračun.
+//
+// Samo ODOBRENE satnice ulaze u obračun. Satnica bez snimka (odobrena pre Faze 2), tarifa ili koeficijent koji fali
+// u snimku, satnica čiji sati ne odgovaraju snimku i radnik bez angažmana (zaposlen / preko podizvođača) su problemi
+// sa jasnom porukom (radnik, nedelja, projekat) — nikad tiho 0 ili 1,00 (D5, D11). Radnik sa problemom nema platni
+// listić; baza ne dozvoljava odobravanje obračuna dok svaki radnik sa odobrenim satima nema listić.
+//
+// Iznos: computeWorkerMonth (monthly.js) sabira sate po (projekat, vrsta, tarife, koeficijenti) pa množi i zaokružuje
+// po grupi; neto/bruto po serbianPayroll.js; trošak (bruto 2 za zaposlenog, iznos sati za podizvođača) se raspodeljuje
+// po projektima srazmerno zaradi na projektu (allocate — zbir tačan na cent, ostatak ide po stabilnom redosledu).
+
+import { round2, sum2 } from "./money.js";
+import { computeWorkerMonth, ENGAGEMENT, MissingRateError, RATE_BASIS } from "./monthly.js";
+import { classifyWeek, HOUR_TYPES } from "./hours.js";
+import { paramsInEur } from "./params.js";
+import { DAY_FIELDS } from "./timesheetRow.js";
+import { validRate } from "./timesheet.js";
+
+const TYPE_ORDER = Object.freeze([HOUR_TYPES.REGULAR, HOUR_TYPES.OVERTIME, HOUR_TYPES.WEEKEND, HOUR_TYPES.HOLIDAY]);
+const TYPE_LABEL = Object.freeze({
+  rs: { redovni: "redovni", prekovremeni: "prekovremeni", vikend: "vikend", praznik: "praznik" },
+  en: { redovni: "regular", prekovremeni: "overtime", vikend: "weekend", praznik: "holiday" },
+});
+
+/** Angažman iz employment_history → engagement za computeWorkerMonth. */
+export const ENGAGEMENT_OF = Object.freeze({
+  direct_employee: ENGAGEMENT.EMPLOYEE,
+  subcontractor_worker: ENGAGEMENT.SUBCONTRACTOR,
+});
+
+/** Upozorenja na platnom listiću (payslips.warnings) — šifre, tekst daje warningLabel. */
+export const PAYSLIP_WARNINGS = Object.freeze({
+  BELOW_MIN_BASE: "ispod_najnize_osnovice",
+  ABOVE_MAX_BASE: "iznad_najvise_osnovice",
+  NEGATIVE_NET: "negativan_neto",
+  NET_NOT_EXACT: "neto_nije_tacan",
+});
+
+const WARNING_TEXT = {
+  rs: {
+    [PAYSLIP_WARNINGS.BELOW_MIN_BASE]: "zarada ispod najniže osnovice — doprinosi na najnižu osnovicu",
+    [PAYSLIP_WARNINGS.ABOVE_MAX_BASE]: "zarada iznad najviše osnovice — doprinosi na najvišu osnovicu",
+    [PAYSLIP_WARNINGS.NEGATIVE_NET]: "neto je negativan",
+    [PAYSLIP_WARNINGS.NET_NOT_EXACT]: "neto se zbog zaokruživanja razlikuje za 1 cent",
+  },
+  en: {
+    [PAYSLIP_WARNINGS.BELOW_MIN_BASE]: "pay below the minimum base — contributions on the minimum base",
+    [PAYSLIP_WARNINGS.ABOVE_MAX_BASE]: "pay above the maximum base — contributions on the maximum base",
+    [PAYSLIP_WARNINGS.NEGATIVE_NET]: "net pay is negative",
+    [PAYSLIP_WARNINGS.NET_NOT_EXACT]: "net differs by 1 cent due to rounding",
+  },
+};
+
+export const warningLabel = (code, lang = "rs") => (WARNING_TEXT[lang] || WARNING_TEXT.rs)[code] || code;
+
+// ───────────────────────── datumi ─────────────────────────
+const day = (v) => (v ? String(v).slice(0, 10) : "");
+
+/** "YYYY-MM-DD" + n dana, u UTC da vremenska zona ne pomeri dan (isto kao hours.js). */
+function addDays(iso, n) {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Prvi dan meseca "YYYY-MM-01" iz "YYYY-MM" ili bilo kog datuma u mesecu. */
+export function monthStart(value) {
+  const m = /^(\d{4})-(\d{2})(?:-(\d{2}))?/.exec(String(value ?? ""));
+  if (!m || Number(m[2]) < 1 || Number(m[2]) > 12) throw new Error(`Neispravan mesec obračuna: ${value}`);
+  return `${m[1]}-${m[2]}-01`;
+}
+
+/** Prvi dan sledećeg meseca. */
+export function nextMonthStart(month) {
+  const s = monthStart(month);
+  const y = Number(s.slice(0, 4));
+  const mo = Number(s.slice(5, 7));
+  return mo === 12 ? `${y + 1}-01-01` : `${y}-${String(mo + 1).padStart(2, "0")}-01`;
+}
+
+/** Poslednji dan meseca. */
+export const monthEnd = (month) => addDays(nextMonthStart(month), -1);
+
+/**
+ * Opseg `week_start` satnica koje zalaze u mesec: nedelja koja počne do 6 dana pre prvog dana meseca ima dane u
+ * mesecu, a poslednja je ona koja počne najkasnije poslednjeg dana meseca.
+ */
+export function timesheetWeekRange(month) {
+  const start = monthStart(month);
+  return { from: addDays(start, -6), to: monthEnd(start) };
+}
+
+/** "DD.MM.YYYY" za poruke. */
+export const formatDay = (iso) => {
+  const d = day(iso);
+  return d ? `${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(0, 4)}` : "";
+};
+
+// ───────────────────────── problemi ─────────────────────────
+export const PROBLEM = Object.freeze({
+  NO_SNAPSHOT: "no_snapshot",
+  SNAPSHOT_MISMATCH: "snapshot_mismatch",
+  MISSING_RATE: "missing_rate",
+  MISSING_COEF: "missing_coef",
+  NO_PROJECT: "no_project",
+  BAD_HOURS: "bad_hours",
+  NO_ENGAGEMENT: "no_engagement",
+  ENGAGEMENT_CHANGES: "engagement_changes",
+  CALC_ERROR: "calc_error",
+});
+
+const SIDE_LABEL = { rs: { worker: "radnika", client: "klijenta" }, en: { worker: "worker", client: "client" } };
+
+const PROBLEM_TEXT = {
+  rs: {
+    [PROBLEM.NO_SNAPSHOT]: () =>
+      "satnica je odobrena bez snimka tarifa i koeficijenata (pre razvrstavanja po vrstama sati) — vratite je u nacrt i odobrite ponovo",
+    [PROBLEM.SNAPSHOT_MISMATCH]: () => "sati u satnici ne odgovaraju snimku iz odobravanja — vratite je u nacrt i odobrite ponovo",
+    [PROBLEM.MISSING_RATE]: (p) =>
+      `u snimku nedostaje tarifa ${p.missing.map((m) => `${SIDE_LABEL.rs[m.side]} (${TYPE_LABEL.rs[m.code] || m.code})`).join(", ")} — vratite satnicu u nacrt i odobrite ponovo`,
+    [PROBLEM.MISSING_COEF]: (p) =>
+      `u snimku nedostaje koeficijent ${p.missing.map((m) => `${SIDE_LABEL.rs[m.side]} (${TYPE_LABEL.rs[m.code] || m.code})`).join(", ")} — vratite satnicu u nacrt i odobrite ponovo`,
+    [PROBLEM.NO_PROJECT]: () => "satnica nije vezana za projekat sa liste",
+    [PROBLEM.BAD_HOURS]: (p) => `neispravni sati (${p.detail})`,
+    [PROBLEM.NO_ENGAGEMENT]: (p) =>
+      `nema angažman (zaposlen ili preko podizvođača) za ${formatDay(p.date)} — upišite ga u profilu radnika (Angažman)`,
+    [PROBLEM.ENGAGEMENT_CHANGES]: (p) =>
+      `angažman se menja u toku meseca (${formatDay(p.date)}) — obračun u v1 ne podržava promenu angažmana u toku meseca`,
+    [PROBLEM.CALC_ERROR]: (p) => `obračun nije moguć (${p.detail})`,
+  },
+  en: {
+    [PROBLEM.NO_SNAPSHOT]: () =>
+      "the timesheet was approved without a rate and coefficient snapshot (before hour types) — set it back to draft and approve it again",
+    [PROBLEM.SNAPSHOT_MISMATCH]: () => "the timesheet hours don't match its approval snapshot — set it back to draft and approve it again",
+    [PROBLEM.MISSING_RATE]: (p) =>
+      `the snapshot has no ${p.missing.map((m) => `${SIDE_LABEL.en[m.side]} rate (${TYPE_LABEL.en[m.code] || m.code})`).join(", ")} — set the timesheet back to draft and approve it again`,
+    [PROBLEM.MISSING_COEF]: (p) =>
+      `the snapshot has no ${p.missing.map((m) => `${SIDE_LABEL.en[m.side]} coefficient (${TYPE_LABEL.en[m.code] || m.code})`).join(", ")} — set the timesheet back to draft and approve it again`,
+    [PROBLEM.NO_PROJECT]: () => "the timesheet is not linked to a project from the list",
+    [PROBLEM.BAD_HOURS]: (p) => `invalid hours (${p.detail})`,
+    [PROBLEM.NO_ENGAGEMENT]: (p) =>
+      `no engagement (employee or via subcontractor) on ${formatDay(p.date)} — add it in the employee profile (Engagement)`,
+    [PROBLEM.ENGAGEMENT_CHANGES]: (p) =>
+      `the engagement changes during the month (${formatDay(p.date)}) — v1 payroll does not support a change of engagement within a month`,
+    [PROBLEM.CALC_ERROR]: (p) => `payroll can't be calculated (${p.detail})`,
+  },
+};
+
+/** Poruka problema: „Radnik, nedelja od DD.MM.YYYY (Projekat): šta fali". */
+export function problemMessage(p, lang = "rs") {
+  const L = PROBLEM_TEXT[lang] || PROBLEM_TEXT.rs;
+  const text = (L[p.code] || (() => p.code))(p);
+  const where = p.weekStart
+    ? `${lang === "en" ? "week of" : "nedelja od"} ${formatDay(p.weekStart)}${p.projectName ? ` (${p.projectName})` : ""}`
+    : "";
+  return `${p.employeeName}${where ? `, ${where}` : ""}: ${text}`;
+}
+
+// ───────────────────────── jedna satnica → linije meseca ─────────────────────────
+function coefOf(v) {
+  if (v === null || v === undefined || v === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? n : null; // prazan koeficijent NIJE 1,00 (D5)
+}
+
+/** Strana radnika iz linije snimka: posebna satnica iz profila zamenjuje tarifu × koeficijent (D5), pa je množilac 1. */
+function workerSide(line) {
+  if (line?.worker_source === "special") {
+    return { rate: validRate(line.special_rate ?? line.worker_rate), coef: 1 };
+  }
+  return { rate: validRate(line?.worker_rate), coef: coefOf(line?.worker_coef) };
+}
+
+const clientSide = (line) => ({ rate: validRate(line?.client_rate), coef: coefOf(line?.client_coef) });
+
+/**
+ * Sati jedne odobrene satnice koji padaju u mesec, razvrstani po danu sa pragom i praznicima iz snimka, sa tarifama
+ * i koeficijentima iz snimka.
+ * @param {object} row   red timesheets (approval_status, week_start, mon_hours … sun_hours, project_id, rate_snapshot)
+ * @param {string} month "YYYY-MM-01" (ili bilo koji datum u mesecu)
+ * @returns {{ lines: Array<{ projectId, hourType, hours, workerRate, workerCoef, clientRate, clientCoef, date,
+ *             timesheetId, weekStart }>, problems: Array<{ code, missing?, detail? }>, days: string[] }}
+ *   `days` su datumi u mesecu sa satima > 0 (i kad satnica ima problem — za proveru angažmana).
+ */
+export function timesheetMonthLines(row, month) {
+  const start = monthStart(month);
+  const next = nextMonthStart(start);
+  const weekStart = day(row?.week_start);
+  const out = { lines: [], problems: [], days: [] };
+
+  const dayHours = DAY_FIELDS.map((f) => {
+    const n = Number.parseFloat(row?.[f]);
+    return Number.isFinite(n) ? round2(n) : 0;
+  });
+  const inMonth = dayHours
+    .map((hours, i) => ({ i, hours, date: weekStart ? addDays(weekStart, i) : "" }))
+    .filter((d) => d.hours > 0 && d.date >= start && d.date < next);
+  out.days = inMonth.map((d) => d.date);
+  if (!inMonth.length) return out;
+
+  if (!row.project_id) {
+    out.problems.push({ code: PROBLEM.NO_PROJECT });
+    return out;
+  }
+
+  const snap = row.rate_snapshot;
+  const threshold = Number(snap?.daily_regular_hours);
+  if (!snap || typeof snap !== "object" || !Array.isArray(snap.lines) || !(threshold > 0)) {
+    out.problems.push({ code: PROBLEM.NO_SNAPSHOT });
+    return out;
+  }
+  const holidays = Array.isArray(snap.holidays) ? snap.holidays : [];
+  const byCode = new Map(snap.lines.filter(Boolean).map((l) => [l.code, l]));
+
+  // Cela nedelja po pravilima iz snimka mora da da iste sate po vrsti kao pri odobravanju; inače snimak nije
+  // snimak ovih sati i deljenje po danu ne bi bilo tačno.
+  let week;
+  try {
+    week = classifyWeek({ weekStart, dayHours, holidays, dailyThreshold: threshold });
+  } catch (e) {
+    out.problems.push({ code: PROBLEM.BAD_HOURS, detail: e.message });
+    return out;
+  }
+  const mismatch = TYPE_ORDER.some((code) => round2(week[code]) !== round2(Number(byCode.get(code)?.hours ?? 0)));
+  if (mismatch) {
+    out.problems.push({ code: PROBLEM.SNAPSHOT_MISMATCH });
+    return out;
+  }
+
+  const missingRates = [];
+  const missingCoefs = [];
+  const note = (list, code, side) => {
+    if (!list.some((m) => m.code === code && m.side === side)) list.push({ code, side });
+  };
+
+  for (const d of inMonth) {
+    const one = [0, 0, 0, 0, 0, 0, 0];
+    one[d.i] = d.hours;
+    const types = classifyWeek({ weekStart, dayHours: one, holidays, dailyThreshold: threshold });
+    for (const code of TYPE_ORDER) {
+      const hours = types[code];
+      if (!(hours > 0)) continue;
+      const line = byCode.get(code);
+      const w = workerSide(line);
+      const c = clientSide(line);
+      if (w.rate === null) note(missingRates, code, "worker");
+      if (w.coef === null) note(missingCoefs, code, "worker");
+      if (c.rate === null) note(missingRates, code, "client");
+      if (c.coef === null) note(missingCoefs, code, "client");
+      out.lines.push({
+        projectId: row.project_id,
+        hourType: code,
+        hours,
+        workerRate: w.rate,
+        workerCoef: w.coef,
+        clientRate: c.rate,
+        clientCoef: c.coef,
+        date: d.date,
+        timesheetId: row.id,
+        weekStart,
+      });
+    }
+  }
+
+  if (missingRates.length) out.problems.push({ code: PROBLEM.MISSING_RATE, missing: missingRates });
+  if (missingCoefs.length) out.problems.push({ code: PROBLEM.MISSING_COEF, missing: missingCoefs });
+  if (out.problems.length) out.lines = [];
+  return out;
+}
+
+// ───────────────────────── angažman ─────────────────────────
+/** Angažman (employment_history) koji važi na dan; preklapanje zabranjuje baza, pa najnoviji početak pobeđuje. */
+function engagementOn(history, employeeId, date) {
+  return (
+    (history || [])
+      .filter((h) => h?.employee_id === employeeId && day(h.start_date) && day(h.start_date) <= date && (!day(h.end_date) || day(h.end_date) >= date))
+      .sort((a, b) => day(b.start_date).localeCompare(day(a.start_date)))[0] || null
+  );
+}
+
+// ───────────────────────── mesec ─────────────────────────
+const employeeNameOf = (emp, row) =>
+  emp ? `${emp.first_name || ""} ${emp.last_name || ""}`.trim() || emp.employee_id || emp.id : row?.employee_name || row?.employee_id;
+
+const lineOrder = (a, b) =>
+  String(a.projectId).localeCompare(String(b.projectId)) ||
+  TYPE_ORDER.indexOf(a.hourType) - TYPE_ORDER.indexOf(b.hourType) ||
+  a.date.localeCompare(b.date) ||
+  String(a.timesheetId).localeCompare(String(b.timesheetId));
+
+/**
+ * Sve odobrene satnice meseca po radniku: linije (sati po danu, vrsti, tarifi i koeficijentu iz snimka), angažman
+ * i problemi. Ne treba kurs — problemi se vide i pre unosa kursa.
+ * @param {object} input
+ * @param {string} input.month              "YYYY-MM-01"
+ * @param {Array}  input.timesheets          redovi timesheets (neodobreni se preskaču)
+ * @param {Array}  [input.employees]         radnici (Employee sa spojenim employee_private: rate_basis, work_fraction)
+ * @param {Array}  [input.employmentHistory] redovi employment_history
+ * @param {Array}  [input.projects]          projekti (za ime u porukama)
+ * @returns {{ month, workers: Array, problems: Array }}
+ */
+export function collectMonth({ month, timesheets, employees, employmentHistory, projects }) {
+  const start = monthStart(month);
+  const empById = new Map((employees || []).map((e) => [e.id, e]));
+  const projectName = new Map((projects || []).map((p) => [p.id, p.name]));
+  const workers = new Map();
+
+  for (const row of timesheets || []) {
+    if (row?.approval_status !== "approved") continue; // samo odobrene satnice ulaze u obračun
+    const r = timesheetMonthLines(row, start);
+    if (!r.days.length) continue;
+    const emp = empById.get(row.employee_id);
+    let w = workers.get(row.employee_id);
+    if (!w) {
+      w = { employeeId: row.employee_id, employeeName: employeeNameOf(emp, row), employee: emp || null, lines: [], days: new Set(), problems: [] };
+      workers.set(row.employee_id, w);
+    }
+    r.days.forEach((d) => w.days.add(d));
+    w.lines.push(...r.lines);
+    for (const p of r.problems) {
+      w.problems.push({
+        ...p,
+        employeeId: w.employeeId,
+        employeeName: w.employeeName,
+        timesheetId: row.id,
+        weekStart: day(row.week_start),
+        projectId: row.project_id || null,
+        projectName: projectName.get(row.project_id) || row.project || "",
+      });
+    }
+  }
+
+  for (const w of workers.values()) {
+    // Angažman svakog dana sa satima: mora da postoji i da bude isti ceo mesec (jedan listić po radniku i mesecu).
+    const days = [...w.days].sort();
+    let first = null;
+    for (const d of days) {
+      const h = engagementOn(employmentHistory, w.employeeId, d);
+      if (!h) {
+        w.problems.push({ code: PROBLEM.NO_ENGAGEMENT, date: d, employeeId: w.employeeId, employeeName: w.employeeName });
+        first = null;
+        break;
+      }
+      if (!first) first = h;
+      else if (h.engagement_type !== first.engagement_type || (h.vendor_id || null) !== (first.vendor_id || null)) {
+        w.problems.push({ code: PROBLEM.ENGAGEMENT_CHANGES, date: d, employeeId: w.employeeId, employeeName: w.employeeName });
+        first = null;
+        break;
+      }
+    }
+    w.engagementType = first?.engagement_type || null;
+    w.vendorId = first?.vendor_id || null;
+    w.vendorName = first?.vendor_name || null;
+    w.lines.sort(lineOrder); // stabilan redosled → raspodela ostatka centa ne zavisi od redosleda učitavanja
+  }
+
+  const list = [...workers.values()].sort(
+    (a, b) => String(a.employeeName).localeCompare(String(b.employeeName), "sr") || String(a.employeeId).localeCompare(String(b.employeeId))
+  );
+  return { month: start, workers: list, problems: list.flatMap((w) => w.problems) };
+}
+
+function warningsOf(calc) {
+  if (!calc) return [];
+  const w = [];
+  if (calc.belowMinBase) w.push(PAYSLIP_WARNINGS.BELOW_MIN_BASE);
+  if (calc.aboveMaxBase) w.push(PAYSLIP_WARNINGS.ABOVE_MAX_BASE);
+  if (calc.negativeNet) w.push(PAYSLIP_WARNINGS.NEGATIVE_NET);
+  if (calc.exactNet === false) w.push(PAYSLIP_WARNINGS.NET_NOT_EXACT);
+  return w;
+}
+
+/**
+ * Platni listići meseca iz odobrenih satnica.
+ * @param {object} input            kao collectMonth, plus:
+ * @param {number} input.eurRsdRate  kurs EUR/RSD koji je admin uneo za mesec — bez kursa nema obračuna (D2)
+ * @param {object} input.params      obračunski parametri u RSD (paramsFromRow / PARAMS_2026_RSD)
+ * @returns {{ month, eurRsdRate, params, payslips: Array, problems: Array, projects: Array, totals: object }}
+ *   payslips su u obliku tabela payslips + `projects` (payslip_projects); radnik sa problemom nema listić.
+ * @throws {Error} bez kursa ili bez parametara obračun ne kreće
+ */
+export function buildMonthPayroll({ month, eurRsdRate, params, timesheets, employees, employmentHistory, projects }) {
+  if (!params) throw new Error("Nema obračunskih parametara (porez i doprinosi)");
+  const pe = paramsInEur(params, eurRsdRate); // baca „Kurs EUR/RSD za mesec nije unet"
+  const collected = collectMonth({ month, timesheets, employees, employmentHistory, projects });
+  const problems = [...collected.problems];
+  const payslips = [];
+
+  for (const w of collected.workers) {
+    if (w.problems.length) continue;
+    const engagement = ENGAGEMENT_OF[w.engagementType];
+    const rateBasis = w.employee?.rate_basis || RATE_BASIS.NET; // podrazumevano neto (D4, isto kao kolona u bazi)
+    const fraction = Number(w.employee?.work_fraction ?? 1) || 1; // isto kao default kolone work_fraction
+    let m;
+    try {
+      m = computeWorkerMonth({ engagement, rateBasis, lines: w.lines, params: pe, fraction });
+    } catch (e) {
+      if (!(e instanceof MissingRateError)) throw e;
+      problems.push({ code: PROBLEM.CALC_ERROR, employeeId: w.employeeId, employeeName: w.employeeName, detail: e.message });
+      continue;
+    }
+    const c = m.calc;
+    payslips.push({
+      employee_id: w.employeeId,
+      employee_name: w.employeeName,
+      engagement_type: w.engagementType,
+      vendor_id: w.vendorId,
+      vendor_name: w.vendorName,
+      rate_basis: rateBasis,
+      work_fraction: fraction,
+      total_hours: m.totalHours,
+      hours_by_type: m.hoursByType,
+      basis_amount: m.basisAmount,
+      bruto: c ? c.bruto : null,
+      neto: c ? c.neto : null,
+      tax: c ? c.tax : null,
+      emp_pio: c ? c.employee.pio : null,
+      emp_health: c ? c.employee.health : null,
+      emp_unemployment: c ? c.employee.unemployment : null,
+      er_pio: c ? c.employer.pio : null,
+      er_health: c ? c.employer.health : null,
+      total_cost: m.laborCost,
+      payout: m.payout,
+      revenue: m.revenue,
+      warnings: warningsOf(c),
+      projects: m.projects.map((p) => ({
+        project_id: p.projectId,
+        hours: p.hours,
+        worker_amount: p.workerAmount,
+        labor_cost: p.laborCost,
+        revenue: p.revenue,
+      })),
+    });
+  }
+
+  return {
+    month: collected.month,
+    eurRsdRate: Number(eurRsdRate),
+    params: pe,
+    payslips,
+    problems,
+    projects: projectTotals(payslips),
+    totals: payrollTotals(payslips),
+  };
+}
+
+/** Zbir po projektu za ceo mesec (iz listića ili iz redova payslip_projects sa `project_id`). */
+export function projectTotals(payslips) {
+  const map = new Map();
+  for (const s of payslips || []) {
+    for (const p of s.projects || []) {
+      const t = map.get(p.project_id) || { project_id: p.project_id, hours: [], worker_amount: [], labor_cost: [], revenue: [] };
+      t.hours.push(p.hours);
+      t.worker_amount.push(p.worker_amount);
+      t.labor_cost.push(p.labor_cost);
+      t.revenue.push(p.revenue);
+      map.set(p.project_id, t);
+    }
+  }
+  return [...map.values()]
+    .map((t) => ({
+      project_id: t.project_id,
+      hours: sum2(t.hours),
+      worker_amount: sum2(t.worker_amount),
+      labor_cost: sum2(t.labor_cost),
+      revenue: sum2(t.revenue),
+      difference: round2(sum2(t.revenue) - sum2(t.labor_cost)),
+    }))
+    .sort((a, b) => String(a.project_id).localeCompare(String(b.project_id)));
+}
+
+const sumOf = (rows, field) => sum2((rows || []).map((r) => (r[field] === null || r[field] === undefined ? 0 : r[field])));
+
+/** Zbirovi meseca: sati, neto za isplatu, porez, doprinosi, bruto, bruto 2 (trošak), zarada, prihod i razlika. */
+export function payrollTotals(payslips) {
+  const rows = payslips || [];
+  const out = {
+    hours: sumOf(rows, "total_hours"),
+    payout: sumOf(rows, "payout"),
+    neto: sumOf(rows, "neto"),
+    bruto: sumOf(rows, "bruto"),
+    tax: sumOf(rows, "tax"),
+    employeeContributions: sum2(["emp_pio", "emp_health", "emp_unemployment"].map((f) => sumOf(rows, f))),
+    employerContributions: sum2(["er_pio", "er_health"].map((f) => sumOf(rows, f))),
+    totalCost: sumOf(rows, "total_cost"),
+    basis: sumOf(rows, "basis_amount"),
+    revenue: sum2(rows.map((s) => sumOf(s.projects, "revenue"))),
+    allocated: sum2(rows.map((s) => sumOf(s.projects, "labor_cost"))),
+  };
+  out.difference = round2(out.revenue - out.allocated); // prihod − trošak radnika (bez ostalih troškova projekta)
+  return out;
+}
+
+/**
+ * Šta se šalje bazi (save_payroll_draft): listići bez polja za prikaz (vendor_name, revenue).
+ */
+export function draftPayload(result) {
+  return result.payslips.map(({ vendor_name: _v, revenue: _r, ...slip }) => slip);
+}
+
+const SLIP_FIELDS = ["total_hours", "basis_amount", "bruto", "neto", "tax", "emp_pio", "emp_health", "emp_unemployment",
+  "er_pio", "er_health", "total_cost", "payout"];
+const PROJECT_FIELDS = ["hours", "worker_amount", "labor_cost", "revenue"];
+const same = (a, b) => (a === null || a === undefined ? null : round2(a)) === (b === null || b === undefined ? null : round2(b));
+
+/**
+ * Da li sačuvan nacrt odgovara obračunu iz trenutnih podataka. Vraća imena radnika čiji se listić razlikuje
+ * (ili koji fali / višak); prazan niz = nacrt je ažuran.
+ * @param {Array} stored    sačuvani listići, svaki sa `projects` (redovi payslip_projects)
+ * @param {Array} computed  buildMonthPayroll().payslips
+ */
+export function staleEmployees(stored, computed) {
+  const a = new Map((stored || []).map((s) => [s.employee_id, s]));
+  const b = new Map((computed || []).map((s) => [s.employee_id, s]));
+  const names = [];
+  for (const id of new Set([...a.keys(), ...b.keys()])) {
+    const s = a.get(id);
+    const c = b.get(id);
+    const name = (s || c).employee_name;
+    if (!s || !c) { names.push(name); continue; }
+    let diff = SLIP_FIELDS.some((f) => !same(s[f], c[f])) || s.engagement_type !== c.engagement_type
+      || s.rate_basis !== c.rate_basis || !same(s.work_fraction, c.work_fraction);
+    const sp = new Map((s.projects || []).map((p) => [p.project_id, p]));
+    const cp = new Map((c.projects || []).map((p) => [p.project_id, p]));
+    if (sp.size !== cp.size) diff = true;
+    for (const [pid, p] of cp) {
+      const q = sp.get(pid);
+      if (!q || PROJECT_FIELDS.some((f) => !same(p[f], q[f]))) diff = true;
+    }
+    if (diff) names.push(name);
+  }
+  return names;
+}

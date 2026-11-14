@@ -28,7 +28,7 @@ import Reports from '@/pages/Reports';
 import PayrollDashboard from '@/pages/payroll/PayrollDashboard';
 import Timesheets from '@/pages/payroll/Timesheets';
 import TimesheetDashboard from '@/pages/timesheets/TimesheetDashboard';
-import WeeklyPayroll from '@/pages/payroll/WeeklyPayroll';
+import MonthlyPayroll from '@/pages/payroll/MonthlyPayroll';
 import PayrollReports from '@/pages/payroll/PayrollReports';
 import Clients from '@/pages/payroll/Clients';
 import EmailNotifications from '@/pages/EmailNotifications';
@@ -91,7 +91,9 @@ const AuthenticatedApp = () => {
         <Route path="/payroll" element={<PayrollDashboard />} />
         <Route path="/timesheets" element={<Timesheets />} />
         <Route path="/timesheet-dashboard" element={<TimesheetDashboard />} />
-        <Route path="/payroll/weekly" element={<WeeklyPayroll />} />
+        <Route path="/payroll/monthly" element={<MonthlyPayroll />} />
+        {/* Stari „Nedeljni obračun" je sada mesečni (Faza 3) — stari linkovi vode na novu stranicu. */}
+        <Route path="/payroll/weekly" element={<Navigate to="/payroll/monthly" replace />} />
         <Route path="/payroll/reports" element={<PayrollReports />} />
         <Route path="/clients" element={<Clients />} />
         <Route path="/vendors" element={<Vendors />} />

@@ -13,10 +13,10 @@ Interna web aplikacija za firmu koja svoje radnike i radnike podizvođača šalj
 - **radnike:** lične podatke, kontakt, zaposlenje, bankovne podatke, dokumenta, angažmane (direktno zaposlen ili preko podizvođača);
 - **projekte:** klijent, lokacija, pozicije sa tarifom za klijenta, radnici dodeljeni projektu sa satnicom;
 - **satnice:** nedeljni unos sati po radniku i projektu (pon–ned), slanje na odobravanje, odobravanje, PDF;
-- **novac:** koliko plaćamo radnika po satu (B2C), koliko naplaćujemo klijentu po satu (B2B), nedeljni obračun, izveštaji o zaradi po radniku, klijentu i projektu, troškovi projekta;
+- **novac:** koliko plaćamo radnika po satu (B2C), koliko naplaćujemo klijentu po satu (B2B), mesečni obračun (neto/bruto, porez, doprinosi, bruto 2 po projektima), izveštaji o zaradi po radniku, klijentu i projektu, troškovi projekta;
 - **ostalo:** zadaci, odsustva, prisustvo, raspored smena, obaveštenja, mejl šabloni, podešavanja (odeljenja i pozicije, kategorije troškova).
 
-Aplikacija je nastala kao izvoz iz Base44 i prebačena je na Supabase. **Izgled i ekrani su ostali isti kao u Base44.** Promenjeni su izvor podataka, prijava i pravila u bazi. Novčana logika na ekranima je **još uvek stara** i delom pogrešna (vidi §9). Ispravan obračun neto/bruto postoji samo u kodu i testovima i još nema svoj ekran (§8).
+Aplikacija je nastala kao izvoz iz Base44 i prebačena je na Supabase. **Izgled i ekrani su ostali isti kao u Base44.** Promenjeni su izvor podataka, prijava i pravila u bazi. Novčana logika na ekranima je **još uvek stara** i delom pogrešna (vidi §9). Ispravan obračun neto/bruto ima svoj ekran od Faze 3 — „Mesečni obračun" (§6.18, §8).
 
 Korisnici su admin i operater. Radnici se ne prijavljuju.
 
@@ -69,7 +69,7 @@ Ako u `.env.local` fale ključevi, aplikacija prikazuje ekran „Supabase nije p
 | Projekti → Pregled projekata, detalj projekta | da | da |
 | Projekti → Troškovi projekata, Tarife i dodele | da | **ne** |
 | Obračun → Radni sati (`/timesheets`), Klijenti (`/clients`) | da | da |
-| Obračun → Platni spisak, Pregled radnih sati, Nedeljni obračun, Finansijski izveštaji | da | **ne** |
+| Obračun → Platni spisak, Pregled radnih sati, Mesečni obračun, Finansijski izveštaji | da | **ne** |
 | Podešavanja (Email poruke, Odeljenja, Kategorije troškova) | da | **ne** |
 
 **U aplikaciji:**
@@ -339,16 +339,17 @@ Naziv ekrana je dat kao „EN / RS" iz menija. Uz svaki ekran piše ko ga vidi.
 - Broje se **sve** satnice, i neodobrene.
 - Ako se kod proizvoljnog perioda obriše datum, stranica verovatno pada (`TimesheetDashboard.jsx:104, 133`).
 
-### 6.18 Weekly Payroll / Nedeljni obračun — `/payroll/weekly` (admin)
-- Biranje nedelje. Dugme „Napravi obračun" pravi jedan zapis po radniku od **odobrenih** satnica te nedelje:
-  - sati, prekovremeno, trošak, prihod, zarada i marža;
-  - B2C tarifa se uzima iz prvog reda;
-  - rok isplate = kraj nedelje + 7 dana;
-  - status pending.
-- Radnik koji već ima obračun za tu nedelju se preskače. Postojeći obračuni se **nikad ne ažuriraju**, pa kasnija izmena satnica ostaje neprimenjena.
-- **Tabela:** radnik, sati, trošak, prihod, zarada, marža, rok, status.
-- Status isplate (pending / approved / paid / delayed / cancelled) se menja odmah, bez potvrde. Nema brisanja ni ponovnog pravljenja.
-- **Neto i bruto ovde ne postoje.** To je planirano za „Mesečni obračun" (§8).
+### 6.18 Monthly Payroll / Mesečni obračun — `/payroll/monthly` (admin; stari `/payroll/weekly` vodi ovde)
+Isti izgled kao nekadašnji „Nedeljni obračun", mesec umesto nedelje (D17). Novac računa `src/lib/payroll/payrollMonth.js`.
+- **Biranje meseca** (strelice, „Ovaj mesec"; mesec ostaje u adresi `?month=2026-03`).
+- **Kurs EUR/RSD** za mesec unosi admin (npr. 117,2). Bez kursa „Generiši obračun" odbija, i ekran i baza; podrazumevani kurs ne postoji.
+- **Zaključavanje meseca:** dugme „Zaključaj mesec" (sve satnice koje zalaze u mesec moraju biti odobrene) i „Otključaj mesec" (samo dok ne postoji obračun).
+- **Generiši obračun** pravi nacrt (može ponovo): samo iz **odobrenih** satnica; nedelja koja prelazi u drugi mesec deli se po danu, sa tarifama, koeficijentima, pragom i praznicima iz snimka satnice. Po radniku: neto, porez, doprinosi radnika, bruto, doprinosi poslodavca, bruto 2 (trošak), za isplatu; klikom na radnika — raspodela po projektima. Podizvođač: isplata = trošak = sati × tarifa, bez poreza.
+- **Šta blokira obračun:** satnica odobrena bez snimka (pre Faze 2), koeficijent/tarifa koja fali u snimku, radnik bez angažmana — poruka sa radnikom, nedeljom i projektom; takav radnik nema listić. Ispod je i provera iz baze. Nacrt koji više ne odgovara podacima ili promenjen kurs se takođe prikazuju.
+- **Kartice:** ukupno sati, za isplatu, bruto 2 (trošak), prihod od klijenata.
+- **Raspodela troška po projektima:** sati, zarada, trošak radnika, prihod, razlika; ispod piše da je zbir troška po projektima jednak zbiru bruto 2 (ostali troškovi projekta nisu uključeni).
+- **Status:** Nacrt → Odobri obračun (uz potvrdu; dugme radi tek kad nema problema) → Označi kao isplaćeno (uz potvrdu). „Obriši nacrt" postoji samo za nacrt. Odobren i isplaćen obračun ne mogu da se menjaju ni brišu (baza).
+- Neto/bruto je upravljački obračun po D7 i **ne zamenjuje PPP-PD prijavu i knjigovođu**.
 
 ### 6.19 Clients / Klijenti — `/clients` (svi; upis samo admin)
 - **Prikaz:** grid ili lista; pretraga po nazivu; sortiranje po nazivu.
@@ -423,13 +424,13 @@ Ovo su dobra mesta za testove. Kroz aplikaciju se greška **ne vidi** (§5.4), p
 | Preimenovanje klijenta ili projekta | osvežava ime u projektima i satnicama, veze ostaju |
 | Poslednji aktivan admin | ne može da se ukloni ili ugasi |
 | Operater menja svoju ulogu | ne uspeva |
-| Mesečni obračun (`payroll_runs`) | samo za zaključan mesec; odobrava se samo ako se slažu sati i zbirovi; odobren je nepromenljiv. **Nema ekran.** |
+| Mesečni obračun (`payroll_runs`) | samo za zaključan mesec i samo sa kursom EUR/RSD; parametre upisuje baza; odobrava se samo ako se slažu sati po radniku i projektu, zbirovi, angažman i bruto/neto/porez/doprinosi (`payroll_run_problems`); odobren i isplaćen je nepromenljiv, isplata samo posle odobravanja; mesec sa obračunom ne može da se otključa. Ekran: §6.18 (D17). |
 
 ---
 
-## 8. Obračun neto/bruto — gotov kod, još bez ekrana
+## 8. Obračun neto/bruto
 
-Fajlovi su u `src/lib/payroll/`, a testovi u `payroll.test.js` (`npm test`). Ekrani ga još ne koriste; planirano je za Fazu 3 („Mesečni obračun").
+Fajlovi su u `src/lib/payroll/`, a testovi u `payroll.test.js` (`npm test`). Koristi ga stranica „Mesečni obračun" (§6.18) preko `payrollMonth.js`.
 
 - **Propisi Srbije 2026:**
   - porez 10% na bruto umanjen za neoporezivi iznos 34.221 RSD;
@@ -474,7 +475,7 @@ Tester treba svaki nalaz da označi kao **poznat** (sa ove liste) ili **nov**.
    - grupisanje po imenu radnika.
 6. ✅ *(delom: EUR troškovi se oduzimaju — D8; RSD i dalje bez kursa, D2)* **Zarada projekta ne oduzima troškove projekta.** RSD troškovi se ne preračunavaju, a u Finansijskim izveštajima se ignorišu.
 7. ✅ *(rešeno: broji samo odobrene, neodobrene prikazuje odvojeno)* **Finansijski izveštaj projekta broji i neodobrene satnice**, a Finansijski izveštaji samo odobrene. Isti projekat zato daje dve različite brojke.
-8. ✅ *(delom: „Generiši" osvežava obračune na čekanju; zastareo obračun ne može da se odobri/isplati; neto/bruto i dalje Faza 3)* **Nedeljni obračun se ne ažurira** posle izmene satnica. Nema neto/bruto, nema zaključavanja meseca u aplikaciji, nema platnog listića.
+8. ✅ *(rešeno u Fazi 3: „Nedeljni obračun" je sada „Mesečni obračun" sa neto/bruto, kursom, zaključavanjem meseca i nepromenljivim odobrenim obračunom — §6.18, D17; platni listić PDF je sledeći zadatak)* **Nedeljni obračun se ne ažurira** posle izmene satnica. Nema neto/bruto, nema zaključavanja meseca u aplikaciji, nema platnog listića.
 9. ✅ *(rešeno: sloj podataka čita sve redove u delovima od 1000)* Platni spisak i Nedeljni obračun učitavaju 500 satnica bez redosleda (polje `date` ne postoji), pa sa više podataka neke se ne računaju.
 
 ### 9.2 Ostalo poznato
