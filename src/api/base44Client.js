@@ -31,6 +31,7 @@ const ENTITY_TABLES = {
   HourType: "hour_types",
   Holiday: "holidays",
   WorkRules: "work_rules",
+  CompanySettings: "company_settings",
   PayrollRun: "payroll_runs",
   Payslip: "payslips",
   PayslipProject: "payslip_projects",
@@ -45,7 +46,7 @@ const PRIVATE_EMPLOYEE_FIELDS = new Set(
 );
 
 // Polja koja čuvaju fajl. U bazi je trajna referenca `storage://files/<putanja>`, a stranica dobija potpisan link.
-const FILE_FIELDS = { documents: ["file_url"], timesheets: ["attachment_url"], employees: ["profile_photo"] };
+const FILE_FIELDS = { documents: ["file_url"], timesheets: ["attachment_url"], employees: ["profile_photo"], company_settings: ["logo_url"] };
 const BUCKET = "files";
 const STORAGE_PREFIX = `storage://${BUCKET}/`;
 export const SIGNED_URL_SECONDS = 60 * 60;
@@ -53,7 +54,7 @@ export const SIGNED_URL_SECONDS = 60 * 60;
 // spiskovi čitaju u delovima — ranije su izveštaji preko 500/1000 satnica tiho gubili redove (QA 14.11.2026).
 export const PAGE_SIZE = 1000;
 // Tabele čiji primarni ključ nije kolona `id` (get/update/delete/create idu preko njega).
-export const PRIMARY_KEY = { hour_types: "code", holidays: "date", work_rules: "id", month_locks: "month", employee_private: "employee_id" };
+export const PRIMARY_KEY = { hour_types: "code", holidays: "date", work_rules: "id", company_settings: "id", month_locks: "month", employee_private: "employee_id" };
 // Kolona po kojoj je redosled stabilan između delova: primarni ključ; payslip_projects nema jednu kolonu ključa.
 const STABLE_ORDER = { ...PRIMARY_KEY, payslip_projects: "payslip_id" };
 

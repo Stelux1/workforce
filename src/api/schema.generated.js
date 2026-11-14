@@ -31,6 +31,17 @@ export const TABLE_COLUMNS = {
     "updated_date",
     "created_by"
   ],
+  "company_settings": [
+    "id",
+    "name",
+    "pib",
+    "registration_number",
+    "address",
+    "city",
+    "bank_account",
+    "logo_url",
+    "updated_date"
+  ],
   "cost_categories": [
     "id",
     "name",

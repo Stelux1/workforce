@@ -1,7 +1,7 @@
 // Jedan spisak stavki menija za bočni (desktop) i mobilni meni, da se ne razilaze (QA 14.11.2026).
 import {
   LayoutDashboard, Users, FileText, Calendar, CheckSquare, Bell, BarChart3, DollarSign, ClipboardList,
-  Building2, Mail, Settings2, FolderKanban, Receipt, PieChart, Table2, Truck, Coins, Clock, CalendarDays, Percent,
+  Building2, Building, Mail, Settings2, FolderKanban, Receipt, PieChart, Table2, Truck, Coins, Clock, CalendarDays, Percent,
 } from "lucide-react";
 
 export const NAV_LABELS = {
@@ -15,7 +15,7 @@ export const NAV_LABELS = {
     "Timesheet Dashboard": "Timesheet Overview",
     "Weekly Payroll": "Weekly Payroll", "Clients": "Clients", "Payroll Reports": "Payroll Reports",
     "Email Notifications": "Email Notifications", "Departments & Positions": "Departments & Positions",
-    "Cost Categories": "Cost Categories", "Coefficients & Holidays": "Coefficients & Holidays", "Vendors": "Vendors", "Rates & Assignments": "Rates & Assignments",
+    "Cost Categories": "Cost Categories", "Coefficients & Holidays": "Coefficients & Holidays", "Company Details": "Company Details", "Vendors": "Vendors", "Rates & Assignments": "Rates & Assignments",
     "Logout": "Logout", "Collapse": "Collapse",
     "section_employees": "Staff Management", "section_projects": "Projects", "section_payroll": "Payroll", "section_settings": "Settings",
   },
@@ -29,7 +29,7 @@ export const NAV_LABELS = {
     "Timesheet Dashboard": "Pregled radnih sati",
     "Weekly Payroll": "Nedeljni obračun", "Clients": "Klijenti", "Payroll Reports": "Finansijski izveštaji",
     "Email Notifications": "Email poruke", "Departments & Positions": "Odeljenja",
-    "Cost Categories": "Kategorije troškova", "Coefficients & Holidays": "Koeficijenti i praznici", "Vendors": "Dobavljači", "Rates & Assignments": "Tarife i dodele",
+    "Cost Categories": "Kategorije troškova", "Coefficients & Holidays": "Koeficijenti i praznici", "Company Details": "Podaci firme", "Vendors": "Dobavljači", "Rates & Assignments": "Tarife i dodele",
     "Logout": "Odjava", "Collapse": "Skupi",
     "section_employees": "Kadrovi", "section_projects": "Projekti", "section_payroll": "Obračun i finansije", "section_settings": "Podešavanja",
   },
@@ -78,6 +78,7 @@ export const NAV_SECTIONS = [
       { label: "Departments & Positions", icon: Settings2, path: "/settings/departments" },
       { label: "Cost Categories", icon: Receipt, path: "/settings/cost-categories" },
       { label: "Coefficients & Holidays", icon: Percent, path: "/settings/coefficients" },
+      { label: "Company Details", icon: Building, path: "/settings/company" },
     ],
   },
 ];
