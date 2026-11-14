@@ -72,12 +72,11 @@ export function draftRates(input) {
   return out;
 }
 
-const rateRef = ({ rate, source, ref }) => ({ rate, source, ref });
-
 /**
- * Šta admin šalje pri odobravanju reda: tarife iz jedinstvenog izbora za nedelju reda (week_start) i izvor tarife
- * za snimak. Koeficijente, posebne satnice, prag i praznike u snimak upisuje baza. Uz to vraća pregled iznosa —
- * isti obračun koji će baza upisati.
+ * Šta admin šalje pri odobravanju reda: tarife iz jedinstvenog izbora za nedelju reda (week_start). Baza pri
+ * odobravanju ponovo bira tarifu po istom redosledu (resolve_timesheet_rate) i odbija red čija tarifa nije ta;
+ * ceo snimak (izvor i oznaka tarife, koeficijenti, posebne satnice, prag, praznici) upisuje baza. Uz to vraća
+ * pregled iznosa — isti obračun koji će baza upisati.
  * @param {object} input
  * @param {object} input.row             red satnice (employee_id, week_start, mon_hours … sun_hours)
  * @param {object} [input.project]       projekat reda ({ id, assigned_employees, job_roles })
@@ -87,8 +86,7 @@ const rateRef = ({ rate, source, ref }) => ({ rate, source, ref });
  * @param {Array}  input.hourTypes       redovi hour_types
  * @param {Array}  [input.holidays]      praznici
  * @param {number} [input.dailyThreshold] work_rules.daily_regular_hours
- * @returns {{ data: { approval_status: "approved", b2c_rate: number, b2b_rate: number, rate_snapshot: object },
- *            hoursByType: object, amounts: object }}
+ * @returns {{ data: { approval_status: "approved", b2c_rate: number, b2b_rate: number }, hoursByType: object, amounts: object }}
  * @throws {MissingRateError|RateUnitError} tarifa koja fali ili nije EUR po satu
  * @throws {MissingCoefficientError} koeficijent koji fali za vrstu sa satima
  */
@@ -114,7 +112,6 @@ export function approvalPayload({ row, project, assignments, rates, employeePriv
       approval_status: "approved",
       b2c_rate: resolved.worker.rate,
       b2b_rate: resolved.client.rate,
-      rate_snapshot: { worker: rateRef(resolved.worker), client: rateRef(resolved.client) },
     },
     hoursByType,
     amounts,

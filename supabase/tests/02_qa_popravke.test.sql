@@ -21,6 +21,8 @@ insert into public.projects (id, name, client_name) values ('b3000000-0000-4000-
 insert into public.employees (id, first_name, last_name, employee_id) values
   ('d3000000-0000-4000-8000-0000000000d1', 'QA2', 'Radnik', 'QA2-001'),
   ('d3000000-0000-4000-8000-0000000000d2', 'QA2', 'Drugi', 'QA2-002');
+-- Važeće tarife prvog radnika (profil 12 / 25) — odobravanje proverava da tarifa reda odgovara izboru tarife.
+insert into public.employee_private (employee_id, b2c_hourly_rate, b2b_hourly_rate) values ('d3000000-0000-4000-8000-0000000000d1', 12, 25);
 
 -- ───── operater ─────
 set local role authenticated;

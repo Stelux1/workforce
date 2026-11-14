@@ -103,6 +103,36 @@ describe("poruke posle QA 14.11.2026", () => {
     );
     expect(describeError({ code: "23514", message: "Satnica nema potpun obračun i ne može da se odobri" }, "en").text).toMatch(/incomplete/);
   });
+  // Poruke su doslovno iz supabase/tests/04_tarifa_pri_odobravanju.test.sql (guard_timesheet).
+  it("tarifa reda koja nije važeća tarifa (Faza 2): srpski prolazi, engleski kaže stranu, izvor i šta da se uradi", () => {
+    const e = {
+      code: "23514",
+      message: "Tarifa radnika (99,00) ne odgovara važećoj tarifi (15,00, izvor: tarifa angažmana) — osvežite stranicu i odobrite ponovo",
+    };
+    expect(rs(e).text).toBe(e.message);
+    expect(describeError(e, "en").text).toBe(
+      "The worker rate (99.00) doesn't match the current rate (15.00, source: assignment rate) — refresh the page and approve again."
+    );
+    const klijent = { code: "23514", message: "Tarifa klijenta (31,00) ne odgovara važećoj tarifi (22,00, izvor: zanimanje na projektu) — osvežite stranicu i odobrite ponovo" };
+    expect(describeError(klijent, "en").text).toBe(
+      "The client rate (31.00) doesn't match the current rate (22.00, source: job role on the project) — refresh the page and approve again."
+    );
+  });
+  it("tarifa koja fali ili nije EUR po satu pri odobravanju → engleski", () => {
+    const oba = { code: "23514", message: "Nema važeće tarife radnika ni klijenta za nedelju od 07.03.2033 — satnica ne može da se odobri" };
+    expect(rs(oba).text).toBe(oba.message);
+    expect(describeError(oba, "en").text).toBe("No valid rate for the worker or the client for the week of 07.03.2033 — the timesheet can't be approved.");
+    expect(describeError({ ...oba, message: "Nema važeće tarife klijenta za nedelju od 07.03.2033 — satnica ne može da se odobri" }, "en").text)
+      .toBe("No valid rate for the client for the week of 07.03.2033 — the timesheet can't be approved.");
+    const rsd = {
+      code: "23514",
+      message: "Važeća tarifa radnika (izvor: tarifa radnika) je 1500,00 RSD po satu — odobravanje prima samo EUR po satu; ispravite tu tarifu u Tarife i dodele",
+    };
+    expect(rs(rsd).text).toBe(rsd.message);
+    expect(describeError(rsd, "en").text).toBe(
+      "The current worker rate (source: employee rate) is 1500.00 RSD per hour — approval accepts only EUR per hour; fix that rate in Rates & Assignments."
+    );
+  });
 });
 
 describe("dataError / plainError", () => {

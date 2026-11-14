@@ -9,6 +9,10 @@
 //
 // Ništa od toga → MissingRateError (nikad 0, D11). Pobednik koji nije EUR po satu → RateUnitError:
 // pogrešna tarifa se ne preskače tiho na sledeći nivo, mora da se ispravi.
+//
+// Isti izbor radi i baza pri odobravanju satnice (resolve_timesheet_rate u
+// supabase/migrations/20261114180000_tarifa_pri_odobravanju.sql) i odbija tarifu reda koja nije ova. Svaka promena
+// ovde mora i tamo, sa istim primerom u payroll.test.js („isti primer kao pgTAP 04") i u pgTAP testu 04.
 
 import { MissingRateError } from "./monthly.js";
 import { validRate } from "./timesheet.js";

@@ -418,6 +418,98 @@ describe("izbor tarife (rates.js)", () => {
   });
 });
 
+// PARITET SA BAZOM: isti podaci, koraci i očekivani brojevi kao „lanac nivoa" u
+// supabase/tests/04_tarifa_pri_odobravanju.test.sql (resolve_timesheet_rate, provera tarife pri odobravanju).
+// Ako se promeni jedan fajl, mora i drugi — rates.js i baza moraju da izaberu istu tarifu, inače odobravanje puca.
+describe("isti primer kao pgTAP 04 (rates.js = resolve_timesheet_rate)", () => {
+  const S = RATE_SOURCES;
+  const D = "2033-03-07"; // week_start satnice
+  const E1 = "d7000000-0000-4000-8000-0000000000d1";
+  const P1 = "b7000000-0000-4000-8000-0000000000b1";
+  const A1 = "a7000000-0000-4000-8000-0000000000a1";
+  const POS = "QA-4 Zavarivač";
+  const rid = (n) => `e7000000-0000-4000-8000-0000000000${String(n).padStart(2, "0")}`;
+  const tarifa = (o) => ({
+    scope: "employee", kind: "cost", unit: "hourly", currency: "EUR", employee_id: null, project_id: null, position: null,
+    assignment_id: null, effective_from: "2033-01-01", effective_to: null, status: "active", created_date: "2033-01-01T00:00:00+00:00", ...o,
+  });
+  const pocetak = () => ({
+    date: D,
+    employeeId: E1,
+    project: {
+      id: P1,
+      job_roles: [{ title: POS, b2b_rate: 22 }],
+      assigned_employees: [{ employee_id: E1, position: POS, b2c_rate: 18, b2b_rate: 24 }],
+    },
+    assignments: [{ id: A1, employee_id: E1, project_id: P1, position: POS, start_date: "2033-01-01", end_date: null, status: "active" }],
+    rates: [
+      tarifa({ id: rid(1), scope: "assignment", kind: "cost", amount: 15, employee_id: E1, project_id: P1, assignment_id: A1 }),
+      tarifa({ id: rid(2), scope: "assignment", kind: "revenue", amount: 30, employee_id: E1, project_id: P1, assignment_id: A1 }),
+      tarifa({ id: rid(3), scope: "project", kind: "cost", amount: 12, project_id: P1 }),
+      tarifa({ id: rid(4), scope: "project", kind: "revenue", amount: 27, project_id: P1 }),
+      tarifa({ id: rid(5), scope: "employee", kind: "cost", amount: 16, employee_id: E1 }),
+      tarifa({ id: rid(6), scope: "employee", kind: "revenue", amount: 29, employee_id: E1 }),
+    ],
+    employeePrivate: { b2c_hourly_rate: 14, b2b_hourly_rate: 20 },
+  });
+  const naProjektu = `project:${P1}:employee:${E1}`;
+  const izProfila = `employee:${E1}:profile`;
+  const izmeniTarife = (u, uslov, izmena) => { u.rates = u.rates.map((r) => (uslov(r) ? { ...r, ...izmena } : r)); };
+  const ishod = (side, u) => {
+    try {
+      const { rate, source, ref } = resolveSideRate(side, u);
+      return { rate, source, ref };
+    } catch (e) {
+      if (e instanceof MissingRateError) return { error: "missing" };
+      if (e instanceof RateUnitError) return { error: "unit", source: e.source, ref: e.ref, amount: e.amount, currency: e.currency, unit: e.unit };
+      throw e;
+    }
+  };
+
+  // [korak, izmena (kumulativno, isto kao update u pgTAP), očekivano za radnika, očekivano za klijenta (undefined = ne proverava se)]
+  const KORACI = [
+    ["početak", () => {}, { rate: 15, source: S.ASSIGNMENT_RATE, ref: rid(1) }, { rate: 30, source: S.ASSIGNMENT_RATE, ref: rid(2) }],
+    ["otkazana dodela", (u) => { u.assignments[0].status = "cancelled"; },
+      { rate: 18, source: S.PROJECT_EMPLOYEE, ref: naProjektu }, { rate: 24, source: S.PROJECT_EMPLOYEE, ref: naProjektu }],
+    ["0 i prazno na projektu", (u) => { u.project.assigned_employees = [{ employee_id: E1, position: POS, b2c_rate: 0, b2b_rate: "" }]; },
+      { rate: 12, source: S.PROJECT_RATE, ref: rid(3) }, { rate: 27, source: S.PROJECT_RATE, ref: rid(4) }],
+    ["tarifa pozicije (starija) i tuđe pozicije", (u) => {
+      u.rates.push(tarifa({ id: rid(7), scope: "project", kind: "cost", amount: 13, project_id: P1, position: POS, effective_from: "2032-06-01" }));
+      u.rates.push(tarifa({ id: rid(8), scope: "project", kind: "cost", amount: 19, project_id: P1, position: "QA-4 Električar", effective_from: "2033-02-01" }));
+    }, { rate: 13, source: S.PROJECT_RATE, ref: rid(7) }, undefined],
+    ["kraj važenja uključen", (u) => izmeniTarife(u, (r) => r.scope === "project", { effective_to: D }),
+      { rate: 13, source: S.PROJECT_RATE, ref: rid(7) }, undefined],
+    ["istekle tarife projekta", (u) => izmeniTarife(u, (r) => r.scope === "project", { effective_to: "2033-03-06" }),
+      { rate: 16, source: S.EMPLOYEE_RATE, ref: rid(5) }, { rate: 22, source: S.JOB_ROLE, ref: `project:${P1}:job_role:${POS}` }],
+    ["bez zanimanja", (u) => { u.project.job_roles = []; }, undefined, { rate: 29, source: S.EMPLOYEE_RATE, ref: rid(6) }],
+    ["neaktivna i buduća tarifa radnika", (u) => {
+      izmeniTarife(u, (r) => r.id === rid(5), { status: "inactive" });
+      izmeniTarife(u, (r) => r.id === rid(6), { effective_from: "2033-03-08" });
+    }, { rate: 14, source: S.PROFILE, ref: izProfila }, { rate: 20, source: S.PROFILE, ref: izProfila }],
+    ["bez profila", (u) => { u.employeePrivate = { b2c_hourly_rate: null, b2b_hourly_rate: null }; }, { error: "missing" }, { error: "missing" }],
+    ["pobednik u RSD", (u) => { u.rates.push(tarifa({ id: rid(9), amount: 1500, currency: "RSD", employee_id: E1 })); },
+      { error: "unit", source: S.EMPLOYEE_RATE, ref: rid(9), amount: 1500, currency: "RSD", unit: "hourly" }, undefined],
+  ];
+
+  it("svaki korak daje isti izvor, oznaku i tarifu kao baza", () => {
+    const u = pocetak();
+    for (const [korak, izmena, radnik, klijent] of KORACI) {
+      izmena(u);
+      if (radnik) expect(ishod("worker", u), `${korak} (radnik)`).toEqual(radnik);
+      if (klijent) expect(ishod("client", u), `${korak} (klijent)`).toEqual(klijent);
+    }
+  });
+
+  it("odobravanje na početku šalje 15 / 30, kao red koji baza odobrava u pgTAP 04", () => {
+    const TYPES = [{ code: "redovni", worker_coef: 1, client_coef: 1 }];
+    const r = approvalPayload({
+      ...pocetak(), row: { employee_id: E1, project_id: P1, week_start: D, mon_hours: 8 }, hourTypes: TYPES, holidays: [], dailyThreshold: 8,
+    });
+    expect(r.data).toEqual({ approval_status: "approved", b2c_rate: 15, b2b_rate: 30 });
+    expect([r.amounts.worker_cost, r.amounts.client_revenue]).toEqual([120, 240]);
+  });
+});
+
 describe("vrste sati (hours.js)", () => {
   // 2026-11-09 je ponedeljak; 2026-11-11 (sreda) je Dan primirja; 2026-11-14 je subota.
   const MON = "2026-11-09";
@@ -648,17 +740,9 @@ describe("red satnice (timesheetRow.js)", () => {
     expect(rsd.problems[0]).toBeInstanceOf(RateUnitError);
   });
 
-  it("odobravanje: tarife iz jedinstvenog izbora, snimak izvora, iznos kao baza (256,80 / 448)", () => {
+  it("odobravanje: tarife iz jedinstvenog izbora (snimak i izvor tarife upisuje baza), iznos kao baza (256,80 / 448)", () => {
     const r = approvalPayload(ulaz());
-    expect(r.data).toEqual({
-      approval_status: "approved",
-      b2c_rate: 12,
-      b2b_rate: 20,
-      rate_snapshot: {
-        worker: { rate: 12, source: RATE_SOURCES.PROJECT_EMPLOYEE, ref: `project:${PRJ}:employee:${E}` },
-        client: { rate: 20, source: RATE_SOURCES.PROJECT_EMPLOYEE, ref: `project:${PRJ}:employee:${E}` },
-      },
-    });
+    expect(r.data).toEqual({ approval_status: "approved", b2c_rate: 12, b2b_rate: 20 });
     expect(r.hoursByType).toEqual({ redovni: 8, prekovremeni: 2, vikend: 8, praznik: 0 });
     expect([r.amounts.worker_cost, r.amounts.client_revenue, r.amounts.profit]).toEqual([256.8, 448, 191.2]);
   });

@@ -188,6 +188,20 @@ const IN_USE_BY_CONSTRAINT = {
 };
 const inUseKey = (constraint) => IN_USE_BY_CONSTRAINT[constraint] || "inUse";
 
+// Provera tarife pri odobravanju (guard_timesheet, migracija 20261114180000): strana, izvor tarife i jedinica.
+const RATE_SIDE_EN = { radnika: "worker", klijenta: "client" };
+const RATE_MISSING_SIDE_EN = { radnika: "the worker", klijenta: "the client", "radnika ni klijenta": "the worker or the client" };
+const RATE_SOURCE_EN = {
+  "tarifa angažmana": "assignment rate",
+  "satnica radnika na projektu": "worker's rate on the project",
+  "tarifa projekta/pozicije": "project/position rate",
+  "zanimanje na projektu": "job role on the project",
+  "tarifa radnika": "employee rate",
+  "profil radnika": "employee profile",
+};
+const RATE_UNIT_EN = { "po satu": "per hour", "po danu": "per day", nedeljno: "per week", mesečno: "per month" };
+const enNumber = (n) => (n === "prazno" ? "empty" : n.replace(",", "."));
+
 // Poruke koje baza diže na srpskom (guard_timesheet, lock_month…) — na engleskom kad je izabran EN.
 const DB_MESSAGES_EN = [
   [/^Satnicu može da odobri samo admin$/, "Only an admin can approve a timesheet."],
@@ -201,6 +215,15 @@ const DB_MESSAGES_EN = [
   [/^Nedostaje koeficijent za vrstu sati: (.+) — admin ga upisuje u Koeficijenti i praznici$/,
     "Missing coefficient for hour type: $1 — an admin enters it in Settings → Coefficients & Holidays."],
   [/^Satnica nema potpun obračun i ne može da se odobri$/, "The timesheet amounts are incomplete, so it can't be approved."],
+  // Tarifa reda mora biti važeća tarifa iz jedinstvenog izbora (D4, D16).
+  [/^Tarifa (radnika|klijenta) \(([^)]+)\) ne odgovara važećoj tarifi \((\S+), izvor: (.+)\) — osvežite stranicu i odobrite ponovo$/,
+    (_, side, rate, expected, source) =>
+      `The ${RATE_SIDE_EN[side]} rate (${enNumber(rate)}) doesn't match the current rate (${enNumber(expected)}, source: ${RATE_SOURCE_EN[source] || source}) — refresh the page and approve again.`],
+  [/^Nema važeće tarife (radnika ni klijenta|radnika|klijenta) za nedelju od (\S+) — satnica ne može da se odobri$/,
+    (_, side, week) => `No valid rate for ${RATE_MISSING_SIDE_EN[side]} for the week of ${week} — the timesheet can't be approved.`],
+  [/^Važeća tarifa (radnika|klijenta) \(izvor: (.+)\) je (\S+) (\S+) (po satu|po danu|nedeljno|mesečno) — odobravanje prima samo EUR po satu; ispravite tu tarifu u Tarife i dodele$/,
+    (_, side, source, amount, currency, unit) =>
+      `The current ${RATE_SIDE_EN[side]} rate (source: ${RATE_SOURCE_EN[source] || source}) is ${enNumber(amount)} ${currency} ${RATE_UNIT_EN[unit]} — approval accepts only EUR per hour; fix that rate in Rates & Assignments.`],
   [/^Mesec (\S+) je već zaključan$/, "Month $1 is already locked."],
   [/^Mesec (\S+) je zaključan$/, "Month $1 is locked."],
   [/^Mesec ima (\d+) neodobrenih satnica$/, "The month has $1 unapproved timesheets."],

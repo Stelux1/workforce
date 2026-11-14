@@ -19,7 +19,10 @@ update public.hour_types set worker_coef = null, client_coef = null where code <
 insert into public.holidays (date, name) values ('2032-03-06', 'QA-3 praznik') on conflict (date) do nothing;
 
 insert into public.clients (id, name) values ('c6000000-0000-4000-8000-0000000000c1', 'QA-3 klijent');
-insert into public.projects (id, name, client_name) values ('b6000000-0000-4000-8000-0000000000b1', 'QA-3 projekat', 'QA-3 klijent');
+-- Važeće tarife oba radnika: satnica radnika na projektu 12 / 20 (odobravanje proverava da je tarifa reda baš ta).
+insert into public.projects (id, name, client_name, assigned_employees) values ('b6000000-0000-4000-8000-0000000000b1', 'QA-3 projekat', 'QA-3 klijent',
+  '[{"employee_id": "d6000000-0000-4000-8000-0000000000d1", "b2c_rate": 12, "b2b_rate": 20},
+    {"employee_id": "d6000000-0000-4000-8000-0000000000d2", "b2c_rate": 12, "b2b_rate": 20}]');
 insert into public.employees (id, first_name, last_name, employee_id) values
   ('d6000000-0000-4000-8000-0000000000d1', 'QA-3', 'Radnik', 'QA-3-001'),
   ('d6000000-0000-4000-8000-0000000000d2', 'QA-3', 'Posebni', 'QA-3-002');
@@ -85,9 +88,9 @@ select is((select (worker_cost, client_revenue, profit, overtime_hours)::text fr
   '(256.80,448.00,191.20,2.00)', 'odobren iznos: 8×12 + 2×12×1,5 + 8×12×1,3 = 256,80; 8×20 + 2×20×1,6 + 8×20×1,4 = 448');
 select is((select rate_snapshot -> 'worker' || jsonb_build_object('client', rate_snapshot -> 'client')
            from public.timesheets where id = 'f6000000-0000-4000-8000-0000000000f1'),
-  '{"rate": 12, "source": "project_employee", "ref": "QA-3-ref-w",
-    "client": {"rate": 20, "source": "job_role", "ref": "QA-3-ref-c"}}'::jsonb,
-  'snimak: tarifa je ona iz reda (ne broj sa ekrana), izvor i oznaka iz izbora tarife');
+  '{"rate": 12, "source": "project_employee", "ref": "project:b6000000-0000-4000-8000-0000000000b1:employee:d6000000-0000-4000-8000-0000000000d1",
+    "client": {"rate": 20, "source": "project_employee", "ref": "project:b6000000-0000-4000-8000-0000000000b1:employee:d6000000-0000-4000-8000-0000000000d1"}}'::jsonb,
+  'snimak: tarifa je ona iz reda (ne broj sa ekrana), izvor i oznaka iz izbora tarife u bazi (ne sa ekrana)');
 select is((select rate_snapshot - 'worker' - 'client' - 'approved_at' from public.timesheets where id = 'f6000000-0000-4000-8000-0000000000f1'),
   '{"daily_regular_hours": 8, "holidays": [], "lines": [
      {"code": "redovni", "hours": 8, "worker_source": "coef", "worker_rate": 12, "worker_coef": 1, "special_rate": null,

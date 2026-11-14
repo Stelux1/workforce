@@ -17,7 +17,8 @@ update public.hour_types set worker_coef = 1, client_coef = 1 where code = 'redo
 insert into public.clients (id, name) values ('c0000000-0000-4000-8000-0000000000c1', 'Test klijent pgTAP');
 insert into public.projects (id, name, client_name) values ('b0000000-0000-4000-8000-0000000000b1', 'Test projekat pgTAP', 'Test klijent pgTAP');
 insert into public.employees (id, first_name, last_name, employee_id) values ('d0000000-0000-4000-8000-0000000000d1', 'Pera', 'Perić', 'TEST-PGTAP-001');
-insert into public.employee_private (employee_id, jmbg, iban, b2c_hourly_rate) values ('d0000000-0000-4000-8000-0000000000d1', '0101990710008', 'RS35000000000000000000', 12);
+-- Tarife 12 / 20 su važeće tarife (tarifa radnika iz Tarifa, satnica klijenta iz profila) — odobravanje ih proverava.
+insert into public.employee_private (employee_id, jmbg, iban, b2c_hourly_rate, b2b_hourly_rate) values ('d0000000-0000-4000-8000-0000000000d1', '0101990710008', 'RS35000000000000000000', 12, 20);
 insert into public.rates (scope, kind, amount, employee_id, effective_from) values ('employee', 'cost', 12, 'd0000000-0000-4000-8000-0000000000d1', '2026-01-01');
 
 select is((select client_id from public.projects where id = 'b0000000-0000-4000-8000-0000000000b1'),
