@@ -37,7 +37,6 @@ export default function Documents() {
   const [catFilter, setCatFilter] = useState("all");
   const [form, setForm] = useState({});
   const [uploading, setUploading] = useState(false);
-  const docUpload = useUnsavedUpload();
   const [uploadFailed, setUploadFailed] = useState(false);
   const [view, setView] = useViewPreference("documents", "list");
   const [sort, setSort] = useState("title_asc");
@@ -64,6 +63,8 @@ export default function Documents() {
       setForm({});
     },
   });
+  // Kreira se posle mutacije da bi znao da li čuvanje traje (odbacivanje se tada odlaže).
+  const docUpload = useUnsavedUpload(createMutation.isPending);
 
   const deleteMutation = useMutation({
     mutationFn: (id) => base44.entities.Document.delete(id),

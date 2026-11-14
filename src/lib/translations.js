@@ -443,7 +443,7 @@ const TRANSLATIONS = {
   "Gross": { rs: "Bruto" },
   "Work Fraction (0.5 = half time)": { rs: "Udeo radnog vremena (0,5 = pola radnog vremena)" },
   "Work fraction must be between 0.01 and 1": { rs: "Udeo radnog vremena mora biti između 0,01 i 1" },
-  "Rates cannot be negative": { rs: "Satnice ne mogu biti negativne" },
+  "Rates must be greater than 0 (leave empty if none)": { rs: "Satnica mora biti veća od 0 (ostavi prazno ako je nema)" },
   "B2C Rate": { rs: "B2C satnica" },
   "B2B Rate": { rs: "B2B satnica" },
   "Weekend Rate": { rs: "Stopa vikenda" },

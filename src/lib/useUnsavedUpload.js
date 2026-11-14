@@ -1,30 +1,40 @@
+// Fajl otpremljen u formi koja se ne sačuva (Otkaži, zatvaranje, zamena drugim fajlom) briše se iz skladišta.
+// `saving` = da li je čuvanje u toku. Dok traje, odbacivanje se odlaže: ako čuvanje uspe (commit), fajl ostaje;
+// ako ne uspe, briše se tek tada. Tako se nikad ne obriše fajl na koji je sačuvan red upravo upućen.
 import { useCallback, useEffect, useRef } from "react";
 import { base44 } from "@/api/base44Client";
 
-// Prati fajl otpremljen u otvorenoj formi a još nesačuvan, da se obriše iz Storage-a ako forma
-// bude otkazana/zatvorena/napuštena, ili ako se fajl zameni ili ukloni pre čuvanja (QA 14.11.2026).
-//   track(url)  - novi otpremljen fajl; prethodni nesačuvan se briše
-//   discard()   - briše nesačuvan fajl (Otkaži, X, zatvaranje)
-//   commit()    - zapis je sačuvan: fajl se zadržava
-// Pri napuštanju stranice (unmount) nesačuvan fajl se briše sam.
-export function useUnsavedUpload() {
+export function useUnsavedUpload(saving = false) {
   const pending = useRef(null);
+  const deferred = useRef(false);
+  const busy = useRef(saving);
+  busy.current = saving;
+
+  const remove = (url) => { if (url) base44.integrations.Core.DiscardUpload({ file_url: url }); };
 
   const discard = useCallback(() => {
+    if (busy.current) { deferred.current = true; return; }
     const url = pending.current;
     pending.current = null;
-    if (url) base44.integrations.Core.DiscardUpload({ file_url: url });
+    remove(url);
   }, []);
 
   const track = useCallback((url) => {
     const prev = pending.current;
     pending.current = url || null;
-    if (prev && prev !== url) base44.integrations.Core.DiscardUpload({ file_url: prev });
+    deferred.current = false;
+    if (prev && prev !== url) remove(prev);
   }, []);
 
-  const commit = useCallback(() => { pending.current = null; }, []);
+  const commit = useCallback(() => { pending.current = null; deferred.current = false; }, []);
 
-  useEffect(() => discard, [discard]);
+  // Čuvanje se završilo: ako je u međuvremenu traženo odbacivanje, a red nije sačuvan — obriši sada.
+  useEffect(() => {
+    if (!saving && deferred.current) { deferred.current = false; discard(); }
+  }, [saving, discard]);
+
+  // Napuštanje stranice: briše nesačuvan fajl, osim ako čuvanje još traje (bolje zaostao fajl nego red bez fajla).
+  useEffect(() => () => { if (!busy.current) { remove(pending.current); pending.current = null; } }, []);
 
   return { track, discard, commit };
 }

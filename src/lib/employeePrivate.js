@@ -12,8 +12,8 @@ export function privateFieldErrors(form) {
     const f = Number(form.work_fraction);
     if (!(f > 0 && f <= 1)) errors.push("Work fraction must be between 0.01 and 1");
   }
-  if (RATE_FIELDS.some((k) => !blank(form[k]) && !(Number(form[k]) >= 0))) {
-    errors.push("Rates cannot be negative");
+  if (RATE_FIELDS.some((k) => !blank(form[k]) && !(Number(form[k]) > 0))) {
+    errors.push("Rates must be greater than 0 (leave empty if none)");
   }
   return errors;
 }

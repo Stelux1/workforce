@@ -163,7 +163,6 @@ export default function EmployeeDetail() {
   const [docDialogOpen, setDocDialogOpen] = useState(false);
   const [docForm, setDocForm] = useState({});
   const [uploading, setUploading] = useState(false);
-  const docUpload = useUnsavedUpload();
   const [uploadFailed, setUploadFailed] = useState(false);
   const [previewDoc, setPreviewDoc] = useState(null);
   const [deleteDocId, setDeleteDocId] = useState(null);
@@ -189,6 +188,8 @@ export default function EmployeeDetail() {
       setDocForm({});
     },
   });
+  // Kreira se posle mutacije da bi znao da li čuvanje traje (odbacivanje se tada odlaže).
+  const docUpload = useUnsavedUpload(createDocMutation.isPending);
 
   const deleteDocMutation = useMutation({
     mutationFn: (id) => base44.entities.Document.delete(id),

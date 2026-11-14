@@ -52,11 +52,10 @@ export const SIGNED_URL_SECONDS = 60 * 60;
 // PostgREST vraća najviše `max_rows` redova po zahtevu (supabase/config.toml: 1000) i to tiho. Zato se veći
 // spiskovi čitaju u delovima — ranije su izveštaji preko 500/1000 satnica tiho gubili redove (QA 14.11.2026).
 export const PAGE_SIZE = 1000;
-// Kolona po kojoj je redosled stabilan između delova (primarni ključ).
-const STABLE_ORDER = { hour_types: "code", holidays: "date", month_locks: "month", employee_private: "employee_id", payslip_projects: "payslip_id" };
-
 // Tabele čiji primarni ključ nije kolona `id` (get/update/delete/create idu preko njega).
 export const PRIMARY_KEY = { hour_types: "code", holidays: "date", work_rules: "id", month_locks: "month", employee_private: "employee_id" };
+// Kolona po kojoj je redosled stabilan između delova: primarni ključ; payslip_projects nema jednu kolonu ključa.
+const STABLE_ORDER = { ...PRIMARY_KEY, payslip_projects: "payslip_id" };
 
 const isDev = import.meta.env?.DEV;
 const warn = (...args) => {

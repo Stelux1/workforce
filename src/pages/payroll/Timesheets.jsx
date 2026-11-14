@@ -193,7 +193,6 @@ export default function Timesheets() {
   const [deleteTsId, setDeleteTsId] = useState(null);
   const [confirmMassDelete, setConfirmMassDelete] = useState(false);
   const [uploadingFile, setUploadingFile] = useState(false);
-  const attachmentUpload = useUnsavedUpload();
   const [manualProject, setManualProject] = useState(false);
 
   const { isAdmin } = useAuth();
@@ -240,6 +239,8 @@ export default function Timesheets() {
     mutationFn: (data) => base44.entities.Timesheet.create(data),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["timesheets"] }); toast.success(T.rowAdded); attachmentUpload.commit(); setDialogOpen(false); setNewRowForm({}); },
   });
+  // Kreira se posle mutacije da bi znao da li čuvanje traje (odbacivanje se tada odlaže).
+  const attachmentUpload = useUnsavedUpload(createMutation.isPending);
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.Timesheet.update(id, data),

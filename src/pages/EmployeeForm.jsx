@@ -26,7 +26,6 @@ export default function EmployeeForm() {
 
   const [form, setForm] = useState({ status: "active" });
   const [uploading, setUploading] = useState(false);
-  const photoUpload = useUnsavedUpload();
 
   const { data: existing } = useQuery({
     queryKey: ["employee", editId],
@@ -70,6 +69,8 @@ export default function EmployeeForm() {
       navigate("/employees");
     },
   });
+  // Kreira se posle mutacije da bi znao da li čuvanje traje (odbacivanje se tada odlaže).
+  const photoUpload = useUnsavedUpload(saveMutation.isPending);
 
   const handlePhotoUpload = async (e) => {
     const file = e.target.files?.[0];
