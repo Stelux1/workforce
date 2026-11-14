@@ -15,6 +15,7 @@
 import { round2, sum2 } from "./money.js";
 import { projectMargin } from "./monthly.js";
 import { sumCostsEur } from "./costs.js";
+import { monthStart, payrollTotals } from "./payrollMonth.js";
 
 /** React ključ / oznaka grupe bez ID-a („bez projekta / ručno uneto"). */
 export const UNASSIGNED_KEY = "bez-id";
@@ -139,4 +140,24 @@ export function projectSummary({ timesheets, projects, costs }) {
   const manual = tsByProject.get(null);
   if (manual) rows.push({ ...groupHeader(null), name: null, snapshotNames: distinctValues(manual, "project"), ...projectFinancials(manual, []) });
   return rows.filter((r) => r.hours > 0 || r.costsEUR > 0).sort((a, b) => b.revenue - a.revenue);
+}
+
+/**
+ * „Payroll Due" (Kontrolna tabla obračuna) iz mesečnog obračuna (D17): odobreni, a još neisplaćeni obračuni i
+ * koliko je po njima za isplatu (`payslips.payout` = neto za zaposlenog, iznos sati za podizvođača; D6: bez
+ * odbitaka). Nacrt još nije dug, isplaćen više nije. Stari nedeljni zapisi (`payroll_records`) se ne koriste.
+ * @param {Array} runs      payroll_runs { id, month, status }
+ * @param {Array} payslips  payslips { run_id, payout } (bar listići odobrenih obračuna)
+ * @returns {{ total: number, workers: number, months: Array<{ runId, month, payout, workers }> }} meseci od najstarijeg
+ */
+export function payrollDue(runs, payslips) {
+  const slipsByRun = groupBy(payslips, (s) => s.run_id);
+  const months = (runs || [])
+    .filter((r) => r?.status === "approved" && r.month)
+    .map((r) => {
+      const slips = slipsByRun.get(r.id) || [];
+      return { runId: r.id, month: monthStart(r.month), payout: payrollTotals(slips).payout, workers: slips.length };
+    })
+    .sort((a, b) => a.month.localeCompare(b.month));
+  return { total: sum2(months.map((m) => m.payout)), workers: months.reduce((n, m) => n + m.workers, 0), months };
 }

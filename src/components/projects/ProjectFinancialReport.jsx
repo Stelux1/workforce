@@ -1,12 +1,18 @@
 import { useQuery } from "@tanstack/react-query";
+import { parseISO } from "date-fns";
 import { base44 } from "@/api/base44Client";
 import { Card } from "@/components/ui/card";
-import { TrendingUp, TrendingDown, DollarSign, Receipt, BarChart2, Users } from "lucide-react";
+import { badgeVariants } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
+import { TrendingUp, TrendingDown, DollarSign, Receipt, BarChart2, Users, CalendarDays, AlertTriangle } from "lucide-react";
+import StatusBadge from "@/components/shared/StatusBadge";
 import { useLang } from "@/lib/LanguageContext";
-import { projectMargin } from "@/lib/payroll/monthly";
-import { sum2 } from "@/lib/payroll/money";
+import { formatDate } from "@/lib/dateFormat";
 import { sumCostsEur } from "@/lib/payroll/costs";
+import { FINAL_RUN_STATUSES, projectFinancialReport, reportProblemMessage } from "@/lib/payroll/projectReport";
 
+// Finansijski izveštaj projekta (Faza 4, D8): sve brojke računa src/lib/payroll/projectReport.js — ovde samo prikaz.
+// Satnice, troškovi i obračun se čitaju po ID-u projekta, pa preimenovanje projekta ne menja nijednu brojku.
 export default function ProjectFinancialReport({ project }) {
   const { lang } = useLang();
   const t = (en, rs) => lang === "rs" ? rs : en;
@@ -16,9 +22,6 @@ export default function ProjectFinancialReport({ project }) {
     queryKey: ["timesheets", "project", project.id],
     queryFn: () => base44.entities.Timesheet.filter({ project_id: project.id }, "-week_start"),
   });
-  const timesheets = allTimesheets.filter((ts) => ts.approval_status === "approved");
-  const pending = allTimesheets.filter((ts) => ts.approval_status !== "approved");
-  const pendingHours = pending.reduce((sum, ts) => sum + (ts.total_hours || 0), 0);
 
   const { data: costs = [], isLoading: loadingCosts } = useQuery({
     queryKey: ["project-costs", project.id],
@@ -30,35 +33,49 @@ export default function ProjectFinancialReport({ project }) {
     queryFn: () => base44.entities.CostCategory.list("name", 200),
   });
 
-  const isLoading = loadingTS || loadingCosts;
+  // Mesečni obračun (samo admin, RLS): status po mesecu i bruto 2 raspodeljen na ovaj projekat. Status obračuna se
+  // menja na drugoj stranici, pa se ovi podaci uvek osvežavaju pri otvaranju (staleTime 0).
+  const { data: runs = [], isLoading: loadingRuns } = useQuery({
+    queryKey: ["payroll-runs"],
+    queryFn: () => base44.entities.PayrollRun.list("month"),
+    staleTime: 0,
+  });
+  const finalRunIds = runs.filter((r) => FINAL_RUN_STATUSES.includes(r.status)).map((r) => r.id).sort();
+  const { data: payslips = [], isLoading: loadingSlips } = useQuery({
+    queryKey: ["payslips", "runs", finalRunIds.join(",")],
+    queryFn: () => base44.entities.Payslip.filter({ run_id: finalRunIds }),
+    enabled: finalRunIds.length > 0,
+    staleTime: 0,
+  });
+  const { data: payslipProjects = [], isLoading: loadingAlloc } = useQuery({
+    queryKey: ["payslip-projects", "project", project.id],
+    queryFn: () => base44.entities.PayslipProject.filter({ project_id: project.id }),
+    staleTime: 0,
+  });
 
-  // Revenue from timesheets (client_revenue = hours * b2b_rate)
-  const totalRevenue = sum2(timesheets.map((ts) => ts.client_revenue || 0));
-  const totalWorkerCost = sum2(timesheets.map((ts) => ts.worker_cost || 0));
-  const totalHours = timesheets.reduce((sum, ts) => sum + (ts.total_hours || 0), 0);
-
-  // Troškovi projekta u EUR (D2): RSD troškovi po kursu unetom uz trošak (src/lib/payroll/costs.js).
-  const costSums = sumCostsEur(costs);
-  const costsEUR = costSums.total;
-  const costsFromRsd = costSums.converted.RSD || { amount: 0, eur: 0 };
-  const costsMissingRsd = costSums.missingByCurrency.RSD || 0;
+  const isLoading = loadingTS || loadingCosts || loadingRuns || loadingSlips || loadingAlloc;
 
   // D8: ostaje nama = prihod − trošak radnika − ostali troškovi projekta (EUR, uključeni preračunati RSD).
   // RSD trošak bez kursa (stari red) nije oduzet — ni kao 0 ni kao RSD — i prikazuje se uz napomenu „nedostaje kurs".
-  const grossProfit = projectMargin({ revenue: totalRevenue, laborCost: totalWorkerCost, otherCosts: costsEUR }).remaining;
-  const profitMargin = totalRevenue > 0 ? (grossProfit / totalRevenue) * 100 : 0;
-  const laborProfit = totalRevenue - totalWorkerCost;
-
-  // Per-employee breakdown
-  const employeeMap = {};
-  timesheets.forEach((ts) => {
-    const key = ts.employee_id || ts.employee_name || "?";
-    if (!employeeMap[key]) employeeMap[key] = { name: ts.employee_name || key, hours: 0, workerCost: 0, revenue: 0 };
-    employeeMap[key].hours += ts.total_hours || 0;
-    employeeMap[key].workerCost += ts.worker_cost || 0;
-    employeeMap[key].revenue += ts.client_revenue || 0;
+  const report = projectFinancialReport({
+    projectId: project.id,
+    timesheets: allTimesheets,
+    costs,
+    runs,
+    payslips,
+    payslipProjects,
   });
-  const employeeRows = Object.values(employeeMap).sort((a, b) => b.hours - a.hours);
+  const { totals, months, employees: employeeRows, pending, problems } = report;
+  const totalRevenue = totals.revenue;
+  const totalWorkerCost = totals.laborCost;
+  const totalHours = totals.hours;
+  const grossProfit = totals.remaining;
+  const profitMargin = totals.marginPct ?? 0;
+  const laborProfit = totals.laborDifference;
+  const costsEUR = report.costs.eur;
+  const costsFromRsd = report.costs.fromRsd;
+  const costsMissingRsd = report.costs.missingRsd;
+  const hasEstimate = totals.hasEstimate;
 
   // Cost breakdown by category — EUR zbir po kategoriji (isti helper), RSD bez kursa posebno.
   const categoryCosts = {};
@@ -76,6 +93,14 @@ export default function ProjectFinancialReport({ project }) {
     if (found) return lang === "rs" ? (found.translation || found.name) : found.name;
     return key;
   };
+
+  const monthLabel = (month) => formatDate(parseISO(month), "LLLL yyyy", lang).replace(/^./, (c) => c.toUpperCase());
+  // <span> (ne Badge/<div>), jer stoji i unutar <p>.
+  const estimateBadge = (
+    <span className={cn(badgeVariants({ variant: "outline" }), "ml-1 px-1.5 py-0 text-[10px] font-medium border-amber-300 text-amber-700 dark:text-amber-400")}>
+      {t("estimate", "procena")}
+    </span>
+  );
 
   if (isLoading) {
     return (
@@ -107,8 +132,16 @@ export default function ProjectFinancialReport({ project }) {
               <TrendingDown className="w-4 h-4 text-orange-600" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground mb-0.5">{t("Worker Costs", "Troškovi radnika")}</p>
+              <p className="text-xs text-muted-foreground mb-0.5">
+                {t("Worker Costs", "Troškovi radnika")}{hasEstimate && estimateBadge}
+              </p>
               <p className="text-lg font-bold text-orange-600">{totalWorkerCost.toFixed(2)} €</p>
+              {totals.payrollLaborCost > 0 && (
+                <p className="text-xs text-muted-foreground">{t("from payroll (gross 2)", "iz obračuna (bruto 2)")}: {totals.payrollLaborCost.toFixed(2)} €</p>
+              )}
+              {hasEstimate && totals.payrollLaborCost > 0 && (
+                <p className="text-xs text-amber-600">{t("estimate", "procena")}: {totals.estimatedLaborCost.toFixed(2)} €</p>
+              )}
             </div>
           </div>
         </Card>
@@ -138,7 +171,9 @@ export default function ProjectFinancialReport({ project }) {
               <DollarSign className={`w-4 h-4 ${grossProfit >= 0 ? "text-green-600" : "text-red-600"}`} />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground mb-0.5">{t("Remaining (after all costs)", "Ostaje nama (posle svih troškova)")}</p>
+              <p className="text-xs text-muted-foreground mb-0.5">
+                {t("Remaining (after all costs)", "Ostaje nama (posle svih troškova)")}{hasEstimate && estimateBadge}
+              </p>
               <p className={`text-lg font-bold ${grossProfit >= 0 ? "text-green-600" : "text-red-600"}`}>
                 {grossProfit.toFixed(2)} €
               </p>
@@ -153,11 +188,23 @@ export default function ProjectFinancialReport({ project }) {
         </Card>
       </div>
 
-      {pending.length > 0 && (
+      {pending.count > 0 && (
         <p className="text-xs text-muted-foreground">
-          {t(`Not approved yet (not included): ${pending.length} entries, ${pendingHours.toFixed(1)} h`,
-             `Još nije odobreno (nije uračunato): ${pending.length} unosa, ${pendingHours.toFixed(1)} h`)}
+          {t(`Not approved yet (not included): ${pending.count} entries, ${pending.hours.toFixed(1)} h`,
+             `Još nije odobreno (nije uračunato): ${pending.count} unosa, ${pending.hours.toFixed(1)} h`)}
         </p>
+      )}
+
+      {problems.length > 0 && (
+        <Card className="p-4 border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-900/10">
+          <div className="flex items-center gap-2 mb-2">
+            <AlertTriangle className="w-4 h-4 text-amber-600" />
+            <h3 className="font-semibold text-sm">{t("Check before relying on these numbers", "Proverite pre nego što se oslonite na brojke")}</h3>
+          </div>
+          <ul className="space-y-1 text-xs text-amber-800 dark:text-amber-300 list-disc pl-5">
+            {problems.map((p, i) => <li key={`${p.code}-${p.timesheetId || p.month}-${i}`}>{reportProblemMessage(p, lang === "rs" ? "rs" : "en")}</li>)}
+          </ul>
+        </Card>
       )}
 
       {/* Hours summary */}
@@ -173,7 +220,7 @@ export default function ProjectFinancialReport({ project }) {
               <p className="text-xs text-muted-foreground">{t("Total Hours", "Ukupno sati")}</p>
             </div>
             <div>
-              <p className="text-2xl font-bold">{timesheets.length}</p>
+              <p className="text-2xl font-bold">{totals.count}</p>
               <p className="text-xs text-muted-foreground">{t("Timesheet Entries", "Unosa")}</p>
             </div>
             <div>
@@ -183,6 +230,52 @@ export default function ProjectFinancialReport({ project }) {
               <p className="text-xs text-muted-foreground">{t("Avg €/h (B2B)", "Prosek €/h (B2B)")}</p>
             </div>
           </div>
+        </Card>
+      )}
+
+      {/* Po mesecima: trošak radnika iz odobrenog obračuna (bruto 2) ili procena */}
+      {months.length > 0 && (
+        <Card className="p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <CalendarDays className="w-4 h-4 text-primary" />
+            <h3 className="font-semibold text-sm">{t("By Month", "Po mesecima")}</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[560px]">
+              <thead>
+                <tr className="text-xs text-muted-foreground font-medium border-b">
+                  <th className="text-left font-medium pb-2">{t("Month", "Mesec")}</th>
+                  <th className="text-left font-medium pb-2">{t("Payroll", "Obračun")}</th>
+                  <th className="text-right font-medium pb-2">{t("Hours", "Sati")}</th>
+                  <th className="text-right font-medium pb-2">{t("Revenue (B2B)", "Prihod (B2B)")}</th>
+                  <th className="text-right font-medium pb-2">{t("Worker Costs", "Troškovi radnika")}</th>
+                  <th className="text-right font-medium pb-2">{t("Revenue − workers", "Prihod − radnici")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {months.map((m) => (
+                  <tr key={m.month} className="border-b last:border-0">
+                    <td className="py-2 font-medium">{monthLabel(m.month)}</td>
+                    <td className="py-2">
+                      {m.runStatus ? <StatusBadge status={m.runStatus} /> : <span className="text-xs text-muted-foreground">{t("none", "nema")}</span>}
+                    </td>
+                    <td className="py-2 text-right text-muted-foreground">{m.hours.toFixed(1)}h</td>
+                    <td className="py-2 text-right text-green-600 font-semibold">{m.revenue.toFixed(2)} €</td>
+                    <td className="py-2 text-right text-orange-600 font-semibold whitespace-nowrap">
+                      {m.laborCost.toFixed(2)} €{m.estimate && estimateBadge}
+                    </td>
+                    <td className={`py-2 text-right font-semibold ${m.difference >= 0 ? "text-green-600" : "text-red-600"}`}>{m.difference.toFixed(2)} €</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {hasEstimate && (
+            <p className="text-xs text-muted-foreground mt-3">
+              {t("Estimate: month without an approved payroll — worker cost is the amount of approved timesheets (hours × worker rate), without taxes and contributions. The final cost (gross 2) comes from the approved monthly payroll.",
+                 "Procena: mesec bez odobrenog obračuna — trošak radnika je iznos odobrenih satnica (sati × satnica radnika), bez poreza i doprinosa. Konačan trošak (bruto 2) daje odobren mesečni obračun.")}
+            </p>
+          )}
         </Card>
       )}
 
@@ -197,14 +290,14 @@ export default function ProjectFinancialReport({ project }) {
             <div className="grid grid-cols-4 gap-2 text-xs text-muted-foreground font-medium pb-2 border-b">
               <span>{t("Employee", "Radnik")}</span>
               <span className="text-right">{t("Hours", "Sati")}</span>
-              <span className="text-right">{t("Cost (B2C)", "Trošak (B2C)")}</span>
+              <span className="text-right">{t("Worker cost", "Trošak radnika")}</span>
               <span className="text-right">{t("Revenue (B2B)", "Prihod (B2B)")}</span>
             </div>
             {employeeRows.map((row) => (
-              <div key={row.name} className="grid grid-cols-4 gap-2 py-2 border-b last:border-0 text-sm">
-                <span className="font-medium truncate">{row.name}</span>
+              <div key={row.key} className="grid grid-cols-4 gap-2 py-2 border-b last:border-0 text-sm">
+                <span className="font-medium truncate">{row.name || "—"}</span>
                 <span className="text-right text-muted-foreground">{row.hours.toFixed(1)}h</span>
-                <span className="text-right text-orange-600 font-semibold">{row.workerCost.toFixed(2)} €</span>
+                <span className="text-right text-orange-600 font-semibold">{row.laborCost.toFixed(2)} €{row.estimate && estimateBadge}</span>
                 <span className="text-right text-green-600 font-semibold">{row.revenue.toFixed(2)} €</span>
               </div>
             ))}

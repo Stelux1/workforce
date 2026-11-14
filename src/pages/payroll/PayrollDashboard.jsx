@@ -9,9 +9,9 @@ import StatCard from "@/components/dashboard/StatCard";
 import StatusBadge from "@/components/shared/StatusBadge";
 import { useT } from "@/lib/translations";
 import { useLang } from "@/lib/LanguageContext";
-import { formatDate, shortDatePattern, longDatePattern } from "@/lib/dateFormat";
+import { formatDate, shortDatePattern } from "@/lib/dateFormat";
 import { round2 } from "@/lib/payroll/money";
-import { timesheetTotals, totalsByClient, totalsByWorker } from "@/lib/payroll/reports";
+import { payrollDue, timesheetTotals, totalsByClient, totalsByWorker } from "@/lib/payroll/reports";
 
 export default function PayrollDashboard() {
   const t = useT();
@@ -38,9 +38,20 @@ export default function PayrollDashboard() {
     queryFn: () => base44.entities.Client.list("name"),
   });
 
-  const { data: payrollRecords = [], isLoading: prLoading } = useQuery({
-    queryKey: ["payroll-records"],
-    queryFn: () => base44.entities.PayrollRecord.list("-week_start"),
+  // „Payroll Due" iz mesečnog obračuna (D17): odobreni, a neisplaćeni obračuni i njihovi listići. Stranica i tabele
+  // obračuna su samo za admina (ADMIN_ONLY_PREFIXES + RLS). Status se menja na Mesečnom obračunu, pa se ovo uvek
+  // osvežava pri otvaranju (staleTime 0). Stari nedeljni zapisi (payroll_records) se više ne koriste.
+  const { data: approvedRuns = [], isLoading: runsLoading } = useQuery({
+    queryKey: ["payroll-runs", "approved"],
+    queryFn: () => base44.entities.PayrollRun.filter({ status: "approved" }, "month"),
+    staleTime: 0,
+  });
+  const dueRunIds = approvedRuns.map((r) => r.id).sort();
+  const { data: duePayslips = [], isLoading: slipsLoading } = useQuery({
+    queryKey: ["payslips", "runs", dueRunIds.join(",")],
+    queryFn: () => base44.entities.Payslip.filter({ run_id: dueRunIds }),
+    enabled: dueRunIds.length > 0,
+    staleTime: 0,
   });
 
   const { data: employees = [] } = useQuery({
@@ -56,9 +67,15 @@ export default function PayrollDashboard() {
   const totalProfit = round2(totalRevenue - totalCost);
   const profitMargin = totalRevenue > 0 ? ((totalProfit / totalRevenue) * 100).toFixed(1) : 0;
 
-  // TODO(Faza 3): Payroll Due iz mesečnog obračuna
-  const pendingPayroll = payrollRecords.filter((p) => p.payment_status === "pending");
-  const pendingAmount = pendingPayroll.reduce((s, p) => s + (p.total_worker_cost || 0), 0);
+  // Za isplatu = zbir „za isplatu" (neto / iznos podizvođača) odobrenih, a još neisplaćenih mesečnih obračuna.
+  const due = payrollDue(approvedRuns, duePayslips);
+  const monthLabel = (month) => formatDate(parseISO(month), "LLLL yyyy", lang).replace(/^./, (c) => c.toUpperCase());
+  const monthLink = (month) => `/payroll/monthly?month=${month.slice(0, 7)}`;
+  const dueTrend = due.months.length === 0
+    ? t("No pending payments")
+    : due.months.length <= 2
+      ? due.months.map((m) => monthLabel(m.month)).join(", ")
+      : `${monthLabel(due.months[0].month)} – ${monthLabel(due.months[due.months.length - 1].month)}`;
 
   // Radnik po employee_id, klijent po project_id → projects.client_id; ime je samo za prikaz (trenutni red po ID-u),
   // pa preimenovanje klijenta ne menja nijednu brojku. Bez klijenta / ručno uneto je posebna grupa, ne spaja se po imenu.
@@ -71,7 +88,7 @@ export default function PayrollDashboard() {
     .slice(0, 5);
 
   // Klijent satnice se čita preko projekta, pa brojke čekaju i projekte i klijente (inače bi sve palo u „bez klijenta").
-  const isLoading = tsLoading || prLoading || projectsLoading || clientsLoading;
+  const isLoading = tsLoading || runsLoading || slipsLoading || projectsLoading || clientsLoading;
 
   if (isLoading) {
     return (
@@ -107,7 +124,7 @@ export default function PayrollDashboard() {
       </div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard title={t("Profit Margin")} value={profitMargin + "%"} icon={TrendingUp} />
-        <StatCard title={t("Payroll Due")} value={"€" + pendingAmount.toLocaleString("en", { maximumFractionDigits: 0 })} icon={AlertCircle} trend={`${pendingPayroll.length} ${t("pending")}`} />
+        <StatCard title={t("Payroll Due")} value={"€" + due.total.toLocaleString("en", { maximumFractionDigits: 0 })} icon={AlertCircle} trend={dueTrend} />
         <StatCard title={t("Pending Approvals")} value={pendingTimesheets.length} icon={Clock} trend={t("Timesheets awaiting review")} />
         <StatCard title={t("Active Employees")} value={employees.filter(e => e.status === "active").length} icon={Users} />
       </div>
@@ -172,18 +189,18 @@ export default function PayrollDashboard() {
             </div>
           </CardHeader>
           <CardContent className="space-y-2">
-            {pendingPayroll.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">{t("No pending payments")}</p>}
-            {pendingPayroll.slice(0, 5).map((p) => (
-              <div key={p.id} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-muted/50 transition-colors">
+            {due.months.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">{t("No pending payments")}</p>}
+            {due.months.map((m) => (
+              <Link key={m.runId} to={monthLink(m.month)} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-muted/50 transition-colors">
                 <div>
-                  <p className="text-sm font-medium">{p.employee_name}</p>
-                  <p className="text-xs text-muted-foreground">{t("Week of %s").replace("%s", p.week_start ? formatDate(parseISO(p.week_start), shortDatePattern(lang), lang) : "")}</p>
+                  <p className="text-sm font-medium">{monthLabel(m.month)}</p>
+                  <p className="text-xs text-muted-foreground">{t("Payslips")}: {m.workers} · {t("approved, not paid yet")}</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold">€{(p.total_worker_cost || 0).toFixed(2)}</span>
-                  <StatusBadge status={p.payment_status} />
+                  <span className="text-sm font-semibold">€{m.payout.toFixed(2)}</span>
+                  <StatusBadge status="approved" />
                 </div>
-              </div>
+              </Link>
             ))}
           </CardContent>
         </Card>

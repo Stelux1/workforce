@@ -290,6 +290,7 @@ const TRANSLATIONS = {
   "revenue": { rs: "prihod" },
   "margin": { rs: "marža" },
   "pending": { rs: "na čekanju" },
+  "approved, not paid yet": { rs: "odobreno, još nije isplaćeno" },
 
   // ── Departments Settings ─────────────────────────────────
   "Departments": { rs: "Odeljenja" },
