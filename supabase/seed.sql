@@ -2,7 +2,7 @@
 -- Lokalni admin nalog za prijavu u aplikaciju na http://localhost:5173
 --   email:   admin@radnici.local
 --   lozinka: 8nfWTuzq4ZeIhyHpMtZs
--- Prvi korisnik u bazi automatski postaje admin (handle_new_user).
+-- Prvi korisnik u bazi automatski postaje aktivan admin (handle_new_user); ostali su neaktivni dok ih admin ne aktivira.
 
 insert into auth.users (
   instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -44,3 +44,7 @@ values (
   jsonb_build_object('sub', 'a0000000-0000-4000-8000-000000000002', 'email', 'operater@radnici.local', 'email_verified', true),
   'email', now(), now(), now()
 );
+
+-- Nov nalog je neaktivan dok ga admin ne aktivira (handle_new_user, migracija 20261114250000); prvi nalog (admin)
+-- je aktivan sam. Lokalni operater se aktivira ovde, kao što bi ga admin aktivirao.
+update public.profiles set active = true where id = 'a0000000-0000-4000-8000-000000000002';

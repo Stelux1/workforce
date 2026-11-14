@@ -526,4 +526,9 @@ Opseg: BACKLOG Faza 3 `[review]`. HEAD `0e50f7f` i ceo diff `011eba8..HEAD` za n
 
 ### Popravke posle pregleda (14.11.2026, kasno veče)
 - **P0 operater određuje tarifu — POPRAVLJENO** (D22, migracija `20261114240000`, pgTAP 08 sa 68 provera). Ponovljeni scenariji iz pregleda: operaterova tarifa 99 €/h odbijena, odobrava se adminovih 12 €/h (96,00); prebacivanje i brisanje dodele sa tarifom odbijeni, tarife ostaju, radnik i dalje dobija 10,00; brisanje projekta sa tarifama zaustavljeno (`on delete restrict`).
+- **P1 angažman menja operater — POPRAVLJENO** (RLS: operater čita, piše samo admin; pgTAP 09).
+- **P1 isplata < 0 / bruto ispod najniže osnovice — POPRAVLJENO kao blokada** (JS `payoutProblems` + provere #20/#21 u `payroll_run_problems`; primeri iz pregleda 8 h × 6 € i 16 h × 12 € su odbijeni, 40 h × 12 € prolazi). Pravilo za deo meseca čeka knjigovođu.
+- **P1 nov nalog odmah aktivan — POPRAVLJENO** (`handle_new_user`: neaktivan operater, osim prvog naloga; postojeći nalozi nepromenjeni). Lista za pravi server je u D14.
+- **P1 izveštaji po trošku satnice — POPRAVLJENO** u Fazi 4 (D20, commit a432b8f).
+- **Verdict posle popravki: ✅** — nema otvorenih P0. P2/P3 ostaju zabeleženi gore.
 

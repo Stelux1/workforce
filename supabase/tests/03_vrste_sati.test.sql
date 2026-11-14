@@ -8,8 +8,8 @@ select plan(23);
 insert into auth.users (id, email, instance_id, aud, role) values
   ('61111111-1111-4111-8111-111111111111', 'qa3-admin@radnici.local', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated'),
   ('62222222-2222-4222-8222-222222222222', 'qa3-operater@radnici.local', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated');
-update public.profiles set role = 'admin' where id = '61111111-1111-4111-8111-111111111111';
-update public.profiles set role = 'operater' where id = '62222222-2222-4222-8222-222222222222';
+update public.profiles set role = 'admin', active = true where id = '61111111-1111-4111-8111-111111111111';
+update public.profiles set role = 'operater', active = true where id = '62222222-2222-4222-8222-222222222222';
 
 -- Pravila kao u šemi: prag 8h, redovni = 1, ostali koeficijenti prazni (D5: admin ih još nije upisao).
 update public.work_rules set daily_regular_hours = 8;

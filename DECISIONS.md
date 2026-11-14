@@ -14,6 +14,7 @@ Svi iznosi (tarife, troškovi, obračun) su u EUR. Zakonski parametri (neoporezi
 Sate unose samo prijavljeni korisnici sa pristupom. Radnici nemaju nalog u v1. Satnice odobrava samo admin (baza).
 Uloge: `admin` (sve) i `operater` (radnici, projekti, unos sati). Operater **u bazi** nema pristup: `employee_private` (JMBG, banka, tarife iz profila), `rates`, `project_costs`, obračunima i podešavanjima.
 **Svesno ograničenje:** snimci tarifa u redovima satnica (`timesheets.b2c_rate` …) i u `projects.assigned_employees`/`job_roles` su vidljivi i operateru kroz API, jer ih postojeće stranice tako čuvaju (D12). Stranice sa novcem su mu sakrivene (`src/lib/access.js`). Ako zatreba strogo, prebaciti te snimke u posebnu tabelu. Isto važi za `timesheets.worker_cost`: od Faze 2 ga računa baza i uključuje posebne satnice iz `employee_private` (prekovremeni/vikend/praznik), pa operater preko API-ja iz troška i sati može da izračuna tu satnicu (14.11.2026).
+**Dopuna 14.11.2026:** angažman radnika (`employment_history`) upisuje, menja i briše samo admin — od njega zavise porez, doprinosi i kome se plaća. Operater ga vidi u profilu radnika (migracija `20261114250000`).
 
 ## D4 — Jedan izbor tarife sa jasnim redosledom (izmenjeno 2026-11-13)
 Postojeća aplikacija ima više mesta za unos tarife; sva ostaju (D12), ali novac se računa samo kroz jednu funkciju (`src/lib/payroll/rates.js`) sa redosledom:
@@ -49,6 +50,7 @@ Luka je odlučio da preskočimo proveru Base44. Kreće se od prazne baze; podaci
 
 ## D14 — Lokalni razvoj
 Lokalni Supabase radi na portovima 573xx (54xxx/55xxx/56xxx zauzimaju drugi projekti). Javna registracija je isključena — naloge otvara admin.
+**Dopuna 14.11.2026:** nov nalog je neaktivan operater dok ga admin ne aktivira (`profiles.active`, za sada u Supabase Studio); samo prvi nalog u praznom sistemu postaje aktivan admin. Testovi koji prave korisnike u `auth.users` moraju da ih aktiviraju. Pre pravog servera: isključiti registraciju, lozinka bar 10 znakova, `seed.sql` se ne pokreće, Lukin nalog se pravi prvi.
 
 ## D12 — Zadržavamo postojeću aplikaciju: isti dizajn, isti ekrani (izmenjeno 2026-11-13)
 Luka: „nastavi tamo da bude isti dizajn, isto sve, ne moraš da radiš dupli posao". Nijedan postojeći ekran se ne pravi iznova i nijedan modul se ne izbacuje. Stranice zadržavaju izgled, komponente i prevode (`translations.js`, SR/EN); menja se samo izvor podataka (Base44 → Supabase) i novčana logika tamo gde je bila pogrešna. Baza prati imena polja i vrednosti koje stranice već koriste, osim gde je to uzrok greške (veza po imenu umesto po ID-u, više izvora tarifa).
@@ -78,6 +80,7 @@ Stranica „Nedeljni obračun" je sada „Mesečni obračun" (`/payroll/monthly`
 - **Odobren i isplaćen obračun, njegovi listići i raspodela su nepromenljivi** (trigger u bazi; zabranjeno je i prebacivanje listića u drugi obračun).
 - **Pojednostavljenja (proverava knjigovođa):** parametri važe po prvom danu meseca obračuna, ne po datumu isplate; udeo radnog vremena je iz profila, a početak/kraj rada u toku meseca se ne srazmerava (zarada ispod najniže osnovice dobija upozorenje, D7).
 **Ne menjati:** ne računati obračun iz trenutnih tarifa i koeficijenata umesto snimka; ne uvoditi podrazumevani kurs; ne dozvoliti izmenu ili brisanje odobrenog obračuna. Svaka promena pravila deljenja ide sa testom u `payroll.test.js` i primerom u `supabase/tests/05_mesecni_obracun.test.sql`.
+**Dopuna 14.11.2026:** problem (bez listića, obračun se ne odobrava) je i isplata manja od nule i zaposleni sa bruto satnicom čiji je bruto ispod najniže osnovice (srazmerno udelu radnog vremena) — dok knjigovođa ne potvrdi pravilo za deo meseca. Neto satnica ispod osnovice ostaje upozorenje. Isti primeri: `payrollProblems.test.js` i pgTAP 09.
 
 ## D18 — Podaci firme (2026-11-14)
 Naziv, PIB (9 cifara), matični broj (8 cifara), adresa, mesto, tekući račun i logo firme su jedan red u `company_settings` (kao `work_rules`), entitet `CompanySettings`, stranica Podešavanja → „Podaci firme". Admin menja, svi prijavljeni čitaju (zaglavlje PDF-a platnog listića i satnice). Logo je PNG ili JPG do 2 MB, proveren po sadržaju. PDF bez podataka nema zaglavlje firme.

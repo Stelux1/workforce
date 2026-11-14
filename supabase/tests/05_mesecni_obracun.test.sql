@@ -12,8 +12,8 @@ select plan(49);
 insert into auth.users (id, email, instance_id, aud, role) values
   ('81111111-1111-4111-8111-111111111111', 'qa5-admin@radnici.local', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated'),
   ('82222222-2222-4222-8222-222222222222', 'qa5-operater@radnici.local', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated');
-update public.profiles set role = 'admin' where id = '81111111-1111-4111-8111-111111111111';
-update public.profiles set role = 'operater' where id = '82222222-2222-4222-8222-222222222222';
+update public.profiles set role = 'admin', active = true where id = '81111111-1111-4111-8111-111111111111';
+update public.profiles set role = 'operater', active = true where id = '82222222-2222-4222-8222-222222222222';
 update public.work_rules set daily_regular_hours = 8;
 update public.hour_types set worker_coef = 1, client_coef = 1 where code = 'redovni';
 -- Parametri za 2034. (isti brojevi kao 2026) da test ne zavisi od onoga što je upisano u lokalnu bazu.

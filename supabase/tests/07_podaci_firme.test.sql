@@ -7,8 +7,8 @@ select plan(12);
 insert into auth.users (id, email, instance_id, aud, role) values
   ('77111111-1111-4111-8111-111111111111', 'qa7-admin@radnici.local', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated'),
   ('77222222-2222-4222-8222-222222222222', 'qa7-operater@radnici.local', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated');
-update public.profiles set role = 'admin' where id = '77111111-1111-4111-8111-111111111111';
-update public.profiles set role = 'operater' where id = '77222222-2222-4222-8222-222222222222';
+update public.profiles set role = 'admin', active = true where id = '77111111-1111-4111-8111-111111111111';
+update public.profiles set role = 'operater', active = true where id = '77222222-2222-4222-8222-222222222222';
 
 -- Početno stanje: tačno jedan red i svi podaci prazni (nikakvi izmišljeni podaci firme).
 select is((select count(*)::int from public.company_settings), 1, 'postoji tačno jedan red');

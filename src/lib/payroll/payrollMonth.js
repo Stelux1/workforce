@@ -9,8 +9,9 @@
 //
 // Samo ODOBRENE satnice ulaze u obračun. Satnica bez snimka (odobrena pre Faze 2), tarifa ili koeficijent koji fali
 // u snimku, satnica čiji sati ne odgovaraju snimku i radnik bez angažmana (zaposlen / preko podizvođača) su problemi
-// sa jasnom porukom (radnik, nedelja, projekat) — nikad tiho 0 ili 1,00 (D5, D11). Radnik sa problemom nema platni
-// listić; baza ne dozvoljava odobravanje obračuna dok svaki radnik sa odobrenim satima nema listić.
+// sa jasnom porukom (radnik, nedelja, projekat) — nikad tiho 0 ili 1,00 (D5, D11). Problem je i isplata manja od nule
+// i bruto satnica ispod najniže osnovice (payoutProblems — dok knjigovođa ne potvrdi pravilo za deo meseca). Radnik sa
+// problemom nema platni listić; baza ne dozvoljava odobravanje obračuna dok svaki radnik sa odobrenim satima nema listić.
 //
 // Iznos: computeWorkerMonth (monthly.js) sabira sate po (projekat, vrsta, tarife, koeficijenti) pa množi i zaokružuje
 // po grupi; neto/bruto po serbianPayroll.js; trošak (bruto 2 za zaposlenog, iznos sati za podizvođača) se raspodeljuje
@@ -114,9 +115,18 @@ export const PROBLEM = Object.freeze({
   NO_ENGAGEMENT: "no_engagement",
   ENGAGEMENT_CHANGES: "engagement_changes",
   CALC_ERROR: "calc_error",
+  // Isplata koja se ne pravi (QA 14.11.2026, P1) — ista pravila proverava baza (payroll_run_problems).
+  NEGATIVE_PAYOUT: "negative_payout",
+  GROSS_BELOW_MIN_BASE: "gross_below_min_base",
 });
 
 const SIDE_LABEL = { rs: { worker: "radnika", client: "klijenta" }, en: { worker: "worker", client: "client" } };
+
+/** Iznos u poruci: „192,00 €" (srpski) / „€192.00" (engleski). */
+const eurText = (n, lang = "rs") => {
+  const s = round2(n).toFixed(2);
+  return lang === "en" ? `€${s}` : `${s.replace(".", ",")} €`;
+};
 
 const PROBLEM_TEXT = {
   rs: {
@@ -134,6 +144,9 @@ const PROBLEM_TEXT = {
     [PROBLEM.ENGAGEMENT_CHANGES]: (p) =>
       `angažman se menja u toku meseca (${formatDay(p.date)}) — obračun u v1 ne podržava promenu angažmana u toku meseca`,
     [PROBLEM.CALC_ERROR]: (p) => `obračun nije moguć (${p.detail})`,
+    [PROBLEM.NEGATIVE_PAYOUT]: (p) => `isplata bi bila negativna (${eurText(p.payout)}) — iznos manji od nule se ne isplaćuje`,
+    [PROBLEM.GROSS_BELOW_MIN_BASE]: (p) =>
+      `zarada po bruto satnici (${eurText(p.bruto)}) je ispod najniže osnovice (${eurText(p.minBase)}), a doprinosi na najnižu osnovicu bi isplatu sveli na ${eurText(p.payout)} — knjigovođa mora da potvrdi pravilo (srazmerna osnovica za deo meseca); do tada nema isplate`,
   },
   en: {
     [PROBLEM.NO_SNAPSHOT]: () =>
@@ -150,6 +163,9 @@ const PROBLEM_TEXT = {
     [PROBLEM.ENGAGEMENT_CHANGES]: (p) =>
       `the engagement changes during the month (${formatDay(p.date)}) — v1 payroll does not support a change of engagement within a month`,
     [PROBLEM.CALC_ERROR]: (p) => `payroll can't be calculated (${p.detail})`,
+    [PROBLEM.NEGATIVE_PAYOUT]: (p) => `the payout would be negative (${eurText(p.payout, "en")}) — an amount below zero is not paid`,
+    [PROBLEM.GROSS_BELOW_MIN_BASE]: (p) =>
+      `pay at the gross rate (${eurText(p.bruto, "en")}) is below the minimum base (${eurText(p.minBase, "en")}), and contributions on the minimum base would cut the payout to ${eurText(p.payout, "en")} — the accountant must confirm the rule (prorated base for part of the month); no payout until then`,
   },
 };
 
@@ -367,6 +383,25 @@ export function collectMonth({ month, timesheets, employees, employmentHistory, 
   return { month: start, workers: list, problems: list.flatMap((w) => w.problems) };
 }
 
+/**
+ * Isplata koju obračun ne pravi dok se ne razjasni (QA 14.11.2026, P1), isto kao payroll_run_problems u bazi:
+ *  - isplata manja od nule;
+ *  - zaposleni sa bruto satnicom čiji je bruto ispod najniže osnovice (srazmerno udelu radnog vremena): doprinosi na
+ *    punu najnižu osnovicu daju premalu ili negativnu isplatu, a pravilo za deo meseca (srazmerna osnovica) mora da
+ *    potvrdi knjigovođa (D7, D17). Neto satnica ispod osnovice ostaje samo upozorenje — radnik dobija dogovoreni neto.
+ * @returns {Array<{ code, payout, bruto?, minBase? }>}
+ */
+export function payoutProblems(m) {
+  const out = [];
+  if (m.payout < 0) out.push({ code: PROBLEM.NEGATIVE_PAYOUT, payout: m.payout });
+  const c = m.calc;
+  if (c && m.engagement === ENGAGEMENT.EMPLOYEE && m.rateBasis === RATE_BASIS.GROSS && c.belowMinBase) {
+    // Ispod najniže osnovice doprinosi se računaju baš na nju (srazmerno udelu), pa je to osnovica doprinosa.
+    out.push({ code: PROBLEM.GROSS_BELOW_MIN_BASE, payout: m.payout, bruto: c.bruto, minBase: c.contributionBase });
+  }
+  return out;
+}
+
 function warningsOf(calc) {
   if (!calc) return [];
   const w = [];
@@ -404,6 +439,12 @@ export function buildMonthPayroll({ month, eurRsdRate, params, timesheets, emplo
     } catch (e) {
       if (!(e instanceof MissingRateError)) throw e;
       problems.push({ code: PROBLEM.CALC_ERROR, employeeId: w.employeeId, employeeName: w.employeeName, detail: e.message });
+      continue;
+    }
+    const blocked = payoutProblems(m);
+    if (blocked.length) {
+      // Kao i ostali problemi: radnik nema listić, a baza ne odobrava obračun bez njega (nikad tiha isplata).
+      problems.push(...blocked.map((p) => ({ ...p, employeeId: w.employeeId, employeeName: w.employeeName })));
       continue;
     }
     const c = m.calc;

@@ -7,6 +7,7 @@ import { Plus, Pencil, Trash2, TriangleAlert, Users } from "lucide-react";
 import { toast } from "sonner";
 import { format, parseISO } from "date-fns";
 import { useLang } from "@/lib/LanguageContext";
+import { useAuth } from "@/lib/AuthContext";
 import { findOverlappingAffiliations, resolveAffiliation } from "@/lib/rateEngine";
 import AffiliationDialog from "@/components/employees/AffiliationDialog";
 import ConfirmDeleteDialog from "@/components/shared/ConfirmDeleteDialog";
@@ -21,6 +22,7 @@ const LABELS = {
     confirm: "Delete this engagement record? Historical timesheets keep their own vendor snapshot.",
     noVendor: "No vendor set", review: "Needs review",
     hint: "Timesheets keep the vendor that was valid on the work date, so later transfers never rewrite history.",
+    adminOnly: "Only an admin changes the engagement — tax, contributions and who gets paid depend on it.",
   },
   rs: {
     title: "Angažovanja i istorija dobavljača", add: "Dodaj angažovanje", none: "Još nema evidentiranih angažovanja.",
@@ -31,12 +33,15 @@ const LABELS = {
     confirm: "Obrisati zapis o angažovanju? Radni sati zadržavaju sopstvenu kopiju dobavljača.",
     noVendor: "Dobavljač nije postavljen", review: "Potrebna provera",
     hint: "Radni sati čuvaju dobavljača koji je važio na datum rada, pa kasniji prelasci ne menjaju istoriju.",
+    adminOnly: "Angažovanje menja samo admin — od njega zavise porez, doprinosi i kome se plaća.",
   },
 };
 
 export default function EmploymentHistoryCard({ employeeId, employeeName }) {
   const { lang } = useLang();
   const L = LABELS[lang] || LABELS.en;
+  // Angažman određuje porez, doprinose i kome se plaća (D8, D17): upisuje ga samo admin (i baza, RLS). Operater ga vidi.
+  const { isAdmin } = useAuth();
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState({});
@@ -112,12 +117,14 @@ export default function EmploymentHistoryCard({ employeeId, employeeName }) {
           <CardTitle className="text-base flex items-center gap-2">
             <Users className="w-4 h-4" /> {L.title}
           </CardTitle>
-          <Button size="sm" className="gap-2" onClick={() => {
-            setForm({ engagement_type: "direct_employee", status: "active", start_date: today });
-            setDialogOpen(true);
-          }}>
-            <Plus className="w-4 h-4" /> {L.add}
-          </Button>
+          {isAdmin && (
+            <Button size="sm" className="gap-2" onClick={() => {
+              setForm({ engagement_type: "direct_employee", status: "active", start_date: today });
+              setDialogOpen(true);
+            }}>
+              <Plus className="w-4 h-4" /> {L.add}
+            </Button>
+          )}
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -152,24 +159,27 @@ export default function EmploymentHistoryCard({ employeeId, employeeName }) {
                     {h.notes ? ` · ${h.notes}` : ""}
                   </p>
                 </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setForm(h); setDialogOpen(true); }}>
-                    <Pencil className="w-3.5 h-3.5" />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setDeleteId(h.id)}>
-                    <Trash2 className="w-3.5 h-3.5 text-destructive" />
-                  </Button>
-                </div>
+                {isAdmin && (
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setForm(h); setDialogOpen(true); }}>
+                      <Pencil className="w-3.5 h-3.5" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setDeleteId(h.id)}>
+                      <Trash2 className="w-3.5 h-3.5 text-destructive" />
+                    </Button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
         )}
 
         <p className="text-xs text-muted-foreground border-t pt-3">{L.hint}</p>
+        {!isAdmin && <p className="text-xs text-muted-foreground">{L.adminOnly}</p>}
       </CardContent>
 
       <AffiliationDialog
-        open={dialogOpen}
+        open={isAdmin && dialogOpen}
         onOpenChange={setDialogOpen}
         form={form}
         setForm={setForm}

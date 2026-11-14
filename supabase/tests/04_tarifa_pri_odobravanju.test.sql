@@ -13,8 +13,8 @@ select plan(28);
 insert into auth.users (id, email, instance_id, aud, role) values
   ('71111111-1111-4111-8111-111111111111', 'qa4-admin@radnici.local', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated'),
   ('72222222-2222-4222-8222-222222222222', 'qa4-operater@radnici.local', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated');
-update public.profiles set role = 'admin' where id = '71111111-1111-4111-8111-111111111111';
-update public.profiles set role = 'operater' where id = '72222222-2222-4222-8222-222222222222';
+update public.profiles set role = 'admin', active = true where id = '71111111-1111-4111-8111-111111111111';
+update public.profiles set role = 'operater', active = true where id = '72222222-2222-4222-8222-222222222222';
 -- Samo redovni sati (pon 8h), koeficijent 1 — iznos = 8 × tarifa.
 update public.work_rules set daily_regular_hours = 8;
 update public.hour_types set worker_coef = 1, client_coef = 1 where code = 'redovni';

@@ -26,8 +26,14 @@ export const AuthProvider = ({ children }) => {
       setProfile(null);
       setAuthError({ type: "unknown", message: error.message });
     } else if (!data || !data.active) {
+      // Nov nalog je neaktivan dok ga admin ne aktivira (handle_new_user, migracija 20261114250000).
       setProfile(null);
-      setAuthError({ type: "user_not_registered", message: "Nalog nije aktivan" });
+      setAuthError({
+        type: "user_not_registered",
+        reason: data ? "inactive" : "missing",
+        email: data?.email || sess.user.email || "",
+        message: "Nalog nije aktivan",
+      });
     } else {
       setProfile(data);
       setAuthError(null);

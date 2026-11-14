@@ -161,23 +161,32 @@ export default function MonthlyPayroll() {
   }, [slipsQ.data, slipProjectsQ.data]);
 
   // Da li nacrt i dalje odgovara podacima (isti kurs i parametri kao u nacrtu, trenutne satnice i profili).
-  const stale = useMemo(() => {
-    if (!run || run.status !== "draft" || slipsQ.isLoading || slipProjectsQ.isLoading) return [];
+  // Isti proračun daje i probleme za koje treba kurs (isplata < 0, bruto ispod najniže osnovice) — prikazuju se
+  // u spisku „Šta blokira obračun", jer ih collectMonth (bez kursa) ne vidi.
+  const live = useMemo(() => {
+    const none = { stale: [], problems: [] };
+    if (!run || run.status !== "draft" || slipsQ.isLoading || slipProjectsQ.isLoading) return none;
     try {
-      const live = buildMonthPayroll({
+      const result = buildMonthPayroll({
         month, eurRsdRate: Number(run.eur_rsd_rate), params: paramsFromRow(run.params), timesheets, employees, employmentHistory: history, projects,
       });
-      return staleEmployees(stored, live.payslips);
+      const known = new Set(collected.problems.map((p) => problemMessage(p, "rs")));
+      return {
+        stale: staleEmployees(stored, result.payslips),
+        problems: (result.problems || []).filter((p) => !known.has(problemMessage(p, "rs"))),
+      };
     } catch {
-      return [];
+      return none;
     }
-  }, [run, stored, month, timesheets, employees, history, projects, slipsQ.isLoading, slipProjectsQ.isLoading]);
+  }, [run, stored, month, timesheets, employees, history, projects, collected, slipsQ.isLoading, slipProjectsQ.isLoading]);
+  const stale = live.stale;
+  const problems = [...collected.problems, ...live.problems];
 
   const totals = payrollTotals(stored);
   const byProject = projectTotals(stored);
   const dbProblems = dbProblemsQ.data || [];
   const rateChanged = run && rate !== null && Number(run.eur_rsd_rate) !== rate;
-  const canApprove = run?.status === "draft" && stored.length > 0 && collected.problems.length === 0 && dbProblems.length === 0
+  const canApprove = run?.status === "draft" && stored.length > 0 && problems.length === 0 && dbProblems.length === 0
     && stale.length === 0 && !rateChanged && !dbProblemsQ.isLoading;
 
   // ───── radnje ─────
@@ -383,7 +392,7 @@ export default function MonthlyPayroll() {
       </Card>
 
       {/* Šta blokira obračun */}
-      {(collected.problems.length > 0 || dbProblems.length > 0 || stale.length > 0) && (
+      {(problems.length > 0 || dbProblems.length > 0 || stale.length > 0) && (
         <Card className="border-red-200 bg-red-50/50 dark:bg-red-950/20" data-testid="payroll-problems">
           <CardHeader className="pb-2">
             <CardTitle className="text-base flex items-center gap-2 text-red-700">
@@ -391,9 +400,9 @@ export default function MonthlyPayroll() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
-            {collected.problems.length > 0 && (
+            {problems.length > 0 && (
               <ul className="list-disc pl-5 space-y-1">
-                {collected.problems.map((p, i) => <li key={`p${i}`}>{problemMessage(p, lang)}</li>)}
+                {problems.map((p, i) => <li key={`p${i}`}>{problemMessage(p, lang)}</li>)}
               </ul>
             )}
             {stale.length > 0 && (

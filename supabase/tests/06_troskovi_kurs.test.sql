@@ -13,8 +13,8 @@ select plan(22);
 insert into auth.users (id, email, instance_id, aud, role) values
   ('96111111-1111-4111-8111-111111111111', 'qa6-admin@radnici.local', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated'),
   ('96222222-2222-4222-8222-222222222222', 'qa6-operater@radnici.local', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated');
-update public.profiles set role = 'admin' where id = '96111111-1111-4111-8111-111111111111';
-update public.profiles set role = 'operater' where id = '96222222-2222-4222-8222-222222222222';
+update public.profiles set role = 'admin', active = true where id = '96111111-1111-4111-8111-111111111111';
+update public.profiles set role = 'operater', active = true where id = '96222222-2222-4222-8222-222222222222';
 
 insert into public.projects (id, name, client_name) values
   ('b9600000-0000-4000-8000-0000000000b1', 'QA-6 projekat troškova', 'QA-6 klijent');

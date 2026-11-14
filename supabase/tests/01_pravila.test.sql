@@ -8,8 +8,8 @@ select plan(35);
 insert into auth.users (id, email, instance_id, aud, role) values
   ('11111111-1111-4111-8111-111111111111', 'test-admin@radnici.local', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated'),
   ('22222222-2222-4222-8222-222222222222', 'test-operater@radnici.local', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated');
-update public.profiles set role = 'admin' where id = '11111111-1111-4111-8111-111111111111';
-update public.profiles set role = 'operater' where id = '22222222-2222-4222-8222-222222222222';
+update public.profiles set role = 'admin', active = true where id = '11111111-1111-4111-8111-111111111111';
+update public.profiles set role = 'operater', active = true where id = '22222222-2222-4222-8222-222222222222';
 -- Pravila razvrstavanja kao u šemi (prag 8h, redovni = 1), nezavisno od onoga što je admin upisao u lokalnu bazu.
 update public.work_rules set daily_regular_hours = 8;
 update public.hour_types set worker_coef = 1, client_coef = 1 where code = 'redovni';
