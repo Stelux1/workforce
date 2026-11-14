@@ -786,3 +786,120 @@ describe("red satnice (timesheetRow.js)", () => {
     });
   });
 });
+
+// ── Izveštaji po ID-u: Kontrolna tabla, Izveštaji o platama, Klijenti (Faza 4) ──
+import { clientIdOf, projectCostTotals, projectFinancials, projectSummary, timesheetTotals, totalsByClient, totalsByWorker } from "./reports.js";
+
+describe("izveštaji: grupisanje po project_id / client_id, ne po imenu", () => {
+  const clients = [
+    { id: "C1", name: "QA-Klijent A" },
+    { id: "C2", name: "QA-Klijent B" },
+  ];
+  const projects = [
+    { id: "P1", name: "QA-Most", client_id: "C1", client_name: "QA-Klijent A" },
+    { id: "P2", name: "QA-Hala", client_id: "C1", client_name: "QA-Klijent A" },
+    { id: "P3", name: "QA-Put", client_id: "C2", client_name: "QA-Klijent B" },
+    { id: "P4", name: "QA-Bez klijenta", client_id: null, client_name: null },
+  ];
+  // Iznose računa baza (D16); ovde su upisani kao u bazi. t2: 7,5 h × 19,99 = 149,925 → 149,93.
+  const ts = (id, employee_id, employee_name, project_id, project, client_name, total_hours, worker_cost, client_revenue) => ({
+    id, employee_id, employee_name, project_id, project, client_name, total_hours, worker_cost, client_revenue,
+    profit: round2(client_revenue - worker_cost),
+  });
+  const timesheets = [
+    ts("t1", "E1", "QA-Marko", "P1", "QA-Most", "QA-Klijent A", 40, 480, 800),
+    ts("t2", "E1", "QA-Marko", "P2", "QA-Hala", "QA-Klijent A", 7.5, 149.93, 187.5),
+    // Zastareli snimak imena u redu: klijent je i dalje C2 po projektu.
+    ts("t3", "E2", "QA-Marko", "P3", "QA-Put", "QA-Stari naziv", 0.1, 0.1, 0.2),
+    ts("t4", "E2", "QA-Marko", "P3", "QA-Put", "QA-Klijent B", 0.2, 0.2, 0.1),
+    // Projekat bez klijenta, iako je u redu upisano ime klijenta A — ne sme da uđe u A.
+    ts("t5", "E3", "QA-Ana", "P4", "QA-Bez klijenta", "QA-Klijent A", 8, 96, 160),
+    // Stari ručno uneti projekat (bez project_id) sa imenom klijenta A — poseban red, ne spaja se po imenu.
+    ts("t6", "E3", "QA-Ana", null, "QA-Ručni projekat", "QA-Klijent A", 4, 48, 80),
+  ];
+  const costs = [
+    { project_id: "P1", amount: 100.1, currency: "EUR" },
+    { project_id: "P1", amount: 0.2 }, // bez valute = EUR
+    { project_id: "P1", amount: 5000, currency: "RSD" }, // RSD nema kurs — ne ulazi u ostaje nama (D2)
+    { project_id: "P3", amount: 50, currency: "EUR" },
+  ];
+  const numbersOnly = (rows) => rows.map(({ name, snapshotNames, ...rest }) => rest);
+
+  it("zbir satnica ide u centima", () => {
+    expect(timesheetTotals(timesheets.slice(2, 4))).toEqual({ hours: 0.3, cost: 0.3, revenue: 0.3, profit: 0, count: 2 });
+    expect(timesheetTotals([{ total_hours: null, worker_cost: undefined }])).toEqual({ hours: 0, cost: 0, revenue: 0, profit: 0, count: 1 });
+  });
+
+  it("klijent satnice je klijent njenog projekta po ID-u", () => {
+    const byId = new Map(projects.map((p) => [p.id, p]));
+    expect(timesheets.map((t) => clientIdOf(t, byId))).toEqual(["C1", "C1", "C2", "C2", null, null]);
+  });
+
+  it("po klijentu: C1 = P1 + P2, C2 = P3 (i sa zastarelim snimkom), bez klijenta posebno", () => {
+    const rows = totalsByClient(timesheets, projects, clients);
+    expect(rows.map((r) => [r.key, r.name, r.hours, r.cost, r.revenue, r.profit, r.count])).toEqual([
+      ["C1", "QA-Klijent A", 47.5, 629.93, 987.5, 357.57, 2],
+      ["C2", "QA-Klijent B", 0.3, 0.3, 0.3, 0, 2],
+      ["bez-id", null, 12, 144, 240, 96, 2],
+    ]);
+    expect(rows[0].avgRate).toBe(20.79); // 987,5 / 47,5
+    expect(rows[2]).toMatchObject({ id: null, unassigned: true, snapshotNames: ["QA-Klijent A"] });
+  });
+
+  it("Accept: preimenovanje klijenta (isti id, novo ime) ne menja nijednu brojku", () => {
+    const before = totalsByClient(timesheets, projects, clients);
+    const rename = (name) => (n) => (n === "QA-Klijent A" ? name : n);
+    const to = rename("QA-Klijent A (novo ime)");
+    // 1) kao posle triggera propagate_client_rename: novo ime u clients, projects.client_name i timesheets.client_name
+    const renamedClients = clients.map((c) => ({ ...c, name: to(c.name) }));
+    const renamedProjects = projects.map((p) => ({ ...p, client_name: p.client_id === "C1" ? to(p.client_name) : p.client_name }));
+    const renamedTs = timesheets.map((t) => ({ ...t, client_name: projects.find((p) => p.id === t.project_id)?.client_id === "C1" ? to(t.client_name) : t.client_name }));
+    const after = totalsByClient(renamedTs, renamedProjects, renamedClients);
+    expect(numbersOnly(after)).toEqual(numbersOnly(before));
+    expect(after[0].name).toBe("QA-Klijent A (novo ime)");
+    // 2) stranica još drži stare satnice/projekte u kešu, a klijent je već preimenovan
+    expect(numbersOnly(totalsByClient(timesheets, projects, renamedClients))).toEqual(numbersOnly(before));
+    // 3) drugi klijent dobije isto ime kao prvi — i dalje dve odvojene grupe, iste brojke
+    const sameName = clients.map((c) => ({ ...c, name: "QA-Isto ime" }));
+    expect(numbersOnly(totalsByClient(timesheets, projects, sameName))).toEqual(numbersOnly(before));
+    // Isto i za pregled projekata i radnike.
+    const sumBefore = projectSummary({ timesheets, projects, costs });
+    expect(numbersOnly(projectSummary({ timesheets: renamedTs, projects: renamedProjects, costs }))).toEqual(numbersOnly(sumBefore));
+    expect(totalsByWorker(renamedTs)).toEqual(totalsByWorker(timesheets));
+  });
+
+  it("preimenovanje projekta ne menja pregled projekata", () => {
+    const before = projectSummary({ timesheets, projects, costs });
+    const renamedProjects = projects.map((p) => (p.id === "P1" ? { ...p, name: "QA-Most (novo)" } : p));
+    const renamedTs = timesheets.map((t) => (t.project_id === "P1" ? { ...t, project: "QA-Most (novo)" } : t));
+    const after = projectSummary({ timesheets: renamedTs, projects: renamedProjects, costs });
+    expect(numbersOnly(after)).toEqual(numbersOnly(before));
+    expect(after.find((r) => r.id === "P1").name).toBe("QA-Most (novo)");
+  });
+
+  it("pregled projekata: ostaje nama = prihod − trošak − EUR troškovi (D8), ručno uneto posebno", () => {
+    const rows = projectSummary({ timesheets, projects, costs });
+    expect(rows.map((r) => [r.key, r.name, r.hours, r.revenue, r.workerCost, r.costsEUR, r.costsRSD, r.profit])).toEqual([
+      ["P1", "QA-Most", 40, 800, 480, 100.3, 5000, 219.7],
+      ["P2", "QA-Hala", 7.5, 187.5, 149.93, 0, 0, 37.57],
+      ["P4", "QA-Bez klijenta", 8, 160, 96, 0, 0, 64],
+      ["bez-id", null, 4, 80, 48, 0, 0, 32],
+      ["P3", "QA-Put", 0.3, 0.3, 0.3, 50, 0, -50],
+    ]);
+    expect(rows.find((r) => r.unassigned).snapshotNames).toEqual(["QA-Ručni projekat"]);
+    // Projekat bez sati i bez EUR troškova se ne prikazuje; satnica čiji projekat nije na listi dobija svoj red.
+    const extra = projectSummary({ timesheets: [ts("t7", "E1", "QA-Marko", "P9", "QA-Nepoznat", null, 1, 10, 20)], projects, costs: [] });
+    expect(extra.map((r) => [r.key, r.name, r.profit])).toEqual([["P9", "QA-Nepoznat", 10]]);
+    expect(projectCostTotals(costs)).toEqual({ eur: 150.3, rsd: 5000 });
+    expect(projectFinancials([], [])).toMatchObject({ hours: 0, revenue: 0, profit: 0, marginPct: null });
+  });
+
+  it("po radniku: po employee_id — dva radnika istog imena ostaju odvojena", () => {
+    const rows = totalsByWorker(timesheets);
+    expect(rows.map((r) => [r.key, r.name, r.hours, r.cost, r.revenue, r.profit, r.avgRate])).toEqual([
+      ["E1", "QA-Marko", 47.5, 629.93, 987.5, 357.57, 13.26],
+      ["E2", "QA-Marko", 0.3, 0.3, 0.3, 0, 1],
+      ["E3", "QA-Ana", 12, 144, 240, 96, 12],
+    ]);
+  });
+});

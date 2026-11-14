@@ -15,6 +15,7 @@ import SortSelect from "@/components/shared/SortSelect";
 import { useT } from "@/lib/translations";
 import { useLang } from "@/lib/LanguageContext";
 import ConfirmDeleteDialog from "@/components/shared/ConfirmDeleteDialog";
+import { totalsByClient } from "@/lib/payroll/reports";
 
 export default function Clients() {
   const t = useT();
@@ -59,15 +60,11 @@ export default function Clients() {
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["clients"] }); toast.success(L("Client deleted", "Klijent obrisan")); },
   });
 
-  const getClientStats = (client) => {
-    const projectIds = new Set(projects.filter((p) => p.client_id === client.id).map((p) => p.id));
-    const approved = timesheets.filter((ts) => projectIds.has(ts.project_id));
-    return {
-      hours: approved.reduce((s, t) => s + (t.total_hours || 0), 0),
-      revenue: approved.reduce((s, t) => s + (t.client_revenue || 0), 0),
-      profit: approved.reduce((s, t) => s + (t.profit || 0), 0),
-    };
-  };
+  // Zbir po client_id (project_id → projects.client_id), u centima — src/lib/payroll/reports.js.
+  // Ime klijenta se ne koristi za brojke, pa preimenovanje ne menja ni sate ni iznose.
+  const statsByClient = new Map(totalsByClient(timesheets, projects, clients).map((row) => [row.id, row]));
+  const NO_STATS = { hours: 0, revenue: 0, profit: 0 };
+  const getClientStats = (client) => statsByClient.get(client.id) || NO_STATS;
 
   const SORT_OPTIONS = [
     { value: "name_asc", label: t("Name A → Z") || "Name A → Z" },

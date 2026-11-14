@@ -10,6 +10,8 @@ import StatusBadge from "@/components/shared/StatusBadge";
 import { useT } from "@/lib/translations";
 import { useLang } from "@/lib/LanguageContext";
 import { formatDate, shortDatePattern, longDatePattern } from "@/lib/dateFormat";
+import { round2 } from "@/lib/payroll/money";
+import { timesheetTotals, totalsByClient, totalsByWorker } from "@/lib/payroll/reports";
 
 export default function PayrollDashboard() {
   const t = useT();
@@ -27,11 +29,11 @@ export default function PayrollDashboard() {
     queryKey: ["timesheets", "submitted"],
     queryFn: () => base44.entities.Timesheet.filter({ approval_status: "submitted" }, "-week_start"),
   });
-  const { data: projects = [] } = useQuery({
+  const { data: projects = [], isLoading: projectsLoading } = useQuery({
     queryKey: ["projects"],
     queryFn: () => base44.entities.Project.list("name"),
   });
-  const { data: clients = [] } = useQuery({
+  const { data: clients = [], isLoading: clientsLoading } = useQuery({
     queryKey: ["clients"],
     queryFn: () => base44.entities.Client.list("name"),
   });
@@ -46,45 +48,30 @@ export default function PayrollDashboard() {
     queryFn: () => base44.entities.Employee.list("-created_date", 200),
   });
 
-  const totalHours = approved.reduce((s, t) => s + (t.total_hours || 0), 0);
-  const totalCost = approved.reduce((s, t) => s + (t.worker_cost || 0), 0);
-  const totalRevenue = approved.reduce((s, t) => s + (t.client_revenue || 0), 0);
-  const totalProfit = totalRevenue - totalCost;
+  // Zbirovi samo iz odobrenih satnica, u centima (src/lib/payroll/reports.js).
+  const totals = timesheetTotals(approved);
+  const totalHours = totals.hours;
+  const totalCost = totals.cost;
+  const totalRevenue = totals.revenue;
+  const totalProfit = round2(totalRevenue - totalCost);
   const profitMargin = totalRevenue > 0 ? ((totalProfit / totalRevenue) * 100).toFixed(1) : 0;
 
+  // TODO(Faza 3): Payroll Due iz mesečnog obračuna
   const pendingPayroll = payrollRecords.filter((p) => p.payment_status === "pending");
   const pendingAmount = pendingPayroll.reduce((s, p) => s + (p.total_worker_cost || 0), 0);
 
-  // Po ID-u radnika i po klijentu projekta (project_id → client_id), ne po imenu.
-  const workerProfit = {};
-  approved.forEach((ts) => {
-    const key = ts.employee_id || ts.employee_name;
-    if (!workerProfit[key]) workerProfit[key] = { name: ts.employee_name, profit: 0, hours: 0 };
-    workerProfit[key].profit += ts.profit || 0;
-    workerProfit[key].hours += ts.total_hours || 0;
-  });
-  const topWorkers = Object.values(workerProfit)
-    .map((d) => [d.name, d])
-    .sort((a, b) => b[1].profit - a[1].profit)
+  // Radnik po employee_id, klijent po project_id → projects.client_id; ime je samo za prikaz (trenutni red po ID-u),
+  // pa preimenovanje klijenta ne menja nijednu brojku. Bez klijenta / ručno uneto je posebna grupa, ne spaja se po imenu.
+  const unassignedClientLabel = lang === "rs" ? "Bez klijenta / ručno uneto" : "No client / entered manually";
+  const topWorkers = totalsByWorker(approved)
+    .sort((a, b) => b.profit - a.profit)
+    .slice(0, 5);
+  const topClients = totalsByClient(approved, projects, clients)
+    .sort((a, b) => b.profit - a.profit)
     .slice(0, 5);
 
-  const projectById = Object.fromEntries(projects.map((p) => [p.id, p]));
-  const clientProfit = {};
-  approved.forEach((ts) => {
-    const proj = projectById[ts.project_id];
-    const key = proj?.client_id || ts.client_name;
-    if (!key) return;
-    const name = clients.find((c) => c.id === proj?.client_id)?.name || proj?.client_name || ts.client_name;
-    if (!clientProfit[key]) clientProfit[key] = { name, profit: 0, revenue: 0 };
-    clientProfit[key].profit += ts.profit || 0;
-    clientProfit[key].revenue += ts.client_revenue || 0;
-  });
-  const topClients = Object.values(clientProfit)
-    .map((d) => [d.name, d])
-    .sort((a, b) => b[1].profit - a[1].profit)
-    .slice(0, 5);
-
-  const isLoading = tsLoading || prLoading;
+  // Klijent satnice se čita preko projekta, pa brojke čekaju i projekte i klijente (inače bi sve palo u „bez klijenta").
+  const isLoading = tsLoading || prLoading || projectsLoading || clientsLoading;
 
   if (isLoading) {
     return (
@@ -136,10 +123,10 @@ export default function PayrollDashboard() {
           </CardHeader>
           <CardContent className="space-y-2">
             {topWorkers.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">{t("No data yet")}</p>}
-            {topWorkers.map(([name, data]) => (
-              <div key={name} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-muted/50 transition-colors">
+            {topWorkers.map((data) => (
+              <div key={data.key} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-muted/50 transition-colors">
                 <div>
-                  <p className="text-sm font-medium">{name}</p>
+                  <p className="text-sm font-medium">{data.name || "—"}</p>
                   <p className="text-xs text-muted-foreground">{data.hours.toFixed(1)}h {t("h worked").replace("h ", "")}</p>
                 </div>
                 <div className="text-right">
@@ -161,10 +148,10 @@ export default function PayrollDashboard() {
           </CardHeader>
           <CardContent className="space-y-2">
             {topClients.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">{t("No data yet")}</p>}
-            {topClients.map(([name, data]) => (
-              <div key={name} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-muted/50 transition-colors">
+            {topClients.map((data) => (
+              <div key={data.key} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-muted/50 transition-colors">
                 <div>
-                  <p className="text-sm font-medium">{name}</p>
+                  <p className={`text-sm font-medium ${data.unassigned ? "italic text-muted-foreground" : ""}`}>{data.unassigned ? unassignedClientLabel : data.name}</p>
                   <p className="text-xs text-muted-foreground">€{data.revenue.toLocaleString("en", { maximumFractionDigits: 0 })} {t("revenue")}</p>
                 </div>
                 <div className="text-right">

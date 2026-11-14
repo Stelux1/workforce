@@ -12,7 +12,7 @@ import { useT } from "@/lib/translations";
 import { useLang } from "@/lib/LanguageContext";
 import { formatDate, shortDatePattern, longDatePattern } from "@/lib/dateFormat";
 import { TrendingUp, TrendingDown, DollarSign, Receipt, BarChart2, Clock } from "lucide-react";
-import { projectMargin } from "@/lib/payroll/monthly";
+import { projectFinancials, projectSummary, timesheetTotals, totalsByClient, totalsByWorker } from "@/lib/payroll/reports";
 
 export default function PayrollReports() {
   const t = useT();
@@ -32,12 +32,12 @@ export default function PayrollReports() {
     queryFn: () => base44.entities.PayrollRecord.list("-week_start"),
   });
 
-  const { data: projects = [] } = useQuery({
+  const { data: projects = [], isLoading: projectsLoading } = useQuery({
     queryKey: ["projects"],
     queryFn: () => base44.entities.Project.list("name"),
   });
 
-  const { data: clients = [] } = useQuery({
+  const { data: clients = [], isLoading: clientsLoading } = useQuery({
     queryKey: ["clients"],
     queryFn: () => base44.entities.Client.list("name"),
   });
@@ -55,49 +55,27 @@ export default function PayrollReports() {
   // ── Payroll tab data (approved timesheets, no project filter) ──
   const approved = timesheets.filter((ts) => ts.approval_status === "approved");
 
-  // Grupisanje po ID-u radnika; „satnica" je prosek (trošak / sati), ne tarifa prvog reda.
-  const workerData = {};
-  approved.forEach((ts) => {
-    const key = ts.employee_id || ts.employee_name;
-    if (!workerData[key]) workerData[key] = { name: ts.employee_name, hours: 0, cost: 0, revenue: 0, profit: 0 };
-    workerData[key].hours += ts.total_hours || 0;
-    workerData[key].cost += ts.worker_cost || 0;
-    workerData[key].revenue += ts.client_revenue || 0;
-    workerData[key].profit += ts.profit || 0;
-  });
-  Object.values(workerData).forEach((d) => { d.rate = d.hours > 0 ? d.cost / d.hours : 0; });
-  const workerRows = Object.values(workerData).map((d) => [d.name, d]).sort((a, b) => b[1].cost - a[1].cost);
+  // Zbirovi idu kroz src/lib/payroll/reports.js: radnik po employee_id, projekat po project_id, klijent po
+  // project_id → projects.client_id. Ime je samo za prikaz (trenutni red po ID-u), pa preimenovanje klijenta
+  // ne menja nijednu brojku. Satnice bez ID-a su posebna grupa („bez projekta / ručno uneto"), ne spajaju se po imenu.
+  const unassignedProjectLabel = rs("No project / entered manually", "Bez projekta / ručno uneto");
+  const unassignedClientLabel = rs("No client / entered manually", "Bez klijenta / ručno uneto");
 
-  // Klijent po projektu satnice (project_id → client_id), sa trenutnim nazivom klijenta.
-  const projectById = Object.fromEntries(projects.map((p) => [p.id, p]));
-  const clientName = (id) => clients.find((c) => c.id === id)?.name;
-  const clientData = {};
-  approved.forEach((ts) => {
-    const proj = projectById[ts.project_id];
-    const key = proj?.client_id || ts.client_name;
-    if (!key) return;
-    if (!clientData[key]) clientData[key] = { name: clientName(proj?.client_id) || proj?.client_name || ts.client_name, hours: 0, revenue: 0, cost: 0, profit: 0 };
-    clientData[key].hours += ts.total_hours || 0;
-    clientData[key].revenue += ts.client_revenue || 0;
-    clientData[key].cost += ts.worker_cost || 0;
-    clientData[key].profit += ts.profit || 0;
-  });
-  Object.values(clientData).forEach((d) => { d.rate = d.hours > 0 ? d.revenue / d.hours : 0; });
-  const clientRows = Object.values(clientData).map((d) => [d.name, d]).sort((a, b) => b[1].revenue - a[1].revenue);
+  // „Satnica" je prosek (trošak / sati), ne tarifa prvog reda.
+  const workerRows = totalsByWorker(approved).sort((a, b) => b.cost - a.cost);
+  // Klijent se čita preko projekta — dok projekti i klijenti ne stignu, sve bi palo u „bez klijenta".
+  const clientRows = projectsLoading || clientsLoading
+    ? []
+    : totalsByClient(approved, projects, clients).sort((a, b) => b.revenue - a.revenue);
 
-  const chartData = workerRows.slice(0, 8).map(([name, d]) => ({
-    name: name.split(" ")[0],
+  const chartData = workerRows.slice(0, 8).map((d) => ({
+    name: (d.name || "—").split(" ")[0],
     cost: Math.round(d.cost),
     revenue: Math.round(d.revenue),
     profit: Math.round(d.profit),
   }));
 
-  const totals = approved.reduce((acc, ts) => ({
-    hours: acc.hours + (ts.total_hours || 0),
-    cost: acc.cost + (ts.worker_cost || 0),
-    revenue: acc.revenue + (ts.client_revenue || 0),
-    profit: acc.profit + (ts.profit || 0),
-  }), { hours: 0, cost: 0, revenue: 0, profit: 0 });
+  const totals = timesheetTotals(approved);
   const margin = totals.revenue > 0 ? ((totals.profit / totals.revenue) * 100).toFixed(1) : 0;
 
   // ── Project Financial Report data ──
@@ -110,13 +88,14 @@ export default function PayrollReports() {
     : costs.filter((c) => c.project_id === selectedProject);
 
   const projApproved = filteredTimesheets.filter((ts) => ts.approval_status === "approved");
-  const projRevenue = projApproved.reduce((s, ts) => s + (ts.client_revenue || 0), 0);
-  const projWorkerCost = projApproved.reduce((s, ts) => s + (ts.worker_cost || 0), 0);
-  const projHours = projApproved.reduce((s, ts) => s + (ts.total_hours || 0), 0);
-  const costsEUR = filteredCosts.filter(c => (c.currency || "EUR") === "EUR").reduce((s, c) => s + (c.amount || 0), 0);
-  const costsRSD = filteredCosts.filter(c => c.currency === "RSD").reduce((s, c) => s + (c.amount || 0), 0);
-  // D8: ostaje nama = prihod − trošak radnika − troškovi projekta (EUR; RSD nema kurs, D2).
-  const grossProfit = projectMargin({ revenue: projRevenue, laborCost: projWorkerCost, otherCosts: costsEUR }).remaining;
+  // D8: ostaje nama = prihod − trošak radnika − troškovi projekta (EUR; RSD nema kurs, D2) — projectFinancials.
+  const selectedFinancials = projectFinancials(projApproved, filteredCosts);
+  const projRevenue = selectedFinancials.revenue;
+  const projWorkerCost = selectedFinancials.workerCost;
+  const projHours = selectedFinancials.hours;
+  const costsEUR = selectedFinancials.costsEUR;
+  const costsRSD = selectedFinancials.costsRSD;
+  const grossProfit = selectedFinancials.profit;
   const projMargin = projRevenue > 0 ? (grossProfit / projRevenue * 100).toFixed(1) : 0;
 
   // Category breakdown
@@ -128,18 +107,11 @@ export default function PayrollReports() {
     else categoryTotals[key].rsd += c.amount || 0;
   });
 
-  // Per-project summary (for "all" view)
-  const projectSummary = projects.map((proj) => {
-    const pts = timesheets.filter((ts) => ts.project_id === proj.id && ts.approval_status === "approved");
-    const pcs = costs.filter((c) => c.project_id === proj.id);
-    const rev = pts.reduce((s, ts) => s + (ts.client_revenue || 0), 0);
-    const wc = pts.reduce((s, ts) => s + (ts.worker_cost || 0), 0);
-    const hrs = pts.reduce((s, ts) => s + (ts.total_hours || 0), 0);
-    const cEUR = pcs.filter(c => (c.currency || "EUR") === "EUR").reduce((s, c) => s + (c.amount || 0), 0);
-    const profit = projectMargin({ revenue: rev, laborCost: wc, otherCosts: cEUR }).remaining;
-    const m = rev > 0 ? (profit / rev * 100).toFixed(1) : "0.0";
-    return { id: proj.id, name: proj.name, hours: hrs, revenue: rev, workerCost: wc, costsEUR: cEUR, profit, margin: m };
-  }).filter(p => p.hours > 0 || p.costsEUR > 0).sort((a, b) => b.revenue - a.revenue);
+  // Per-project summary (for "all" view) — po project_id, satnice bez projekta u posebnom redu.
+  const projectRows = projectSummary({ timesheets: approved, projects, costs }).map((p) => ({
+    ...p,
+    margin: p.revenue > 0 ? (p.profit / p.revenue * 100).toFixed(1) : "0.0",
+  }));
 
   const getCategoryLabel = (key) => {
     const found = costCategories.find((c) => c.name.toLowerCase() === key?.toLowerCase());
@@ -203,9 +175,16 @@ export default function PayrollReports() {
                       </tr>
                     </thead>
                     <tbody className="divide-y">
-                      {projectSummary.map((p) => (
-                        <tr key={p.id} className="hover:bg-muted/30">
-                          <td className="py-3 px-4 font-medium">{p.name}</td>
+                      {projectRows.map((p) => (
+                        <tr key={p.key} className="hover:bg-muted/30">
+                          <td className="py-3 px-4 font-medium">
+                            {p.unassigned ? (
+                              <>
+                                <span className="italic text-muted-foreground">{unassignedProjectLabel}</span>
+                                {p.snapshotNames?.length > 0 && <p className="text-xs font-normal text-muted-foreground">{p.snapshotNames.join(", ")}</p>}
+                              </>
+                            ) : (p.name || "—")}
+                          </td>
                           <td className="py-3 px-4 text-right text-muted-foreground">{p.hours.toFixed(1)}h</td>
                           <td className="py-3 px-4 text-right text-green-600 font-semibold">€{p.revenue.toFixed(2)}</td>
                           <td className="py-3 px-4 text-right text-orange-600">€{p.workerCost.toFixed(2)}</td>
@@ -216,7 +195,7 @@ export default function PayrollReports() {
                           <td className="py-3 px-4 text-right text-muted-foreground">{p.margin}%</td>
                         </tr>
                       ))}
-                      {projectSummary.length === 0 && (
+                      {projectRows.length === 0 && (
                         <tr><td colSpan={7} className="text-center py-8 text-muted-foreground">{rs("No data", "Nema podataka")}</td></tr>
                       )}
                     </tbody>
@@ -380,11 +359,11 @@ export default function PayrollReports() {
                     </tr>
                   </thead>
                   <tbody className="divide-y">
-                    {workerRows.map(([name, d]) => (
-                      <tr key={name} className="hover:bg-muted/30">
-                        <td className="py-3 px-4 font-medium">{name}</td>
+                    {workerRows.map((d) => (
+                      <tr key={d.key} className="hover:bg-muted/30">
+                        <td className="py-3 px-4 font-medium">{d.name || "—"}</td>
                         <td className="py-3 px-4 text-right">{d.hours.toFixed(1)}h</td>
-                        <td className="py-3 px-4 text-right">€{d.rate?.toFixed(2)}/h</td>
+                        <td className="py-3 px-4 text-right">€{d.avgRate.toFixed(2)}/h</td>
                         <td className="py-3 px-4 text-right font-semibold">€{d.cost.toFixed(2)}</td>
                       </tr>
                     ))}
@@ -411,11 +390,13 @@ export default function PayrollReports() {
                     </tr>
                   </thead>
                   <tbody className="divide-y">
-                    {clientRows.map(([name, d]) => (
-                      <tr key={name} className="hover:bg-muted/30">
-                        <td className="py-3 px-4 font-medium">{name}</td>
+                    {clientRows.map((d) => (
+                      <tr key={d.key} className="hover:bg-muted/30">
+                        <td className="py-3 px-4 font-medium">
+                          {d.unassigned ? <span className="italic text-muted-foreground">{unassignedClientLabel}</span> : (d.name || "—")}
+                        </td>
                         <td className="py-3 px-4 text-right">{d.hours.toFixed(1)}h</td>
-                        <td className="py-3 px-4 text-right">€{d.rate?.toFixed(2)}/h</td>
+                        <td className="py-3 px-4 text-right">€{d.avgRate.toFixed(2)}/h</td>
                         <td className="py-3 px-4 text-right font-semibold">€{d.revenue.toFixed(2)}</td>
                       </tr>
                     ))}
@@ -443,11 +424,11 @@ export default function PayrollReports() {
                     </tr>
                   </thead>
                   <tbody className="divide-y">
-                    {workerRows.map(([name, d]) => {
+                    {workerRows.map((d) => {
                       const m = d.revenue > 0 ? ((d.profit / d.revenue) * 100).toFixed(1) : "0.0";
                       return (
-                        <tr key={name} className="hover:bg-muted/30">
-                          <td className="py-3 px-4 font-medium">{name}</td>
+                        <tr key={d.key} className="hover:bg-muted/30">
+                          <td className="py-3 px-4 font-medium">{d.name || "—"}</td>
                           <td className="py-3 px-4 text-right">€{d.cost.toFixed(2)}</td>
                           <td className="py-3 px-4 text-right">€{d.revenue.toFixed(2)}</td>
                           <td className="py-3 px-4 text-right text-emerald-600 font-semibold">€{d.profit.toFixed(2)}</td>
