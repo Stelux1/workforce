@@ -430,3 +430,96 @@ Fajlovi su pravljeni u stranici (canvas/bajtovi) i ubacivani u `input[type=file]
 - **Potpisan link:** bez prijave (fetch bez kolačića/tokena, kao incognito) → 200 `application/pdf` ✅ (namerno), važi tačno 3600 s (`exp − iat`); izmenjen token / bez tokena / `/object/public/` → 400 ✅. Istek posle 1 h na neosveženoj stranici nije testiran (sesija nije čekala sat).
 - **Neuspelo otpremanje** (presretnut `fetch` ka `/storage/v1/object/files` → `TypeError`): i prilog satnice i fotografija prikazuju „Nema veze sa serverom. Proverite internet ili da li baza radi." i dugme se vraća — OPIS §9.3 #11 („Otpremanje…" zauvek) **više ne važi**.
 - **Operater:** vidi sva 4 dokumenta i preuzima PDF (200) ✅.
+
+---
+
+# Pregled novčane logike, RLS-a i zaključavanja pre prve prave isplate — 14.11.2026 (veče) — Claude Opus 5.5
+
+Opseg: BACKLOG Faza 3 `[review]`. HEAD `0e50f7f` i ceo diff `011eba8..HEAD` za novac i prava: `src/lib/payroll/*` i njihova SQL ogledala u `supabase/migrations/20261114120000…20261114220000`; RLS, grantovi i prava na funkcije u živoj lokalnoj bazi (`pg_policies`, `information_schema.role_table_grants`, `pg_proc.proacl`); zaključavanje i nepromenljivost (napadi u transakcijama sa `rollback`, REST sa lokalnim anon ključem). `MonthlyPayroll.jsx`, izvoz listića, `ProjectFinancialReport.jsx` i `PayrollDashboard.jsx` drugi agenti upravo menjaju — pregledani su u verziji iz HEAD-a (**u izradi**). Kod, baza i podaci nisu menjani; jedini izmenjen fajl je ovaj.
+
+## Sažetak
+- **Novi nalazi: 1 × P0, 4 × P1, 3 × P2, 8 × P3.**
+- **P0:** operater kroz običan ekran projekta („Zaposleni na projektu" → prilagođena B2C satnica) upisuje satnicu radnika koja je 2. nivo jedinstvenog izbora tarife (D4) — iznad tarife projekta, tarife radnika i profila koje unosi samo admin. Provera tarife pri odobravanju (D16, migracija 180000) tu satnicu prihvata kao „važeću", admin jednim klikom „Odobri" odobrava, a mesečni obračun isplaćuje iz snimka. Isto bez ijednog broja: operater prebaci tuđu dodelu sa većom tarifom na radnika ili obriše dodelu pa FK kaskada obriše adminovu tarifu.
+- Zaključavanje i nepromenljivost drže za svaki put dostupan preko API-ja (21 pokušaj, svi odbijeni ili bez uticaja na novac). `app.snapshot_sync` / `app.payroll_workflow` korisnik ne može da postavi (PostgREST izlaže samo `public`: `rpc/set_config` → PGRST202).
+- JS ↔ SQL: nema razlike koja menja iznos; razlike u redosledu kod izjednačenja daju odbijeno odobravanje, ne pogrešan iznos.
+- Verify: `npm test` **165/165**, `npm run test:db` **183/183** (7 fajlova). `npm run build` nije pokrenut (piše `dist/` dok drugi agenti rade).
+- Presuda: **BLOCK** dok se ne zatvori P0 (minimum na kraju).
+
+## Poznato (već prijavljeno Luki) — potvrđeno u živoj bazi, ne ponavljam
+- Svih 6 odobrenih satnica nema `rate_snapshot` (QA-Radnik-1/2 i ostale, odobrene pre Faze 2) → obračun ih ispravno odbija (`payroll_run_problems` #4, `NO_SNAPSHOT`).
+- EMP-005 / QA-Radnik-4, nedelja 19.10.2026: odobrena sa `b2c_rate 0,00`, trošak 0 (baza bi danas izabrala 15,00).
+- `hour_types`: prekovremeni / vikend / praznik bez koeficijenata (samo redovni 1 / 1).
+- `employment_history`: 0 redova — nijedan radnik još ne može da dobije listić (`NO_ENGAGEMENT`).
+- `payroll_params` 2026: „potvrditi u Službenom glasniku".
+
+## Nalazi (P0 → P3)
+
+### [P0] Operater određuje satnicu radnika preko projekta i dodela — provera tarife pri odobravanju to prihvata
+- Gde: `src/components/projects/ProjectEmployees.jsx:61-70, 84-93, 250-262` (prilagođena B2C satnica, bez provere uloge; `/projects/:id` je operateru dozvoljen), `ProjectRoles.jsx:65-80` (B2B zanimanja); RLS `projects_staff` i `project_assignments_staff` = `for all` za osoblje (`20261113170000_init.sql:944-948`); izbor tarife u bazi čita baš te podatke (`20261114180000_tarifa_pri_odobravanju.sql:75-96, 110-116`); `rates.assignment_id … on delete cascade` (`init.sql:430`, isto `rates.project_id` `:427`).
+- Scenario 1 (dokazano, `rollback`): admin u Tarife unese tarifu projekta 12 €/h, profil radnika 14 €/h. Operater na projektu upiše radniku prilagođenu B2C satnicu 99 i pošalje satnicu (pon 8 h). Admin klikne Odobri: `approvalPayload` sam bira 99 (nivo `project_employee`), baza `resolve_timesheet_rate` takođe 99 → **odobreno, `worker_cost 792,00` umesto 96,00**, snimak `{"source": "project_employee", "rate": 99}`; obračun plaća iz snimka.
+- Scenario 2 (dokazano, `rollback`): operater promeni `employee_id` dodele „Poslovođa" (adminova tarifa angažmana 25 €/h) na radnika čija je dodela 10 €/h i obriše njegovu dodelu → kaskada obriše adminov red u `rates` (RLS ne važi za FK kaskadu); baza za radnika bira **25,00**. Promena pozicije u dodeli / na projektu isto bira drugu tarifu pozicije.
+- Zašto P0: pogrešan iznos za isplatu, kroz ekran, bez API-ja; zaobilazi upravo ono što D16 („broj koji je operater upisao u nacrt") i D3 (operater nema pristup tarifama) treba da spreče. Isti obrazac kao jutarnji P0 „operater upiše, admin odobri istim klikom".
+- Popravka (minimum): (1) trigger na `projects` (insert/update): ako nije `is_admin()`, odbij svaku promenu `b2c_rate` / `b2b_rate` u `assigned_employees` i `job_roles` (operaterov nov unos bez tarife); (2) trigger na `project_assignments`: operater ne menja `employee_id` / `project_id` / `position` / datume / status i ne briše dodelu koja ima red u `rates`; `rates.assignment_id` i `rates.project_id` na `on delete restrict`; (3) ekran: polja tarife u `ProjectEmployees` / `ProjectRoles` samo za admina; (4) pgTAP: operater → 42501 za sva tri puta, admin-tok i dalje prolazi.
+
+### [P1] Angažman (zaposlen ↔ podizvođač) menja operater, a od njega zavise porez, doprinosi i kome se plaća
+- Gde: RLS `employment_history_staff` (`init.sql:944-948`); `src/components/employees/EmploymentHistoryCard.jsx:58-72` (bez provere uloge); upotreba `payrollMonth.js:340-360`, `monthly.js:68-79`; provera `20261114200000_mesecni_obracun.sql:196-207` poredi listić sa istom tabelom.
+- Scenario (dokazano: operater `update employment_history set engagement_type …` prolazi): radnik sa bruto satnicom prebačen u „radnik podugovarača" → listić: isplata = bruto umesto neto, bez poreza i doprinosa, plaća se podizvođaču; baza ne vidi problem. Admin vidi samo oznaku „Podizvođač · …" u redu listića.
+- Popravka: upis u `employment_history` samo admin (novčana odluka, D8), ili trigger: operater ne menja `engagement_type` / `vendor_id` / datume; pgTAP.
+
+### [P1] Bruto satnica ispod najniže osnovice daje premalu ili negativnu isplatu, a baza odobrava
+- Gde: `serbianPayroll.js:22-25, 50` (doprinosi na punu najnižu osnovicu, neto može < 0), `monthly.js:73` (`payout = calc.neto`), `payrollMonth.js:370-377` (samo upozorenje), `20261114200000_mesecni_obracun.sql:231-233` (proverava samo isplata = neto, ne i ≥ 0).
+- Scenario (izračunato bibliotekom, kurs 117,2, najniža osnovica 437,69 €): bruto satnica, 8 h × 6 € = 48 € bruto → doprinosi radnika 87,10 € → **„za isplatu" −39,10 €**, obračun može da se odobri; 16 h × 12 € = 192 € bruto → neto 104,90 €. D17 svesno ne srazmerava početak/kraj rada u toku meseca, ali ovde to više nije samo upozorenje nego pogrešna isplata. Koliko znam, zakon za deo meseca srazmerava najnižu osnovicu — potvrditi sa knjigovođom.
+- Popravka (minimum): `payroll_run_problems` odbija `payout < 0`; za `rate_basis = bruto` + `ispod_najnize_osnovice` blokirati dok knjigovođa ne potvrdi pravilo; test u `payroll.test.js` i pgTAP 05.
+
+### [P1] „Ostaje nama" i zarada u izveštajima računaju trošak radnika iz satnice, ne bruto 2 (poznato kao Faza 4, ekrani u izradi)
+- Gde (HEAD): `ProjectFinancialReport.jsx:37` (`worker_cost` satnice), `reports.js:106-120` (`projectFinancials` → `timesheetTotals.cost`), `PayrollDashboard.jsx:43, 59-61` („Payroll Due" iz starog `payroll_records`).
+- Scenario: radnik sa neto satnicom 12 €/h, 160 h → satnica kaže trošak 1.920,00 €, a bruto 2 je 3.105,93 € (D8): „ostaje nama" je precenjen za 1.185,93 € po radniku mesečno. Kontrolna tabla prikazuje „Payroll Due" iz zapisa koji se više ne prave.
+- Popravka: kao zadatak Faze 4 — za mesece sa obračunom trošak = `payslip_projects.labor_cost`, inače oznaka „procena"; „Payroll Due" iz odobrenih a neisplaćenih `payroll_runs`.
+
+### [P1] Pre puštanja na server: nov nalog je odmah aktivan operater, prvi nalog postaje admin
+- Gde: `init.sql:24-25` (`role default 'operater'`, `active default true`), `:30-39` (`handle_new_user`), `:50-53` (`is_staff` = svaki aktivan profil). Lokalno je registracija isključena (`supabase/config.toml:178`), ali nov Supabase projekat ima registraciju **uključenu** podrazumevano; najmanja lozinka 6 (`config.toml:184`).
+- Scenario: Luka napravi projekat (NEEDS-USER, Faza 0) i ne isključi registraciju → bilo ko sa URL-om i javnim ključem postane operater: čita sve radnike i dokumenta (lične karte, pasoše), satnice sa tarifama, i menja projekte (→ P0); na praznoj bazi prvi registrovan postaje admin.
+- Popravka: `handle_new_user` upisuje `active = false` svima osim prvog admina (admin aktivira); kontrolna lista za server: registracija isključena, lozinka ≥ 10 + zaštita od procurelih lozinki, `seed.sql` se ne pokreće.
+
+### [P2] Baza ne proverava iznose listića prema snimku satnica — samo međusobnu usklađenost
+- Gde: `20261114200000_mesecni_obracun.sql:16, 192-194, 222-233`.
+- Scenario: greška u `src/lib/payroll` (pogrešan koeficijent u grupi, pogrešna osnovica poreza) daje listić koji prolazi svih 19 provera: zarada se poredi samo sa zbirom `worker_amount` koji šalje isti ekran, porez i doprinosi se ne porede sa parametrima. D17 to svesno ostavlja JS-u (D11), ali pre prave isplate nema druge brane.
+- Popravka (odbrana u dubinu): u `payroll_run_problems` dodati (a) `worker_amount` po (radnik, projekat) iz dana satnice × linije snimka, sa istim ključem grupe kao `aggregate()` u `monthly.js`; (b) porez i doprinose iz `run.params`, kursa i `work_fraction`, tolerancija 0,01. Isti primer u `payroll.test.js` i pgTAP 05.
+
+### [P2] Operater prebacuje projekat drugom klijentu — izveštaji po klijentu se menjaju i za zaključane mesece
+- Gde: `init.sql:369-380` (`sync_project_client`, security definer, menja `client_id` po `client_name` koji šalje bilo ko iz osoblja), `reports.js:56-59` (klijent satnice = trenutni klijent projekta).
+- Scenario: operater u formi projekta izabere drugog klijenta → sav prihod projekta, i iz odobrenih/zaključanih meseci, prelazi drugom klijentu u Klijentima i Fin. izveštajima.
+- Popravka: promena `client_id` projekta sa odobrenim satnicama samo admin (trigger).
+
+### [P2] Spisak isplata za banku (u izradi): valuta i negativni iznosi
+- Gde: `src/lib/payroll/payslipExport.js` (još neprateći fajl), kolone „Iznos" / „Valuta" iz `payslips.payout` u EUR.
+- Rizik: zarada rezidentima se po deviznim propisima isplaćuje u dinarima — spisak u EUR verovatno ne može direktno banci; negativan `payout` (P1 iznad) bi ušao u spisak. Proveriti sa knjigovođom pre prve isplate; izvoz neka preskoči/označi `payout ≤ 0` i neka ne otprema fajlove u zajednički bucket `files` (čita ga i operater).
+
+### [P3] Ostalo
+| # | Nalaz | Gde |
+|---|---|---|
+| 1 | `app.snapshot_sync` / `app.payroll_workflow` su obične GUC zastavice; preko API-ja nedostupne (PGRST202), ali ako se ikad pojavi put sa SQL-om: pod `snapshot_sync` se ne porede `total_hours`, `overtime_hours`, `profit`; pod `payroll_workflow` odobren obračun može da promeni kurs, parametre i mesec. Učvrstiti: uslov `pg_trigger_depth() > 1` + ta tri polja u poređenju; u workflow režimu dozvoliti samo `status`, `approved_*`, `paid_date`. | `20261114180000…sql:239-248`, `20261114200000…sql:46-54` |
+| 2 | Admin na odobrenoj satnici (odobreno → odobreno) može da prepiše `approved_by` / `approved_date`, `affiliation_id`, `vendor_*`, `created_by` — novac ostaje, trag odobravanja ne. | `20261114180000…sql:294-302, 320-364` |
+| 3 | `authenticated` ima `TRUNCATE`, `TRIGGER`, `REFERENCES` na svim tabelama (Supabase podrazumevano); TRUNCATE zaobilazi RLS i triggere po redu. Nedostupno preko PostgREST-a — `revoke` radi odbrane u dubinu. | grantovi u bazi |
+| 4 | Operater čita koeficijente (`hour_types`), prag i praznike, a D3 kaže „bez podešavanja"; `company_settings_read` je `using (true)` — čita i deaktiviran nalog (ostale tabele traže `is_staff()`). | `init.sql:952-959`, `20261114210000…sql:21` |
+| 5 | Tarifa se bira po ponedeljku za celu nedelju (i za deo nedelje u sledećem mesecu); dodela koja počinje u sredu ne važi te nedelje. Svesno (D16), ali nije upisano kao ograničenje. | `20261114180000…sql:332-333`, `timesheetRow.js:94-95` |
+| 6 | Kurs se čuva sa 4 decimale (`numeric(10,4)`), a ekran računa sa svim upisanim decimalama → nacrt odmah „zastari" dok se ne generiše ponovo; `stale` u `MonthlyPayroll.jsx:157-167` (HEAD) guta grešku i tada ne blokira dugme (baza i dalje proverava). Zaokružiti kurs na 4 decimale pre računanja. | `init.sql:737`, `MonthlyPayroll.jsx:135, 157-167` |
+| 7 | `lock_month` broji i odbijene satnice kao „neodobrene", a operater može da spreči zaključavanje upisom nacrta u mesec; operater briše radnika bez satnica → FK kaskada briše i `employee_private` (JMBG, IBAN); osoblje može da obriše bilo koji fajl u bucketu. | `20261114120000…sql:134-140`, `init.sql:205`, storage politike |
+| 8 | `supabase/seed.sql` u gitu sadrži lozinke lokalnog admina i operatera (nikad ga ne pokretati na serveru). Pri istom `start_date` dve dodele JS i SQL biraju poziciju različitim redom → odobravanje odbijeno (bezbedno, ali zbunjujuće). | `seed.sql:4, 28`; `rates.js:126-133` ↔ `20261114180000…sql:89-92` |
+
+## Provereno i radi
+- **RLS:** uključen na svih 30 tabela u `public`; anon nema nijedan grant na tabele ni pravo na funkcije (REST sa anon ključem: tabele i `rpc/is_admin` → 42501). Samo admin: `employee_private`, `rates`, `project_costs`, `payroll_records`, `payroll_params`, `payroll_runs`, `payslips`, `payslip_projects`, `email_templates` (operater u transakciji: 0 redova u `rates`, `employee_private`, `payroll_runs`). `month_locks` samo čitanje (upis samo `lock_month` / `unlock_month`); `profiles` samo svoj red ili admin, bez insert/delete politike; klijenti, šifarnici, praznici, vrste sati, prag i podaci firme — upis samo admin.
+- **Funkcije:** svih 30 u `public` ima `search_path=''`; security definer funkcije koje menjaju ili vraćaju novac proveravaju `is_admin()` (`save_payroll_draft`, `approve_payroll_run`, `payroll_run_problems`, `mark_payroll_paid`, `lock_month`, `unlock_month` — operater → 42501); pomoćne (`resolve_timesheet_rate`, `timesheet_amounts`, `timesheet_hours_by_type`, `rate_trim`, `rate_value`, `timesheet_rate_problem`, `payroll_params_for_month`) nemaju `authenticated`. PostgREST izlaže samo `public` / `graphql_public`; `pg_graphql` nije instaliran; nijedna tabela iz `public` nije u realtime publikaciji.
+- **Satnica:** operater ne odobrava, ne odbija, ne menja i ne briše odobrenu; admin na odobrenoj ne menja sate, tarife, radnika, projekat ni nedelju, a iznosi, `hours_by_type` i snimak se zadržavaju; iznose, vrste sati i snimak uvek računa baza (vrednosti sa ekrana se ignorišu); nacrt nikad nema snimak ni `approved_by`.
+- **Zaključan mesec + odobren obračun** (napadi kao admin, sve u `rollback`): izmena napomene, vraćanje u nacrt, brisanje i nov red sa danom u mesecu → „Mesec 03.2034 je zaključan"; izmena / brisanje / dodavanje listića i raspodele → odbijeno; brisanje obračuna, promena kursa ili napomene → odbijeno; `unlock_month` → odbijeno; brisanje dobavljača (FK `set null` u listić) → odbijeno; promena `payroll_params` ne menja `payroll_runs.params`; preimenovanje projekta i klijenta menja samo imena (96,00 / 216,00 / 120,00 ostaju).
+- **JS ↔ SQL:** `round2` = Postgres `round(numeric, 2)` (pola od nule, bez float greške do 15 cifara); razvrstavanje sati (praznik → vikend → prag); iznos po vrsti uz prednost posebne satnice; redosled tarifa, datumi važenja, statusi i „samo EUR po satu"; RSD trošak `round(amount / kurs, 2)`; izbor `payroll_params` po prvom danu meseca; provere D17 (angažman, osnova satnice, udeo) iste u oba.
+- **Mesečni obračun:** samo odobrene satnice; nedelja preko granice meseca deli se po danu, sa pragom, praznicima, tarifama i koeficijentima iz snimka (ne trenutnim); snimak koji ne odgovara satima, koeficijent ili tarifa koja fali → problem, nikad 0 ili 1,00; bez kursa nema nacrta ni odobravanja; zbir raspodele = trošak na cent; radnik sa problemom nema listić, a baza ne odobrava obračun bez njega.
+- **Tajne i logovi:** `.env.local` u `.gitignore`, `.env.local.example` sa praznim vrednostima, nema service ključa ni `console.log` u `src` (osim testova); repozitorijum nema remote.
+- **Testovi:** `npm test` 165/165, `npm run test:db` 183/183.
+
+## Zaključak
+- Novčano jezgro (`src/lib/payroll`) i čuvari u bazi su tačni i usklađeni, a zaključavanje i nepromenljivost odobrenog novca drže na svakom putu dostupnom korisniku.
+- Rupa je na ulazu: tarifu koju plaćamo može da odredi operater (P0), a i angažman koji određuje porez (P1). Pre prve isplate još: premala/negativna isplata za bruto satnicu ispod najniže osnovice (P1) i valuta spiska za banku (P2, sa knjigovođom).
+- Presuda: **BLOCK** — minimum za ✅:
+  1. P0: operater ne menja tarife u `projects.assigned_employees` / `job_roles` ni dodele koje imaju tarifu (`project_assignments`); `rates.assignment_id` / `project_id` na `on delete restrict`; polja tarife na projektu samo za admina; pgTAP za sva tri puta.
+  2. Preporučeno u istom krugu, pre prve isplate: P1 angažman samo admin; P1 `payout < 0` blokira odobravanje; P1 kontrolna lista za server.
