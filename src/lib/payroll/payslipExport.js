@@ -270,9 +270,12 @@ const BANK_LABELS = {
     subcontractorNote: "Radnik preko podizvođača — plaća se faktura podizvođača, ne zarada",
     invalid: ["Rb.", "Ime i prezime", "Šifra radnika", "JMBG", "Iznos", "Valuta", "Opis plaćanja", "Napomena"],
     invalidNote: "Iznos za isplatu nije veći od 0 — nije u spisku za banku; proverite obračun",
+    jmbg: ["Rb.", "Ime i prezime", "Šifra radnika", "Banka", "Račun (IBAN)", "Iznos", "Valuta", "Napomena"],
+    jmbgNote: "Nedostaje JMBG u profilu radnika — ostaje u spisku za banku (banka plaća po računu), dopunite JMBG",
     missingSheet: "Nedostaje račun",
     invalidSheet: "Iznos nije za isplatu",
     subcontractorSheet: "Podizvođači",
+    jmbgSheet: "Nedostaje JMBG",
   },
   en: {
     payments: ["No.", "Full name", "Employee ID", "JMBG", "Bank", "Account (IBAN)", "Amount", "Currency", "Payment description"],
@@ -282,9 +285,12 @@ const BANK_LABELS = {
     subcontractorNote: "Worker via a subcontractor — the subcontractor's invoice is paid, not a salary",
     invalid: ["No.", "Full name", "Employee ID", "JMBG", "Amount", "Currency", "Payment description", "Note"],
     invalidNote: "The amount to pay is not above 0 — not in the bank list; check the payroll",
+    jmbg: ["No.", "Full name", "Employee ID", "Bank", "Account (IBAN)", "Amount", "Currency", "Note"],
+    jmbgNote: "JMBG missing in the employee profile — stays in the bank list (the bank pays by account), please add the JMBG",
     missingSheet: "Nedostaje račun",
     invalidSheet: "Iznos nije za isplatu",
     subcontractorSheet: "Podizvođači",
+    jmbgSheet: "Nedostaje JMBG",
   },
 };
 export const bankLabels = (lang = "rs") => BANK_LABELS[lang] || BANK_LABELS.rs;
@@ -296,6 +302,8 @@ export const bankLabels = (lang = "rs") => BANK_LABELS[lang] || BANK_LABELS.rs;
  *  - `invalidAmount`: zaposleni čiji je neto ≤ 0 — upozorenje, nikad u spisku za banku (proverava se pre računa);
  *  - `missingAccount`: zaposleni bez računa — upozorenje, nikad tiho preskočen;
  *  - `subcontractors`: radnici preko podizvođača (neto prazan) — iznos `payout`, plaća se faktura podizvođača.
+ * Dodatno `missingJmbg`: radnici iz `payments` čiji je JMBG prazan — OSTAJU u isplatama (banka plaća po računu), ali
+ * ih izvoz prijavljuje (list „Nedostaje JMBG" i upozorenje na stranici), nikad tiho.
  * @throws {Error} za nacrt (ili obračun bez statusa) i za listić zaposlenog bez neto iznosa
  */
 export function bankExportRows({ run, payslips, employees, vendorNames }) {
@@ -311,6 +319,7 @@ export function bankExportRows({ run, payslips, employees, vendorNames }) {
   const invalidAmount = [];
   const missingAccount = [];
   const subcontractors = [];
+  const missingJmbg = [];
   for (const s of sorted) {
     const emp = empById.get(s.employee_id);
     const base = { employeeId: s.employee_id, employeeName: s.employee_name || "", employeeCode: emp?.employee_id || "" };
@@ -323,7 +332,10 @@ export function bankExportRows({ run, payslips, employees, vendorNames }) {
     const row = { ...base, jmbg: clean(emp?.jmbg), amount: s.neto, currency: PAYOUT_CURRENCY, description };
     const account = clean(emp?.iban);
     if (!(toNumber(s.neto) > 0)) invalidAmount.push(row); // nikad iznos ≤ 0 u nalogu za banku
-    else if (account) payments.push({ ...row, bankName: clean(emp?.bank_name), account });
+    else if (account) {
+      payments.push({ ...row, bankName: clean(emp?.bank_name), account });
+      if (!row.jmbg) missingJmbg.push({ ...row, bankName: clean(emp?.bank_name), account }); // ostaje u isplatama, ali sa upozorenjem
+    }
     else missingAccount.push(row);
   }
   const number = (rows) => rows.map((r, i) => ({ no: i + 1, ...r }));
@@ -333,12 +345,13 @@ export function bankExportRows({ run, payslips, employees, vendorNames }) {
     invalidAmount: number(invalidAmount),
     missingAccount: number(missingAccount),
     subcontractors: number(subcontractors),
+    missingJmbg: number(missingJmbg),
   };
 }
 
 /**
  * Tabele (niz redova) za Excel iz bankExportRows: list isplata i, ako ih ima, „Iznos nije za isplatu",
- * „Nedostaje račun" i „Podizvođači".
+ * „Nedostaje račun", „Nedostaje JMBG" i „Podizvođači".
  * Iznos ostaje broj iz baze (ćelija sa formatom „#,##0.00"), JMBG i račun su tekst (vodeće nule).
  */
 export function bankExportSheets(rows, run, lang = "rs") {
@@ -368,6 +381,15 @@ export function bankExportSheets(rows, run, lang = "rs") {
       rows: rows.missingAccount.map((r) => [r.no, r.employeeName, r.employeeCode, r.jmbg, r.amount, r.currency, r.description, L.missingNote]),
       amountColumn: 4,
       widths: [5, 30, 14, 16, 12, 8, 18, 60],
+    });
+  }
+  if (rows.missingJmbg?.length) {
+    sheets.push({
+      name: L.jmbgSheet,
+      header: L.jmbg,
+      rows: rows.missingJmbg.map((r) => [r.no, r.employeeName, r.employeeCode, r.bankName, r.account, r.amount, r.currency, L.jmbgNote]),
+      amountColumn: 5,
+      widths: [5, 30, 14, 20, 28, 12, 8, 70],
     });
   }
   if (rows.subcontractors.length) {

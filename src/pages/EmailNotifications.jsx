@@ -15,6 +15,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import PageHeader from "@/components/shared/PageHeader";
 import { useL } from "@/lib/translations";
+import { companyNameOf, fillEmailTemplate, COMPANY_NAME_MISSING } from "@/lib/emailTemplate";
 
 const TEMPLATE_TYPES = [
   { value: "timesheet_reminder", label: "Timesheet Reminder", rs: "Podsetnik za satnicu" },
@@ -74,6 +75,13 @@ export default function EmailNotifications() {
     queryKey: ["email_templates"],
     queryFn: () => base44.entities.EmailTemplate.list("-created_date", 100),
   });
+
+  // Naziv firme za {company_name} iz „Podaci firme" (D18) — ne upisan u kodu.
+  const { data: companyRows = [] } = useQuery({
+    queryKey: ["company-settings"],
+    queryFn: () => base44.entities.CompanySettings.list(null, 1),
+  });
+  const companyName = companyNameOf(companyRows[0]);
 
   const { data: employees = [] } = useQuery({
     queryKey: ["employees"],
@@ -145,14 +153,17 @@ export default function EmailNotifications() {
     }
     if (!sendForm.subject || !sendForm.body) { toast.error(L("Subject and body required", "Naslov i tekst su obavezni")); return; }
 
+    if (!companyName && /{company_name}/.test(`${sendForm.subject} ${sendForm.body}`)) {
+      toast.error(L(`Company name is not entered (Settings → Company details) — the message would go out with “${COMPANY_NAME_MISSING}”.`, `Naziv firme nije unet (Podešavanja → Podaci firme) — poruka bi otišla sa „${COMPANY_NAME_MISSING}“.`), { duration: 12000 });
+      return;
+    }
+
     setSending(true);
     let successCount = 0;
     try {
       for (const emp of targets) {
         // Menjaju se samo ove dve promenljive, i u naslovu i u telu (ranije samo u telu).
-        const fill = (text) => text
-          .replace(/{employee_name}/g, `${emp.first_name} ${emp.last_name}`)
-          .replace(/{company_name}/g, "Stelux Construct DOO");
+        const fill = (text) => fillEmailTemplate(text, { employeeName: `${emp.first_name} ${emp.last_name}`, companyName });
         const body = fill(sendForm.body);
         await base44.integrations.Core.SendEmail({
           to: emp.email,
@@ -286,6 +297,13 @@ export default function EmailNotifications() {
               <Label>{L("Body *", "Tekst *")}</Label>
               <Textarea value={sendForm.body || ""} onChange={(e) => setSendForm((p) => ({ ...p, body: e.target.value }))} rows={7} className="text-sm" />
               <p className="text-xs text-muted-foreground">{"{employee_name}"} {L("will be replaced automatically for each recipient", "se automatski zamenjuje za svakog primaoca")}</p>
+              <div className="rounded-md border bg-muted/40 p-3" data-testid="email-preview">
+                <p className="text-xs font-medium text-muted-foreground mb-1">{L("Preview", "Pregled")}</p>
+                <p className="text-sm whitespace-pre-wrap">{fillEmailTemplate(sendForm.body || "", { companyName })}</p>
+                {!companyName && (
+                  <p className="text-xs text-destructive mt-2">{L("Company name is not entered (Settings → Company details).", "Naziv firme nije unet (Podešavanja → Podaci firme).")}</p>
+                )}
+              </div>
             </div>
             <div className="space-y-3">
               <Label>{L("Recipients", "Primaoci")}</Label>

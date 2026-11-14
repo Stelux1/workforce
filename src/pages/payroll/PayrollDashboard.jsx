@@ -9,7 +9,7 @@ import StatCard from "@/components/dashboard/StatCard";
 import StatusBadge from "@/components/shared/StatusBadge";
 import { useT } from "@/lib/translations";
 import { useLang } from "@/lib/LanguageContext";
-import { formatDate, shortDatePattern } from "@/lib/dateFormat";
+import { formatDate } from "@/lib/dateFormat";
 import { round2 } from "@/lib/payroll/money";
 import { payrollDue, timesheetTotals, totalsByClient, totalsByWorker } from "@/lib/payroll/reports";
 
@@ -219,7 +219,7 @@ export default function PayrollDashboard() {
               <div key={ts.id} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-muted/50 transition-colors">
                 <div>
                   <p className="text-sm font-medium">{ts.employee_name}</p>
-                  <p className="text-xs text-muted-foreground">{ts.date && formatDate(parseISO(ts.date), shortDatePattern(lang), lang)} · {ts.total_hours?.toFixed(1)}h</p>
+                  <p className="text-xs text-muted-foreground">{ts.week_start && `${lang === "rs" ? "nedelja od" : "week of"} ${formatDate(parseISO(ts.week_start), "dd.MM.yyyy", lang)}`} · {Number(ts.total_hours ?? 0).toFixed(1)}h</p>
                 </div>
                 <StatusBadge status={ts.approval_status} />
               </div>

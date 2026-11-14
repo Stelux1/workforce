@@ -300,6 +300,11 @@ export default function MonthlyPayroll() {
         toast.warning(L(`No bank account — NOT in the bank list (sheet "Nedostaje račun"): ${names}`,
           `Bez računa — NISU u spisku za banku (list „Nedostaje račun"): ${names}`), { duration: 20000 });
       }
+      if (rows.missingJmbg.length) {
+        const names = rows.missingJmbg.map((r) => r.employeeName).join(", ");
+        toast.warning(L(`JMBG missing — still in the bank list, please add it (sheet "Nedostaje JMBG"): ${names}`,
+          `Nedostaje JMBG — ostaju u spisku za banku, dopunite ga (list „Nedostaje JMBG"): ${names}`), { duration: 20000 });
+      }
       if (rows.subcontractors.length) {
         const names = rows.subcontractors.map((r) => r.employeeName).join(", ");
         toast.info(L(`Via a subcontractor — paid by the subcontractor's invoice, not in the salary list (sheet "Podizvođači"): ${names}`,

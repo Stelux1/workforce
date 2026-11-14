@@ -223,6 +223,22 @@ describe("spisak isplata za banku", () => {
     const excelSum = sum2([...pay.slice(1).map((r) => r[6]), ...missing.slice(1).map((r) => r[4])]);
     expect(excelSum).toBe(sum2(PAYSLIPS.map((s) => s.neto ?? 0)));
   });
+  it("radnik bez JMBG-a ostaje u isplatama, ali je prijavljen: missingJmbg + list Nedostaje JMBG", () => {
+    const noJmbg = { ...SLIP_BIG, id: "s-nj", employee_id: "e5", employee_name: "Bez Jmbga" };
+    const emps = [...EMPLOYEES, { id: "e5", employee_id: "EMP-050", first_name: "Bez", last_name: "Jmbga", jmbg: "  ", bank_name: "Banka C", iban: "RS35222222222222222222" }];
+    const r = bankExportRows({ run: run("approved"), payslips: [SLIP_EMP, noJmbg], employees: emps });
+    expect(r.payments.map((x) => x.employeeName)).toEqual(["Bez Jmbga", "Petar Petrović"]); // nije izbačen iz isplata
+    expect(r.missingJmbg).toEqual([expect.objectContaining({ no: 1, employeeName: "Bez Jmbga", employeeCode: "EMP-050", account: "RS35222222222222222222", amount: SLIP_BIG.neto })]);
+    const wb = buildBankWorkbook(r, run("approved"));
+    expect(wb.SheetNames).toEqual(["Isplate 03.2026", "Nedostaje JMBG"]);
+    const sheet = XLSX.utils.sheet_to_json(wb.Sheets["Nedostaje JMBG"], { header: 1 });
+    expect(sheet[1].slice(0, 3)).toEqual([1, "Bez Jmbga", "EMP-050"]);
+    expect(sheet[1][7]).toMatch(/Nedostaje JMBG/);
+    expect(sheet[1][5]).toBe(SLIP_BIG.neto);
+    // svi radnici sa JMBG-om → nema upozorenja ni lista
+    const ok = bankExportRows({ run: run("paid"), payslips: [SLIP_EMP], employees: EMPLOYEES });
+    expect(ok.missingJmbg).toEqual([]);
+  });
   it("bez radnika bez računa i bez podizvođača — samo list isplata", () => {
     const only = bankExportRows({ run: run("paid"), payslips: [SLIP_EMP], employees: EMPLOYEES });
     expect(buildBankWorkbook(only, run("paid")).SheetNames).toEqual(["Isplate 03.2026"]);
