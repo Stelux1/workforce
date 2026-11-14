@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useUnsavedUpload } from "@/lib/useUnsavedUpload";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -162,6 +163,7 @@ export default function EmployeeDetail() {
   const [docDialogOpen, setDocDialogOpen] = useState(false);
   const [docForm, setDocForm] = useState({});
   const [uploading, setUploading] = useState(false);
+  const docUpload = useUnsavedUpload();
   const [uploadFailed, setUploadFailed] = useState(false);
   const [previewDoc, setPreviewDoc] = useState(null);
   const [deleteDocId, setDeleteDocId] = useState(null);
@@ -182,6 +184,7 @@ export default function EmployeeDetail() {
       queryClient.invalidateQueries({ queryKey: ["employee-docs", empId] });
       queryClient.invalidateQueries({ queryKey: ["documents"] });
       toast.success(t("Document uploaded"));
+      docUpload.commit();
       setDocDialogOpen(false);
       setDocForm({});
     },
@@ -203,8 +206,10 @@ export default function EmployeeDetail() {
     setUploadFailed(false);
     try {
       const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      docUpload.track(file_url);
       setDocForm((prev) => ({ ...prev, file_url, file_name: file.name }));
     } catch (err) {
+      docUpload.discard();
       setUploadFailed(true); // čuvanje blokirano dok se ne izabere drugi fajl (QA 14.11.2026)
       setDocForm((prev) => ({ ...prev, file_url: "", file_name: "" }));
       throw err; // poruku prikazuje lib/errorToasts.js
@@ -435,7 +440,7 @@ export default function EmployeeDetail() {
           <DocumentPreviewModal doc={previewDoc} open={!!previewDoc} onClose={() => setPreviewDoc(null)} />
 
           {/* Upload Document Dialog */}
-          <Dialog open={docDialogOpen} onOpenChange={setDocDialogOpen}>
+          <Dialog open={docDialogOpen} onOpenChange={(o) => { if (!o) docUpload.discard(); setDocDialogOpen(o); }}>
             <DialogContent className="max-w-lg">
               <DialogHeader><DialogTitle>{t("Upload Document")}</DialogTitle></DialogHeader>
               <div className="space-y-4">
@@ -476,7 +481,7 @@ export default function EmployeeDetail() {
                 </div>
               </div>
               <DialogFooter>
-                <Button variant="outline" onClick={() => setDocDialogOpen(false)}>{t("Cancel")}</Button>
+                <Button variant="outline" onClick={() => { docUpload.discard(); setDocDialogOpen(false); }}>{t("Cancel")}</Button>
                 <Button onClick={handleDocSave} disabled={createDocMutation.isPending || uploading || uploadFailed}>{t("Save")}</Button>
               </DialogFooter>
             </DialogContent>

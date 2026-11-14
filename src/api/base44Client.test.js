@@ -72,6 +72,27 @@ describe("otpremanje fajla", () => {
   });
 });
 
+describe("odbacivanje nesačuvanog fajla (Otkaži posle otpremanja)", () => {
+  beforeEach(() => { state.removed = []; });
+
+  it("briše objekat po potpisanom linku", async () => {
+    await base44.integrations.Core.DiscardUpload({ file_url: "http://x/storage/v1/object/sign/files/2026-11/a-b.pdf?token=t" });
+    expect(state.removed).toEqual(["2026-11/a-b.pdf"]);
+  });
+
+  it("briše objekat i po storage:// referenci", async () => {
+    await base44.integrations.Core.DiscardUpload({ file_url: "storage://files/2026-11/c.pdf" });
+    expect(state.removed).toEqual(["2026-11/c.pdf"]);
+  });
+
+  it("ignoriše sve što nije u našem bucketu", async () => {
+    await base44.integrations.Core.DiscardUpload({ file_url: "https://example.com/a.pdf" });
+    await base44.integrations.Core.DiscardUpload({ file_url: "" });
+    await base44.integrations.Core.DiscardUpload({});
+    expect(state.removed).toEqual([]);
+  });
+});
+
 describe("potpisani linkovi se osvežavaju pre isteka", () => {
   it("osvežavanje je pre isteka linka", async () => {
     const { SIGNED_URL_REFRESH_MS, STALE_AFTER_MS } = await import("@/lib/query-client");

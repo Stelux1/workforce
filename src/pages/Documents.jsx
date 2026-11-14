@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useUnsavedUpload } from "@/lib/useUnsavedUpload";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { parseISO } from "date-fns";
 import { formatDate, longDatePattern } from "@/lib/dateFormat";
@@ -36,6 +37,7 @@ export default function Documents() {
   const [catFilter, setCatFilter] = useState("all");
   const [form, setForm] = useState({});
   const [uploading, setUploading] = useState(false);
+  const docUpload = useUnsavedUpload();
   const [uploadFailed, setUploadFailed] = useState(false);
   const [view, setView] = useViewPreference("documents", "list");
   const [sort, setSort] = useState("title_asc");
@@ -57,6 +59,7 @@ export default function Documents() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["documents"] });
       toast.success(t("Document uploaded"));
+      docUpload.commit();
       setDialogOpen(false);
       setForm({});
     },
@@ -77,11 +80,13 @@ export default function Documents() {
     setUploadFailed(false);
     try {
       const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      docUpload.track(file_url);
       setForm((prev) => ({ ...prev, file_url, file_name: file.name }));
     } catch (err) {
       // Izabrani fajl nije otpremljen: čuvanje se blokira dok se ne izabere drugi fajl ili ukloni izbor
       // (ranije se dokument tiho čuvao bez fajla, QA 14.11.2026). Poruku prikazuje lib/errorToasts.js.
       setUploadFailed(true);
+      docUpload.discard();
       setForm((prev) => ({ ...prev, file_url: "", file_name: "" }));
       throw err;
     } finally {
@@ -270,7 +275,7 @@ export default function Documents() {
       />
 
       {/* Upload Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={(o) => { if (!o) docUpload.discard(); setDialogOpen(o); }}>
         <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle>{t("Upload Document")}</DialogTitle></DialogHeader>
           <div className="space-y-4">
@@ -323,7 +328,7 @@ export default function Documents() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>{t("Cancel")}</Button>
+            <Button variant="outline" onClick={() => { docUpload.discard(); setDialogOpen(false); }}>{t("Cancel")}</Button>
             <Button onClick={handleSave} disabled={createMutation.isPending || uploading || uploadFailed}>{t("Save")}</Button>
           </DialogFooter>
         </DialogContent>

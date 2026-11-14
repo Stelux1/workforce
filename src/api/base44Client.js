@@ -200,6 +200,16 @@ async function removeFiles(paths, context) {
   if (error) warn(`Fajlovi nisu obrisani (${context}):`, error.message);
 }
 
+// Briše fajl otpremljen u formi koja je otkazana/zatvorena pre čuvanja (QA 14.11.2026). Prima potpisan link ili
+// storage:// referencu; sve što nije u našem bucketu se ignoriše. Greška se samo beleži, korisnik je ne vidi.
+async function DiscardUpload({ file_url } = {}) {
+  try {
+    await removeFiles(storagePaths([file_url]), "DiscardUpload");
+  } catch (e) {
+    warn("Otpremljeni fajl nije obrisan (DiscardUpload):", e?.message || e);
+  }
+}
+
 // ───────────────────────── generički entitet ─────────────────────────
 function makeEntity(name, table) {
   const selectCols = table === "employees" ? "*, employee_private(*)" : "*";
@@ -390,7 +400,7 @@ const auth = {
 
 export const base44 = {
   entities,
-  integrations: { Core: { UploadFile, SendEmail } },
+  integrations: { Core: { UploadFile, DiscardUpload, SendEmail } },
   auth,
   rpc: async (fn, args) => {
     const { data, error } = await requireSupabase().rpc(fn, args);

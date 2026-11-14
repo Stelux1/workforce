@@ -20,6 +20,7 @@ import { useViewPreference } from "@/hooks/useViewPreference";
 import SortSelect from "@/components/shared/SortSelect";
 import { exportTimesheetPDF } from "@/lib/timesheetPdf";
 import TimesheetPreviewModal from "@/components/timesheets/TimesheetPreviewModal";
+import { useUnsavedUpload } from "@/lib/useUnsavedUpload";
 import ConfirmDeleteDialog from "@/components/shared/ConfirmDeleteDialog";
 import { resolveAffiliation } from "@/lib/rateEngine";
 import { useT } from "@/lib/translations";
@@ -192,6 +193,7 @@ export default function Timesheets() {
   const [deleteTsId, setDeleteTsId] = useState(null);
   const [confirmMassDelete, setConfirmMassDelete] = useState(false);
   const [uploadingFile, setUploadingFile] = useState(false);
+  const attachmentUpload = useUnsavedUpload();
   const [manualProject, setManualProject] = useState(false);
 
   const { isAdmin } = useAuth();
@@ -236,7 +238,7 @@ export default function Timesheets() {
 
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.Timesheet.create(data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["timesheets"] }); toast.success(T.rowAdded); setDialogOpen(false); setNewRowForm({}); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["timesheets"] }); toast.success(T.rowAdded); attachmentUpload.commit(); setDialogOpen(false); setNewRowForm({}); },
   });
 
   const updateMutation = useMutation({
@@ -325,6 +327,7 @@ export default function Timesheets() {
     setUploadingFile(true);
     try {
       const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      attachmentUpload.track(file_url);
       setNewRowForm((p) => ({ ...p, attachment_url: file_url, attachment_name: file.name }));
     } finally {
       setUploadingFile(false); // greška se prikazuje globalno (lib/errorToasts.js)
@@ -818,7 +821,7 @@ export default function Timesheets() {
       />
 
       {/* Add Row Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={(o) => { if (!o) attachmentUpload.discard(); setDialogOpen(o); }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{T.addTimesheetRow}</DialogTitle>
@@ -1000,7 +1003,7 @@ export default function Timesheets() {
                   <span className="flex-1 truncate text-xs">{newRowForm.attachment_name || "attachment.pdf"}</span>
                   <button
                     type="button"
-                    onClick={() => setNewRowForm((p) => ({ ...p, attachment_url: "", attachment_name: "" }))}
+                    onClick={() => { attachmentUpload.discard(); setNewRowForm((p) => ({ ...p, attachment_url: "", attachment_name: "" })); }}
                     className="text-muted-foreground hover:text-destructive text-xs"
                   >
                     <X className="w-3.5 h-3.5" />
@@ -1025,7 +1028,7 @@ export default function Timesheets() {
             </div>
             </div>
             <DialogFooter>
-            <Button variant="outline" onClick={() => { setDialogOpen(false); setNewRowForm({}); setManualProject(false); }}>{T.cancel}</Button>
+            <Button variant="outline" onClick={() => { attachmentUpload.discard(); setDialogOpen(false); setNewRowForm({}); setManualProject(false); }}>{T.cancel}</Button>
             <Button onClick={handleAddRow} disabled={createMutation.isPending}>{T.addRow}</Button>
           </DialogFooter>
         </DialogContent>

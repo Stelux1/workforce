@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 import { ArrowLeft, Save, Upload, User, Phone, Briefcase, Landmark, Heart, IdCard } from "lucide-react";
 import { toast } from "sonner";
+import { useUnsavedUpload } from "@/lib/useUnsavedUpload";
 import { useT } from "@/lib/translations";
 import { useAuth } from "@/lib/AuthContext";
 import { privateFieldErrors, normalizePrivate } from "@/lib/employeePrivate";
@@ -25,6 +26,7 @@ export default function EmployeeForm() {
 
   const [form, setForm] = useState({ status: "active" });
   const [uploading, setUploading] = useState(false);
+  const photoUpload = useUnsavedUpload();
 
   const { data: existing } = useQuery({
     queryKey: ["employee", editId],
@@ -62,6 +64,7 @@ export default function EmployeeForm() {
         ? base44.entities.Employee.update(editId, data)
         : base44.entities.Employee.create(data),
     onSuccess: () => {
+      photoUpload.commit();
       queryClient.invalidateQueries({ queryKey: ["employees"] });
       toast.success(T("Employee saved"));
       navigate("/employees");
@@ -75,6 +78,7 @@ export default function EmployeeForm() {
     try {
       // „Maks 5MB" sa ekrana se sada i proverava (ranije je prolazila i fotografija od 6 MB).
       const { file_url } = await base44.integrations.Core.UploadFile({ file, maxBytes: 5 * 1024 * 1024 });
+      photoUpload.track(file_url); // prethodna nesačuvana fotografija se briše
       setForm((prev) => ({ ...prev, profile_photo: file_url }));
     } finally {
       setUploading(false); // greška se prikazuje globalno (lib/errorToasts.js)
