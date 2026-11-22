@@ -12,7 +12,8 @@ Princip (D12): postojeće stranice ostaju iste; menja se izvor podataka i novča
 - [x] [build] *(opus)* Šema po imenima polja iz aplikacije (D12): sve Base44 tabele + `employee_private`, `project_id`/`client_id` veze, zaključavanje meseca, odobravanje satnica samo za admina i samo sa tarifom, mesečni obračun (`payroll_runs`/`payslips`). Accept: `npm run test:db` — 35 testova zeleno.
 - [x] [build] *(opus)* Prijava i uloge (Supabase Auth, `AuthLayout`, `src/lib/access.js`). Accept: neprijavljen vidi prijavu; operater ne vidi novčane stranice i direktan URL ga vraća na početnu — provereno u pregledaču.
 - [x] [build] Sloj podataka sa istim pozivima kao Base44 (`src/api/base44Client.js`) + uklonjen Base44 vite plugin. Accept: dodavanje radnika, klijenta i projekta kroz postojeće forme radi; banka/IBAN završavaju u `employee_private`; projekat dobija `client_id` — provereno u pregledaču.
-- [ ] NEEDS-USER: napraviti Supabase projekat (besplatan plan) kad krećemo na server; ključeve upisati u `.env.local` sam — ne slati u chat.
+- [x] NEEDS-USER: napraviti Supabase projekat (besplatan plan) kad krećemo na server. Urađeno 22.11.2026: projekat `workforce` (ref `yuhsygsaxiodmxfydgyi`, eu-west-1), GitHub `Stelux1/workforce` povezan, „Deploy to production" na grani `main` — svaki push na `main` primenjuje nove migracije; `seed.sql` i auth podešavanja iz `config.toml` se NE prenose (podešavaju se u Supabase-u).
+- [ ] NEEDS-USER: URL i Publishable key produkcionog projekta upisati u `.env.local` sam — ne slati u chat. Lukin nalog napraviti prvi (prvi nalog postaje admin), pa isključiti registraciju i podići minimalnu lozinku na 10 (D14, dopuna 14.11.2026).
 
 ## Phase 1 — Sve postojeće stranice na novoj bazi
 
