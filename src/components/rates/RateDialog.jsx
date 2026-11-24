@@ -25,6 +25,15 @@ const LABELS = {
     active: "Aktivna", inactive: "Neaktivna", notes: "Napomene", save: "Sačuvaj", cancel: "Otkaži",
     selectEmployee: "Izaberite zaposlenog", selectProject: "Izaberite projekat", selectAssignment: "Izaberite dodjelu",
   },
+  sk: {
+    add: "Pridať sadzbu", edit: "Upraviť sadzbu", scope: "Platí pre", assignment: "Konkrétne pridelenie",
+    project: "Projekt / rola", employee: "Predvolené pre zamestnanca", kind: "Typ", cost: "Náklad (na úhradu)",
+    revenue: "Tržba (fakturovateľná)", employeeName: "Zamestnanec", projectName: "Projekt", position: "Rola / pozícia",
+    assignmentName: "Pridelenie", unit: "Jednotka sadzby", amount: "Suma", currency: "Mena",
+    from: "Platí od", to: "Platí do", open: "prázdne = na neurčito", status: "Stav",
+    active: "Aktívna", inactive: "Neaktívna", notes: "Poznámky", save: "Uložiť", cancel: "Zrušiť",
+    selectEmployee: "Vyberte zamestnanca", selectProject: "Vyberte projekt", selectAssignment: "Vyberte pridelenie",
+  },
 };
 
 export default function RateDialog({ open, onOpenChange, form, setForm, onSave, saving, employees = [], projects = [], assignments = [], lang }) {

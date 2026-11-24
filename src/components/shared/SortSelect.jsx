@@ -1,5 +1,4 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowUpAZ, ArrowDownAZ } from "lucide-react";
 
 export default function SortSelect({ value, onValueChange, options }) {
   return (

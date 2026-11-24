@@ -15,6 +15,8 @@ import {
 
 import { useL } from "@/lib/translations";
 import { useAuth } from "@/lib/AuthContext";
+import { negativeLabourMargin } from "@/lib/projectSite";
+import NegativeMarginNote from "@/components/projects/NegativeMarginNote";
 
 // Satnica radnika na projektu je tarifa (2. nivo izbora tarife, D4) — upisuje je samo admin (baza: guard_project_rates).
 // Isto pravilo kao rate_value u bazi: broj (ili tekst broja) > 0.
@@ -42,6 +44,9 @@ export default function ProjectEmployees({ project, onUpdated }) {
   const jobRoles = project.job_roles || [];
 
   const resolvedRole = jobRoles.find((r) => r.title === selectedRoleTitle) || null;
+  // Tarife koje će dijalog sačuvati (isto kao handleAdd/handleEditSave) — za prikaz zarade i upozorenje (spec §5).
+  const dialogB2C = customB2CRate ? parseFloat(customB2CRate) : resolvedRole?.b2c_rate ?? editEntry?.b2c_rate;
+  const dialogB2B = resolvedRole?.b2b_rate ?? editEntry?.b2b_rate;
 
   const updateMutation = useMutation({
     mutationFn: (newAssigned) =>
@@ -143,19 +148,19 @@ export default function ProjectEmployees({ project, onUpdated }) {
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <Users className="w-4 h-4 text-primary" />
-          <h2 className="font-semibold">{L("Employees on the project", "Zaposleni na projektu")}</h2>
+          <h2 className="font-semibold">{L("Employees on the project", "Zaposleni na projektu", "Zamestnanci na projekte")}</h2>
           <Badge variant="secondary">{assigned.length}</Badge>
         </div>
         <Button size="sm" onClick={() => { setEditEntry(null); setShowAdd(true); }}>
           <Plus className="w-4 h-4" />
-          {L("Add employee", "Dodaj zaposlenog")}
+          {L("Add employee", "Dodaj zaposlenog", "Pridať zamestnanca")}
         </Button>
       </div>
 
       {assigned.length === 0 ? (
         <div className="text-center py-8 text-muted-foreground text-sm">
           <Users className="w-8 h-8 mx-auto mb-2 opacity-30" />
-          <p>{L("No employees on the project", "Nema zaposlenih na projektu")}</p>
+          <p>{L("No employees on the project", "Nema zaposlenih na projektu", "Na projekte nie sú žiadni zamestnanci")}</p>
         </div>
       ) : (
         <div className="space-y-2">
@@ -171,14 +176,17 @@ export default function ProjectEmployees({ project, onUpdated }) {
                      B2B: €{emp.b2b_rate ?? "—"}/h · B2C: €{emp.b2c_rate ?? "—"}/h
                    </p>
                  )}
+                {isAdmin && negativeLabourMargin(emp.b2c_rate, emp.b2b_rate) && (
+                  <div className="mt-1"><NegativeMarginNote L={L} compact /></div>
+                )}
               </div>
               {!isAdmin && hasRate(emp) ? (
                 <span
                   className="flex items-center px-2 text-muted-foreground"
-                  title={L("The rate for this employee was set by an admin — only an admin can change or remove them.", "Tarifu ovog radnika je odredio admin — menja ga i uklanja samo admin.")}
+                  title={L("The rate for this employee was set by an admin — only an admin can change or remove them.", "Tarifu ovog radnika je odredio admin — menja ga i uklanja samo admin.", "Sadzbu tohto zamestnanca určil administrátor — meniť alebo odstrániť ju môže iba administrátor.")}
                 >
                   <Lock className="w-3.5 h-3.5" aria-hidden="true" />
-                  <span className="sr-only">{L("Only an admin can change this employee", "Ovog radnika menja samo admin")}</span>
+                  <span className="sr-only">{L("Only an admin can change this employee", "Ovog radnika menja samo admin", "Tohto zamestnanca môže meniť iba administrátor")}</span>
                 </span>
               ) : (
               <div className="flex items-center gap-1">
@@ -209,20 +217,20 @@ export default function ProjectEmployees({ project, onUpdated }) {
       <Dialog open={showAdd} onOpenChange={(o) => { if (!o) closeDialog(); }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>{editEntry ? L("Edit employee", "Uredi zaposlenog") : L("Add employee to project", "Dodaj zaposlenog na projekat")}</DialogTitle>
+            <DialogTitle>{editEntry ? L("Edit employee", "Uredi zaposlenog", "Upraviť zamestnanca") : L("Add employee to project", "Dodaj zaposlenog na projekat", "Pridať zamestnanca na projekt")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             {/* Employee dropdown — only for new */}
             {!editEntry && (
               <div>
-                <Label>{L("Employee", "Zaposleni")}</Label>
+                <Label>{L("Employee", "Zaposleni", "Zamestnanec")}</Label>
                 <Select value={selectedEmployeeId} onValueChange={setSelectedEmployeeId}>
                   <SelectTrigger className="mt-1">
-                    <SelectValue placeholder={L("Select employee...", "Odaberi zaposlenog...")} />
+                    <SelectValue placeholder={L("Select employee...", "Odaberi zaposlenog...", "Vyberte zamestnanca...")} />
                   </SelectTrigger>
                   <SelectContent>
                     {available.length === 0 ? (
-                      <SelectItem value="__none" disabled>{L("All employees have already been added", "Svi zaposleni su već dodati")}</SelectItem>
+                      <SelectItem value="__none" disabled>{L("All employees have already been added", "Svi zaposleni su već dodati", "Všetci zamestnanci sú už pridaní")}</SelectItem>
                     ) : (
                       available.map((emp) => (
                         <SelectItem key={emp.id} value={emp.id}>
@@ -238,12 +246,12 @@ export default function ProjectEmployees({ project, onUpdated }) {
 
             {/* Role / position */}
             <div>
-              <Label>{L("Job role / position", "Zanimanje / pozicija")}</Label>
+              <Label>{L("Job role / position", "Zanimanje / pozicija", "Pracovná rola / pozícia")}</Label>
               {jobRoles.length > 0 ? (
                 <>
                   <Select value={selectedRoleTitle} onValueChange={setSelectedRoleTitle}>
                     <SelectTrigger className="mt-1">
-                      <SelectValue placeholder={L("Select job role...", "Odaberi zanimanje...")} />
+                      <SelectValue placeholder={L("Select job role...", "Odaberi zanimanje...", "Vyberte pracovnú rolu...")} />
                     </SelectTrigger>
                     <SelectContent>
                       {jobRoles.map((r) => (
@@ -253,14 +261,14 @@ export default function ProjectEmployees({ project, onUpdated }) {
                             : r.title}
                         </SelectItem>
                       ))}
-                      <SelectItem value="__custom">{L("Other (enter manually)", "Ostalo (unesi ručno)")}</SelectItem>
+                      <SelectItem value="__custom">{L("Other (enter manually)", "Ostalo (unesi ručno)", "Iné (zadať ručne)")}</SelectItem>
                     </SelectContent>
                   </Select>
                   {selectedRoleTitle === "__custom" && (
                     <Input
                       value={customPosition}
                       onChange={(e) => setCustomPosition(e.target.value)}
-                      placeholder={L("Enter position...", "Unesite poziciju...")}
+                      placeholder={L("Enter position...", "Unesite poziciju...", "Zadajte pozíciu...")}
                       className="mt-2"
                     />
                   )}
@@ -269,7 +277,7 @@ export default function ProjectEmployees({ project, onUpdated }) {
                   <Input
                   value={customPosition}
                   onChange={(e) => setCustomPosition(e.target.value)}
-                  placeholder={L("Enter position...", "Unesite poziciju...")}
+                  placeholder={L("Enter position...", "Unesite poziciju...", "Zadajte pozíciu...")}
                   className="mt-1"
                   />
                   )}
@@ -277,25 +285,25 @@ export default function ProjectEmployees({ project, onUpdated }) {
 
                   {!isAdmin && (
                     <p className="text-xs text-muted-foreground">
-                      {L("The employee's rate on the project is entered by an admin. Until then the project, job role and employee rates apply.", "Satnicu radnika na projektu upisuje admin. Do tada važe tarife projekta, zanimanja i radnika.")}
+                      {L("The employee's rate on the project is entered by an admin. Until then the project, job role and employee rates apply.", "Satnicu radnika na projektu upisuje admin. Do tada važe tarife projekta, zanimanja i radnika.", "Sadzbu zamestnanca na projekte zadáva administrátor. Dovtedy platia sadzby projektu, pracovnej roly a zamestnanca.")}
                     </p>
                   )}
 
                   {/* Manual B2C rate input — samo admin (tarifa, D3/D4) */}
                   {isAdmin && (resolvedRole || selectedRoleTitle) && (
                   <div>
-                  <Label>{L("B2C rate - manual entry (€/h)", "B2C tarifa - ručni unos (€/h)")}</Label>
+                  <Label>{L("B2C rate - manual entry (€/h)", "B2C tarifa - ručni unos (€/h)", "Sadzba B2C – ručné zadanie (€/h)")}</Label>
                   <Input
                   type="number"
                   min="0"
                   step="0.5"
                   value={customB2CRate}
                   onChange={(e) => setCustomB2CRate(e.target.value)}
-                  placeholder={resolvedRole?.b2c_rate ? L(`Default: €${resolvedRole.b2c_rate}/h`, `Podrazumevano: €${resolvedRole.b2c_rate}/h`) : "0.00"}
+                  placeholder={resolvedRole?.b2c_rate ? L(`Default: €${resolvedRole.b2c_rate}/h`, `Podrazumevano: €${resolvedRole.b2c_rate}/h`, `Predvolené: €${resolvedRole.b2c_rate}/h`) : "0.00"}
                   className="mt-1"
                   />
                   <p className="text-xs text-muted-foreground mt-1">
-                    {resolvedRole?.b2c_rate ? L("Leave empty for the default value", "Ostavite prazno za zadatu vrednost") : L("Without a B2C rate, this employee's timesheets cannot be approved.", "Bez B2C tarife satnice ovog radnika ne mogu da se odobre.")}
+                    {resolvedRole?.b2c_rate ? L("Leave empty for the default value", "Ostavite prazno za zadatu vrednost", "Nechajte prázdne pre predvolenú hodnotu") : L("Without a B2C rate, this employee's timesheets cannot be approved.", "Bez B2C tarife satnice ovog radnika ne mogu da se odobre.", "Bez sadzby B2C nemožno schváliť výkazy tohto zamestnanca.")}
                   </p>
                   </div>
                   )}
@@ -305,33 +313,36 @@ export default function ProjectEmployees({ project, onUpdated }) {
                     <div className="rounded-lg bg-muted/60 px-4 py-2 text-sm grid grid-cols-3 gap-2 text-center">
                       <div>
                         <p className="text-xs text-muted-foreground">B2B</p>
-                        <p className="font-semibold">€{resolvedRole?.b2b_rate || "—"}/h</p>
+                        <p className="font-semibold">€{dialogB2B || "—"}/h</p>
                       </div>
                       <div>
                         <p className="text-xs text-muted-foreground">B2C</p>
-                        <p className="font-semibold">€{customB2CRate ? parseFloat(customB2CRate).toFixed(2) : (resolvedRole?.b2c_rate || "—")}/h</p>
+                        <p className="font-semibold">€{customB2CRate ? parseFloat(customB2CRate).toFixed(2) : (dialogB2C || "—")}/h</p>
                       </div>
                       <div>
-                        <p className="text-xs text-muted-foreground">{L("Profit", "Zarada")}</p>
+                        <p className="text-xs text-muted-foreground">{L("Profit", "Zarada", "Zisk")}</p>
                         {(() => {
                           // Bez B2C tarife nema zarade za prikaz (ranije „€NaN/h").
-                          const b2c = customB2CRate ? parseFloat(customB2CRate) : resolvedRole?.b2c_rate;
-                          const b2b = resolvedRole?.b2b_rate;
+                          const b2c = dialogB2C;
+                          const b2b = dialogB2B;
                           return b2c > 0 && b2b > 0
-                            ? <p className="font-semibold text-green-600">€{(b2b - b2c).toFixed(2)}/h</p>
+                            ? <p className={`font-semibold ${b2b - b2c < 0 ? "text-red-600" : "text-green-600"}`}>€{(b2b - b2c).toFixed(2)}/h</p>
                             : <p className="font-semibold text-muted-foreground">—</p>;
                         })()}
                       </div>
                     </div>
                   )}
+                  {isAdmin && (resolvedRole || selectedRoleTitle) && negativeLabourMargin(dialogB2C, dialogB2B) && (
+                    <NegativeMarginNote L={L} />
+                  )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={closeDialog}>{L("Cancel", "Odustani")}</Button>
+            <Button variant="outline" onClick={closeDialog}>{L("Cancel", "Odustani", "Zrušiť")}</Button>
             <Button
               onClick={editEntry ? handleEditSave : handleAdd}
               disabled={(!editEntry && !selectedEmployeeId) || updateMutation.isPending}
             >
-              {updateMutation.isPending ? L("Saving...", "Čuvanje...") : editEntry ? L("Save", "Sačuvaj") : L("Add", "Dodaj")}
+              {updateMutation.isPending ? L("Saving...", "Čuvanje...", "Ukladá sa...") : editEntry ? L("Save", "Sačuvaj", "Uložiť") : L("Add", "Dodaj", "Pridať")}
             </Button>
           </DialogFooter>
         </DialogContent>

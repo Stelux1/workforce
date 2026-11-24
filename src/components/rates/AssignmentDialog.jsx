@@ -22,6 +22,14 @@ const LABELS = {
     selectEmployee: "Izaberite zaposlenog", selectProject: "Izaberite projekat",
     vendorAtStart: "Angažovanje na datum početka",
   },
+  sk: {
+    add: "Pridať pridelenie", edit: "Upraviť pridelenie", employee: "Zamestnanec", project: "Projekt",
+    position: "Rola na projekte", start: "Začiatok pridelenia", end: "Koniec pridelenia", open: "prázdne = na neurčito",
+    status: "Stav", planned: "Plánované", active: "Aktívne", completed: "Dokončené", cancelled: "Zrušené",
+    reference: "Zmluva / odkaz na sadzbu", notes: "Poznámky", save: "Uložiť", cancel: "Zrušiť",
+    selectEmployee: "Vyberte zamestnanca", selectProject: "Vyberte projekt",
+    vendorAtStart: "Pracovný vzťah k dátumu začiatku",
+  },
 };
 
 export default function AssignmentDialog({ open, onOpenChange, form, setForm, onSave, saving, employees = [], projects = [], affiliationLabel, lang }) {

@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { TrendingUp, TrendingDown, DollarSign, Receipt, BarChart2, Users, CalendarDays, AlertTriangle } from "lucide-react";
 import StatusBadge from "@/components/shared/StatusBadge";
 import { useLang } from "@/lib/LanguageContext";
+import { pick } from "@/lib/translations";
 import { formatDate } from "@/lib/dateFormat";
 import { sumCostsEur } from "@/lib/payroll/costs";
 import { FINAL_RUN_STATUSES, projectFinancialReport, reportProblemMessage } from "@/lib/payroll/projectReport";
@@ -15,7 +16,7 @@ import { FINAL_RUN_STATUSES, projectFinancialReport, reportProblemMessage } from
 // Satnice, troškovi i obračun se čitaju po ID-u projekta, pa preimenovanje projekta ne menja nijednu brojku.
 export default function ProjectFinancialReport({ project }) {
   const { lang } = useLang();
-  const t = (en, rs) => lang === "rs" ? rs : en;
+  const t = (en, rs, sk) => pick(lang, en, rs, sk);
 
   // Po ID-u projekta (ne po imenu) i sve satnice — odobrene ulaze u novac, ostale se samo prikazuju (QA 14.11.2026).
   const { data: allTimesheets = [], isLoading: loadingTS } = useQuery({
@@ -80,7 +81,7 @@ export default function ProjectFinancialReport({ project }) {
   // Cost breakdown by category — EUR zbir po kategoriji (isti helper), RSD bez kursa posebno.
   const categoryCosts = {};
   costs.forEach((c) => {
-    const key = c.category || t("Uncategorized", "Nekategorisano");
+    const key = c.category || t("Uncategorized", "Nekategorisano", "Bez kategórie");
     (categoryCosts[key] ||= []).push(c);
   });
   const categoryTotals = Object.fromEntries(Object.entries(categoryCosts).map(([key, list]) => {
@@ -90,7 +91,7 @@ export default function ProjectFinancialReport({ project }) {
 
   const getCategoryLabel = (key) => {
     const found = costCategories.find((c) => c.name.toLowerCase() === key?.toLowerCase());
-    if (found) return lang === "rs" ? (found.translation || found.name) : found.name;
+    if (found) return found.name;
     return key;
   };
 
@@ -98,7 +99,7 @@ export default function ProjectFinancialReport({ project }) {
   // <span> (ne Badge/<div>), jer stoji i unutar <p>.
   const estimateBadge = (
     <span className={cn(badgeVariants({ variant: "outline" }), "ml-1 px-1.5 py-0 text-[10px] font-medium border-amber-300 text-amber-700 dark:text-amber-400")}>
-      {t("estimate", "procena")}
+      {t("estimate", "procena", "odhad")}
     </span>
   );
 
@@ -120,7 +121,7 @@ export default function ProjectFinancialReport({ project }) {
               <TrendingUp className="w-4 h-4 text-green-600" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground mb-0.5">{t("Revenue (B2B)", "Prihod (B2B)")}</p>
+              <p className="text-xs text-muted-foreground mb-0.5">{t("Revenue (B2B)", "Prihod (B2B)", "Tržby (B2B)")}</p>
               <p className="text-lg font-bold text-green-600">{totalRevenue.toFixed(2)} €</p>
             </div>
           </div>
@@ -133,14 +134,14 @@ export default function ProjectFinancialReport({ project }) {
             </div>
             <div>
               <p className="text-xs text-muted-foreground mb-0.5">
-                {t("Worker Costs", "Troškovi radnika")}{hasEstimate && estimateBadge}
+                {t("Worker Costs", "Troškovi radnika", "Náklady na zamestnancov")}{hasEstimate && estimateBadge}
               </p>
               <p className="text-lg font-bold text-orange-600">{totalWorkerCost.toFixed(2)} €</p>
               {totals.payrollLaborCost > 0 && (
-                <p className="text-xs text-muted-foreground">{t("from payroll (gross 2)", "iz obračuna (bruto 2)")}: {totals.payrollLaborCost.toFixed(2)} €</p>
+                <p className="text-xs text-muted-foreground">{t("from payroll (gross 2)", "iz obračuna (bruto 2)", "zo zúčtovania miezd (hrubá 2)")}: {totals.payrollLaborCost.toFixed(2)} €</p>
               )}
               {hasEstimate && totals.payrollLaborCost > 0 && (
-                <p className="text-xs text-amber-600">{t("estimate", "procena")}: {totals.estimatedLaborCost.toFixed(2)} €</p>
+                <p className="text-xs text-amber-600">{t("estimate", "procena", "odhad")}: {totals.estimatedLaborCost.toFixed(2)} €</p>
               )}
             </div>
           </div>
@@ -152,13 +153,13 @@ export default function ProjectFinancialReport({ project }) {
               <Receipt className="w-4 h-4 text-red-600" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground mb-0.5">{t("Project Costs", "Projektni troškovi")}</p>
+              <p className="text-xs text-muted-foreground mb-0.5">{t("Project Costs", "Projektni troškovi", "Náklady projektu")}</p>
               {costs.length > 0 && <p className="text-base font-bold text-red-600">{costsEUR.toFixed(2)} €</p>}
               {costsFromRsd.amount > 0 && (
-                <p className="text-xs text-muted-foreground">{t("incl.", "uklj.")} {costsFromRsd.amount.toFixed(2)} RSD = {costsFromRsd.eur.toFixed(2)} €</p>
+                <p className="text-xs text-muted-foreground">{t("incl.", "uklj.", "vr.")} {costsFromRsd.amount.toFixed(2)} RSD = {costsFromRsd.eur.toFixed(2)} €</p>
               )}
               {costsMissingRsd > 0 && (
-                <p className="text-xs font-semibold text-red-500">{costsMissingRsd.toFixed(2)} RSD · {t("missing exchange rate", "nedostaje kurs")}</p>
+                <p className="text-xs font-semibold text-red-500">{costsMissingRsd.toFixed(2)} RSD · {t("missing exchange rate", "nedostaje kurs", "chýba kurz")}</p>
               )}
               {costs.length === 0 && <p className="text-base font-bold text-muted-foreground">—</p>}
             </div>
@@ -172,16 +173,16 @@ export default function ProjectFinancialReport({ project }) {
             </div>
             <div>
               <p className="text-xs text-muted-foreground mb-0.5">
-                {t("Remaining (after all costs)", "Ostaje nama (posle svih troškova)")}{hasEstimate && estimateBadge}
+                {t("Remaining (after all costs)", "Ostaje nama (posle svih troškova)", "Zostáva nám (po všetkých nákladoch)")}{hasEstimate && estimateBadge}
               </p>
               <p className={`text-lg font-bold ${grossProfit >= 0 ? "text-green-600" : "text-red-600"}`}>
                 {grossProfit.toFixed(2)} €
               </p>
               {totalRevenue > 0 && (
-                <p className="text-xs text-muted-foreground">{profitMargin.toFixed(1)}% · {t("before project costs", "pre troškova projekta")}: {laborProfit.toFixed(2)} €</p>
+                <p className="text-xs text-muted-foreground">{profitMargin.toFixed(1)}% · {t("before project costs", "pre troškova projekta", "pred nákladmi projektu")}: {laborProfit.toFixed(2)} €</p>
               )}
               {costsMissingRsd > 0 && (
-                <p className="text-xs text-amber-600">{t(`RSD costs (${costsMissingRsd.toFixed(2)}) not deducted — missing exchange rate`, `RSD troškovi (${costsMissingRsd.toFixed(2)}) nisu oduzeti — nedostaje kurs`)}</p>
+                <p className="text-xs text-amber-600">{t(`RSD costs (${costsMissingRsd.toFixed(2)}) not deducted — missing exchange rate`, `RSD troškovi (${costsMissingRsd.toFixed(2)}) nisu oduzeti — nedostaje kurs`, `Náklady v RSD (${costsMissingRsd.toFixed(2)}) neboli odpočítané — chýba kurz`)}</p>
               )}
             </div>
           </div>
@@ -191,7 +192,7 @@ export default function ProjectFinancialReport({ project }) {
       {pending.count > 0 && (
         <p className="text-xs text-muted-foreground">
           {t(`Not approved yet (not included): ${pending.count} entries, ${pending.hours.toFixed(1)} h`,
-             `Još nije odobreno (nije uračunato): ${pending.count} unosa, ${pending.hours.toFixed(1)} h`)}
+             `Još nije odobreno (nije uračunato): ${pending.count} unosa, ${pending.hours.toFixed(1)} h`, `Zatiaľ neschválené (nezapočítané): ${pending.count} záznamov, ${pending.hours.toFixed(1)} h`)}
         </p>
       )}
 
@@ -199,10 +200,10 @@ export default function ProjectFinancialReport({ project }) {
         <Card className="p-4 border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-900/10">
           <div className="flex items-center gap-2 mb-2">
             <AlertTriangle className="w-4 h-4 text-amber-600" />
-            <h3 className="font-semibold text-sm">{t("Check before relying on these numbers", "Proverite pre nego što se oslonite na brojke")}</h3>
+            <h3 className="font-semibold text-sm">{t("Check before relying on these numbers", "Proverite pre nego što se oslonite na brojke", "Skontrolujte pred tým, než sa na tieto čísla spoľahnete")}</h3>
           </div>
           <ul className="space-y-1 text-xs text-amber-800 dark:text-amber-300 list-disc pl-5">
-            {problems.map((p, i) => <li key={`${p.code}-${p.timesheetId || p.month}-${i}`}>{reportProblemMessage(p, lang === "rs" ? "rs" : "en")}</li>)}
+            {problems.map((p, i) => <li key={`${p.code}-${p.timesheetId || p.month}-${i}`}>{reportProblemMessage(p, lang)}</li>)}
           </ul>
         </Card>
       )}
@@ -212,22 +213,22 @@ export default function ProjectFinancialReport({ project }) {
         <Card className="p-4">
           <div className="flex items-center gap-2 mb-3">
             <BarChart2 className="w-4 h-4 text-primary" />
-            <h3 className="font-semibold text-sm">{t("Hours Summary", "Pregled sati")}</h3>
+            <h3 className="font-semibold text-sm">{t("Hours Summary", "Pregled sati", "Prehľad hodín")}</h3>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-center">
             <div>
               <p className="text-2xl font-bold text-primary">{totalHours.toFixed(1)}</p>
-              <p className="text-xs text-muted-foreground">{t("Total Hours", "Ukupno sati")}</p>
+              <p className="text-xs text-muted-foreground">{t("Total Hours", "Ukupno sati", "Hodiny spolu")}</p>
             </div>
             <div>
               <p className="text-2xl font-bold">{totals.count}</p>
-              <p className="text-xs text-muted-foreground">{t("Timesheet Entries", "Unosa")}</p>
+              <p className="text-xs text-muted-foreground">{t("Timesheet Entries", "Unosa", "Záznamov vo výkazoch")}</p>
             </div>
             <div>
               <p className="text-2xl font-bold">
                 {totalHours > 0 ? (totalRevenue / totalHours).toFixed(2) : "—"}
               </p>
-              <p className="text-xs text-muted-foreground">{t("Avg €/h (B2B)", "Prosek €/h (B2B)")}</p>
+              <p className="text-xs text-muted-foreground">{t("Avg €/h (B2B)", "Prosek €/h (B2B)", "Priemer €/h (B2B)")}</p>
             </div>
           </div>
         </Card>
@@ -238,18 +239,18 @@ export default function ProjectFinancialReport({ project }) {
         <Card className="p-4">
           <div className="flex items-center gap-2 mb-3">
             <CalendarDays className="w-4 h-4 text-primary" />
-            <h3 className="font-semibold text-sm">{t("By Month", "Po mesecima")}</h3>
+            <h3 className="font-semibold text-sm">{t("By Month", "Po mesecima", "Podľa mesiacov")}</h3>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm min-w-[560px]">
               <thead>
                 <tr className="text-xs text-muted-foreground font-medium border-b">
-                  <th className="text-left font-medium pb-2">{t("Month", "Mesec")}</th>
-                  <th className="text-left font-medium pb-2">{t("Payroll", "Obračun")}</th>
-                  <th className="text-right font-medium pb-2">{t("Hours", "Sati")}</th>
-                  <th className="text-right font-medium pb-2">{t("Revenue (B2B)", "Prihod (B2B)")}</th>
-                  <th className="text-right font-medium pb-2">{t("Worker Costs", "Troškovi radnika")}</th>
-                  <th className="text-right font-medium pb-2">{t("Revenue − workers", "Prihod − radnici")}</th>
+                  <th className="text-left font-medium pb-2">{t("Month", "Mesec", "Mesiac")}</th>
+                  <th className="text-left font-medium pb-2">{t("Payroll", "Obračun", "Zúčtovanie")}</th>
+                  <th className="text-right font-medium pb-2">{t("Hours", "Sati", "Hodiny")}</th>
+                  <th className="text-right font-medium pb-2">{t("Revenue (B2B)", "Prihod (B2B)", "Tržby (B2B)")}</th>
+                  <th className="text-right font-medium pb-2">{t("Worker Costs", "Troškovi radnika", "Náklady na zamestnancov")}</th>
+                  <th className="text-right font-medium pb-2">{t("Revenue − workers", "Prihod − radnici", "Tržby − zamestnanci")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -257,7 +258,7 @@ export default function ProjectFinancialReport({ project }) {
                   <tr key={m.month} className="border-b last:border-0">
                     <td className="py-2 font-medium">{monthLabel(m.month)}</td>
                     <td className="py-2">
-                      {m.runStatus ? <StatusBadge status={m.runStatus} /> : <span className="text-xs text-muted-foreground">{t("none", "nema")}</span>}
+                      {m.runStatus ? <StatusBadge status={m.runStatus} /> : <span className="text-xs text-muted-foreground">{t("none", "nema", "žiadne")}</span>}
                     </td>
                     <td className="py-2 text-right text-muted-foreground">{m.hours.toFixed(1)}h</td>
                     <td className="py-2 text-right text-green-600 font-semibold">{m.revenue.toFixed(2)} €</td>
@@ -273,7 +274,7 @@ export default function ProjectFinancialReport({ project }) {
           {hasEstimate && (
             <p className="text-xs text-muted-foreground mt-3">
               {t("Estimate: month without an approved payroll — worker cost is the amount of approved timesheets (hours × worker rate), without taxes and contributions. The final cost (gross 2) comes from the approved monthly payroll.",
-                 "Procena: mesec bez odobrenog obračuna — trošak radnika je iznos odobrenih satnica (sati × satnica radnika), bez poreza i doprinosa. Konačan trošak (bruto 2) daje odobren mesečni obračun.")}
+                 "Procena: mesec bez odobrenog obračuna — trošak radnika je iznos odobrenih satnica (sati × satnica radnika), bez poreza i doprinosa. Konačan trošak (bruto 2) daje odobren mesečni obračun.", "Odhad: mesiac bez schváleného zúčtovania — náklady na zamestnanca sú suma schválených výkazov (hodiny × sadzba zamestnanca) bez daní a odvodov. Konečné náklady (hrubá 2) vyplývajú zo schváleného mesačného zúčtovania.")}
             </p>
           )}
         </Card>
@@ -284,14 +285,14 @@ export default function ProjectFinancialReport({ project }) {
         <Card className="p-4">
           <div className="flex items-center gap-2 mb-3">
             <Users className="w-4 h-4 text-primary" />
-            <h3 className="font-semibold text-sm">{t("Employee Earnings", "Zarada radnika")}</h3>
+            <h3 className="font-semibold text-sm">{t("Employee Earnings", "Zarada radnika", "Zárobok zamestnancov")}</h3>
           </div>
           <div className="space-y-0">
             <div className="grid grid-cols-4 gap-2 text-xs text-muted-foreground font-medium pb-2 border-b">
-              <span>{t("Employee", "Radnik")}</span>
-              <span className="text-right">{t("Hours", "Sati")}</span>
-              <span className="text-right">{t("Worker cost", "Trošak radnika")}</span>
-              <span className="text-right">{t("Revenue (B2B)", "Prihod (B2B)")}</span>
+              <span>{t("Employee", "Radnik", "Zamestnanec")}</span>
+              <span className="text-right">{t("Hours", "Sati", "Hodiny")}</span>
+              <span className="text-right">{t("Worker cost", "Trošak radnika", "Náklady na zamestnanca")}</span>
+              <span className="text-right">{t("Revenue (B2B)", "Prihod (B2B)", "Tržby (B2B)")}</span>
             </div>
             {employeeRows.map((row) => (
               <div key={row.key} className="grid grid-cols-4 gap-2 py-2 border-b last:border-0 text-sm">
@@ -302,7 +303,7 @@ export default function ProjectFinancialReport({ project }) {
               </div>
             ))}
             <div className="grid grid-cols-4 gap-2 pt-2 text-sm font-bold">
-              <span>{t("Total", "Ukupno")}</span>
+              <span>{t("Total", "Ukupno", "Spolu")}</span>
               <span className="text-right text-primary">{totalHours.toFixed(1)}h</span>
               <span className="text-right text-orange-600">{totalWorkerCost.toFixed(2)} €</span>
               <span className="text-right text-green-600">{totalRevenue.toFixed(2)} €</span>
@@ -316,7 +317,7 @@ export default function ProjectFinancialReport({ project }) {
         <Card className="p-4">
           <div className="flex items-center gap-2 mb-3">
             <Receipt className="w-4 h-4 text-primary" />
-            <h3 className="font-semibold text-sm">{t("Cost Breakdown", "Pregled troškova po kategoriji")}</h3>
+            <h3 className="font-semibold text-sm">{t("Cost Breakdown", "Pregled troškova po kategoriji", "Náklady podľa kategórií")}</h3>
           </div>
           <div className="space-y-2">
             {Object.entries(categoryTotals).map(([cat, vals]) => (
@@ -326,7 +327,7 @@ export default function ProjectFinancialReport({ project }) {
                   <span className="text-sm font-semibold text-primary">{vals.eur.toFixed(2)} €</span>
                   {vals.missingRsd > 0 && <span className="text-sm text-muted-foreground mx-1">·</span>}
                   {vals.missingRsd > 0 && (
-                    <span className="text-sm font-semibold text-amber-600">{vals.missingRsd.toFixed(2)} RSD ({t("missing exchange rate", "nedostaje kurs")})</span>
+                    <span className="text-sm font-semibold text-amber-600">{vals.missingRsd.toFixed(2)} RSD ({t("missing exchange rate", "nedostaje kurs", "chýba kurz")})</span>
                   )}
                 </div>
               </div>
@@ -338,7 +339,7 @@ export default function ProjectFinancialReport({ project }) {
       {totalRevenue === 0 && costs.length === 0 && (
         <Card className="p-8 text-center">
           <p className="text-muted-foreground text-sm">
-            {t("No financial data available for this project.", "Nema finansijskih podataka za ovaj projekat.")}
+            {t("No financial data available for this project.", "Nema finansijskih podataka za ovaj projekat.", "Pre tento projekt nie sú k dispozícii finančné údaje.")}
           </p>
         </Card>
       )}

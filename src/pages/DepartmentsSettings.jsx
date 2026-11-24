@@ -15,6 +15,7 @@ import EmptyState from "@/components/shared/EmptyState";
 import { toast } from "sonner";
 import { useT } from "@/lib/translations";
 import { useLang } from "@/lib/LanguageContext";
+import { pageTitle } from "@/lib/pageTitles";
 
 export default function DepartmentsSettings() {
   const T = useT();
@@ -22,10 +23,8 @@ export default function DepartmentsSettings() {
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingDept, setEditingDept] = useState(null);
-  const [form, setForm] = useState({ name: "", translation: "", positions: [] });
+  const [form, setForm] = useState({ name: "", positions: [] });
   const [newPosition, setNewPosition] = useState("");
-  const [newPositionTranslation, setNewPositionTranslation] = useState("");
-  const [newDepartmentTranslation, setNewDepartmentTranslation] = useState("");
   const [viewMode, setViewMode] = useState("grid");
   const [editingPositionKey, setEditingPositionKey] = useState(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
@@ -52,24 +51,18 @@ export default function DepartmentsSettings() {
 
   const openNew = () => {
     setEditingDept(null);
-    setForm({ name: "", translation: "", positions: [] });
+    setForm({ name: "", positions: [] });
     setNewPosition("");
-    setNewPositionTranslation("");
-    setNewDepartmentTranslation("");
+    setEditingPositionKey(null);
     setDialogOpen(true);
   };
 
   const openEdit = (dept) => {
     setEditingDept(dept);
-    setForm({ name: dept.name, translation: dept.translation || "", positions: dept.positions || [] });
+    setForm({ name: dept.name, positions: dept.positions || [] });
     setNewPosition("");
-    setNewPositionTranslation("");
-    setNewDepartmentTranslation("");
+    setEditingPositionKey(null);
     setDialogOpen(true);
-  };
-
-  const getDepartmentText = (name, translation) => {
-    return lang === 'rs' ? (translation || name) : name;
   };
 
   const addPosition = () => {
@@ -79,13 +72,8 @@ export default function DepartmentsSettings() {
       toast.error(T("Position already exists")); 
       return; 
     }
-    const positionObj = {
-      name: trimmed,
-      translation: newPositionTranslation.trim()
-    };
-    setForm((p) => ({ ...p, positions: [...p.positions, positionObj] }));
+    setForm((p) => ({ ...p, positions: [...p.positions, { name: trimmed }] }));
     setNewPosition("");
-    setNewPositionTranslation("");
   };
 
   const removePosition = (pos) => {
@@ -96,47 +84,46 @@ export default function DepartmentsSettings() {
 
   const startEditPosition = (pos) => {
     const posKey = typeof pos === 'string' ? pos : pos.name;
-    const posName = typeof pos === 'string' ? pos : pos.name;
-    const posTranslation = typeof pos === 'string' ? '' : (pos.translation || pos.name);
     setEditingPositionKey(posKey);
-    setNewPosition(posName);
-    setNewPositionTranslation(posTranslation);
+    setNewPosition(posKey);
   };
 
   const saveEditPosition = () => {
-    if (!newPosition.trim() || !editingPositionKey) return;
+    const trimmed = newPosition.trim();
+    if (!trimmed || !editingPositionKey) return;
+    if (trimmed !== editingPositionKey && form.positions.some(p => (typeof p === 'string' ? p : p.name) === trimmed)) {
+      toast.error(T("Position already exists"));
+      return;
+    }
     setForm((p) => ({
       ...p,
       positions: p.positions.map((x) => {
         const isMatch = typeof x === 'string' ? x === editingPositionKey : x.name === editingPositionKey;
+        // Ostala polja pozicije (npr. stari prevod) ostaju u bazi — menja se samo naziv.
         if (isMatch) {
-          return { name: newPosition.trim(), translation: newPositionTranslation.trim() };
+          return typeof x === 'string' ? { name: trimmed } : { ...x, name: trimmed };
         }
         return x;
       })
     }));
     setEditingPositionKey(null);
     setNewPosition("");
-    setNewPositionTranslation("");
   };
 
   const cancelEditPosition = () => {
     setEditingPositionKey(null);
     setNewPosition("");
-    setNewPositionTranslation("");
   };
 
-  const getPositionText = (pos) => {
-    if (typeof pos === 'string') return pos;
-    return lang === 'rs' ? (pos.translation || pos.name) : pos.name;
-  };
+  // Prikaz uvek koristi naziv; kolona `translation` ostaje u bazi, ali se više ne unosi ni prikazuje.
+  const getPositionText = (pos) => (typeof pos === 'string' ? pos : pos.name);
 
   const handleSave = async () => {
     if (!form.name.trim()) { toast.error(T("Department name is required")); return; }
     const normalizedPositions = form.positions.map(pos => 
-      typeof pos === 'string' ? { name: pos, translation: '' } : pos
+      typeof pos === 'string' ? { name: pos } : pos
     );
-    const dataToSave = { ...form, positions: normalizedPositions };
+    const dataToSave = { name: form.name.trim(), positions: normalizedPositions };
     if (editingDept) {
       await updateMutation.mutateAsync({ id: editingDept.id, data: dataToSave });
       toast.success(T("Department updated"));
@@ -157,7 +144,7 @@ export default function DepartmentsSettings() {
     <div className="space-y-6">
       <div className="flex items-center justify-between mb-6">
         <PageHeader
-          title={T("Departments")}
+          title={pageTitle("Departments & Positions", lang)}
           subtitle={T("Configure departments and their available positions")}
           actionLabel={T("Add Department")}
           onAction={openNew}
@@ -200,7 +187,7 @@ export default function DepartmentsSettings() {
             <Card key={dept.id} className="p-5 hover:shadow-md transition-all">
               <div className="flex items-start justify-between mb-3">
                 <div>
-                     <h3 className="font-semibold text-base" title={dept.translation}>{getDepartmentText(dept.name, dept.translation)}</h3>
+                     <h3 className="font-semibold text-base">{dept.name}</h3>
                      <p className="text-xs text-muted-foreground">{(dept.positions || []).length} {(dept.positions || []).length === 1 ? T("Position") : T("Positions")}</p>
                    </div>
                 <div className="flex gap-1">
@@ -219,7 +206,7 @@ export default function DepartmentsSettings() {
                   (dept.positions || []).map((pos) => {
                     const posKey = typeof pos === 'string' ? pos : pos.name;
                     return (
-                      <Badge key={posKey} variant="secondary" className="text-xs" title={typeof pos === 'string' ? '' : pos.translation}>
+                      <Badge key={posKey} variant="secondary" className="text-xs">
                         {getPositionText(pos)}
                       </Badge>
                     );
@@ -235,7 +222,7 @@ export default function DepartmentsSettings() {
             <Card key={dept.id} className="p-4 hover:shadow-md transition-all">
               <div className="flex items-center justify-between">
                 <div className="flex-1">
-                  <h3 className="font-semibold text-base" title={dept.translation}>{getDepartmentText(dept.name, dept.translation)}</h3>
+                  <h3 className="font-semibold text-base">{dept.name}</h3>
                   <p className="text-xs text-muted-foreground mt-1">
                     {(dept.positions || []).length} {(dept.positions || []).length === 1 ? T("Position") : T("Positions")}
                   </p>
@@ -247,7 +234,7 @@ export default function DepartmentsSettings() {
                     (dept.positions || []).map((pos) => {
                       const posKey = typeof pos === 'string' ? pos : pos.name;
                       return (
-                        <Badge key={posKey} variant="secondary" className="text-xs" title={typeof pos === 'string' ? '' : pos.translation}>
+                        <Badge key={posKey} variant="secondary" className="text-xs">
                           {getPositionText(pos)}
                         </Badge>
                       );
@@ -298,11 +285,6 @@ export default function DepartmentsSettings() {
                  onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
                  placeholder={T("e.g. Engineering, Sales, HR...")}
                />
-               <Input
-                 value={form.translation || ""}
-                 onChange={(e) => setForm((p) => ({ ...p, translation: e.target.value }))}
-                 placeholder={T("Translation (Serbian) - optional")}
-               />
              </div>
              <div className="space-y-2">
                <Label>{T("Positions")}</Label>
@@ -311,13 +293,7 @@ export default function DepartmentsSettings() {
                    value={newPosition}
                    onChange={(e) => setNewPosition(e.target.value)}
                    onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), editingPositionKey ? saveEditPosition() : addPosition())}
-                   placeholder={T("Position in English")}
-                 />
-                 <Input
-                   value={newPositionTranslation}
-                   onChange={(e) => setNewPositionTranslation(e.target.value)}
-                   onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), editingPositionKey ? saveEditPosition() : addPosition())}
-                   placeholder={T("Translation (Serbian) - optional")}
+                   placeholder={T("Position name")}
                  />
                  <div className="flex gap-2">
                    <Button type="button" className="flex-1" onClick={editingPositionKey ? saveEditPosition : addPosition}>
@@ -348,9 +324,6 @@ export default function DepartmentsSettings() {
                       <div key={posKey} className={`flex items-center justify-between p-2 rounded-md transition-colors ${editingPositionKey === posKey ? 'bg-primary/10 border border-primary' : 'bg-muted/40 hover:bg-muted/60'}`}>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium truncate">{getPositionText(pos)}</p>
-                          {typeof pos !== 'string' && pos.translation && (
-                            <p className="text-xs text-muted-foreground truncate">{pos.name}</p>
-                          )}
                         </div>
                         <div className="flex gap-1 ml-2 flex-shrink-0">
                           <button onClick={() => startEditPosition(pos)} className="p-1 hover:bg-accent rounded" title={T("Edit")}>

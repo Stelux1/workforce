@@ -4,13 +4,15 @@ import { base44 } from "@/api/base44Client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Edit, Search, Trash2, Truck } from "lucide-react";
+import { Edit, Search, Trash2, Handshake, Upload } from "lucide-react";
 import { toast } from "sonner";
 import PageHeader from "@/components/shared/PageHeader";
 import EmptyState from "@/components/shared/EmptyState";
 import ConfirmDeleteDialog from "@/components/shared/ConfirmDeleteDialog";
 import VendorDialog from "@/components/vendors/VendorDialog";
+import ImportVendorsDialog from "@/components/vendors/ImportVendorsDialog";
 import { useLang } from "@/lib/LanguageContext";
+import { useT } from "@/lib/translations";
 
 const LABELS = {
   en: {
@@ -31,16 +33,27 @@ const LABELS = {
     confirm: "Obrisati dobavljača? Dobavljač koji ima angažmane ne može da se obriše — tada ga postavite na Neaktivan.",
     nameRequired: "Naziv dobavljača je obavezan",
   },
+  sk: {
+    title: "Dodávatelia", subtitle: "Subdodávateľské firmy dodávajúce pracovníkov",
+    add: "Pridať dodávateľa", search: "Hľadať dodávateľov...", empty: "Zatiaľ žiadni dodávatelia",
+    vendor: "Dodávateľ", country: "Krajina", contact: "Kontakt", currency: "Mena",
+    workers: "Aktívni pracovníci", terms: "Podmienky", status: "Stav", active: "Aktívny", inactive: "Neaktívny",
+    saved: "Dodávateľ bol uložený", deleted: "Dodávateľ bol odstránený",
+    confirm: "Odstrániť tohto dodávateľa? Dodávateľa s pracovnými vzťahmi nemožno odstrániť — nastavte ho radšej ako Neaktívny.",
+    nameRequired: "Názov dodávateľa je povinný",
+  },
 };
 
 export default function Vendors() {
   const { lang } = useLang();
   const L = LABELS[lang] || LABELS.en;
+  const T = useT();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState({});
   const [deleteId, setDeleteId] = useState(null);
+  const [importOpen, setImportOpen] = useState(false);
 
   const { data: vendors = [], isLoading } = useQuery({
     queryKey: ["vendors"],
@@ -84,7 +97,9 @@ export default function Vendors() {
       toast.error(L.nameRequired);
       return;
     }
-    saveMutation.mutate({ ...form, name: form.name.trim() });
+    // Vendor ID dodeljuje baza (VEN-001, …) i ne menja se sa ekrana.
+    const { vendor_id: _vendorId, ...rest } = form;
+    saveMutation.mutate({ ...rest, name: form.name.trim() });
   };
 
   const filtered = vendors
@@ -104,7 +119,12 @@ export default function Vendors() {
         subtitle={L.subtitle}
         actionLabel={L.add}
         onAction={() => { setForm({ status: "active", default_currency: "EUR", payroll_cycle: "monthly" }); setDialogOpen(true); }}
-      />
+      >
+        <Button variant="outline" className="gap-2" onClick={() => setImportOpen(true)}>
+          <Upload className="w-4 h-4" />
+          {T("Import CSV")}
+        </Button>
+      </PageHeader>
 
       <div className="relative max-w-md">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -115,7 +135,7 @@ export default function Vendors() {
         <Card className="h-40 animate-pulse" />
       ) : filtered.length === 0 ? (
         <EmptyState
-          icon={Truck}
+          icon={Handshake}
           title={L.empty}
           actionLabel={L.add}
           onAction={() => { setForm({ status: "active", default_currency: "EUR" }); setDialogOpen(true); }}
@@ -141,12 +161,12 @@ export default function Vendors() {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                          <Truck className="w-4 h-4 text-primary" />
+                          <Handshake className="w-4 h-4 text-primary" />
                         </div>
                         <div>
                           <p className="font-semibold">{vendor.name}</p>
                           <p className="text-xs text-muted-foreground">
-                            {[vendor.vendor_id, vendor.vat_number && `VAT: ${vendor.vat_number}`].filter(Boolean).join(" · ")}
+                            {[vendor.vendor_id && `ID: ${vendor.vendor_id}`, vendor.vat_number && `VAT: ${vendor.vat_number}`].filter(Boolean).join(" · ")}
                           </p>
                         </div>
                       </div>
@@ -194,6 +214,8 @@ export default function Vendors() {
         saving={saveMutation.isPending}
         lang={lang}
       />
+
+      <ImportVendorsDialog open={importOpen} onOpenChange={setImportOpen} existingVendors={vendors} />
 
       <ConfirmDeleteDialog
         open={!!deleteId}

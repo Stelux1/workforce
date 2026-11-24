@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
-import { Calendar, ChevronLeft, ChevronRight, Trash2, User, Clock, MapPin } from "lucide-react";
+import { ChevronLeft, ChevronRight, Trash2, User, Clock, MapPin } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,6 +33,7 @@ export default function SchedulePage() {
   const [deleteShift, setDeleteShift] = useState(null);
   const shiftTypeLabel = (type) => ({
     rs: { morning: "Jutarnja", afternoon: "Popodnevna", night: "Noćna", full_day: "Ceo dan", custom: "Prilagođena" },
+  sk: { morning: "Ranná", afternoon: "Poobedná", night: "Nočná", full_day: "Celý deň", custom: "Vlastná" },
     en: { morning: "Morning", afternoon: "Afternoon", night: "Night", full_day: "Full day", custom: "Custom" },
   }[lang] || {})[type] || type;
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -49,7 +50,7 @@ export default function SchedulePage() {
 
   const { data: employees = [] } = useQuery({
     queryKey: ["employees"],
-    queryFn: () => base44.entities.Employee.list("-created_date", 200),
+    queryFn: () => base44.entities.Employee.list("-created_date"),
   });
 
   const createMutation = useMutation({
@@ -191,7 +192,7 @@ export default function SchedulePage() {
                           </div>
                         </td>
                         <td className="px-4 py-3">
-                          <p className={`font-medium ${isToday ? "text-primary" : ""}`}>{formatDate(s._day, lang === "rs" ? "EEE, d. MMM" : "EEE, MMM d", lang)}</p>
+                          <p className={`font-medium ${isToday ? "text-primary" : ""}`}>{formatDate(s._day, lang === "rs" ? "EEE, d. MMM" : lang === "sk" ? "EEE, d. MMM" : "EEE, MMM d", lang)}</p>
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-1 text-muted-foreground">
@@ -285,7 +286,7 @@ export default function SchedulePage() {
         open={!!deleteShift}
         onClose={() => setDeleteShift(null)}
         onConfirm={() => deleteMutation.mutate(deleteShift.id)}
-        message={lang === "rs" ? `Obrisati smenu ${deleteShift?.employee_name || ""} (${deleteShift?.date || ""})?` : `Delete the shift of ${deleteShift?.employee_name || ""} (${deleteShift?.date || ""})?`}
+        message={lang === "rs" ? `Obrisati smenu ${deleteShift?.employee_name || ""} (${deleteShift?.date || ""})?` : lang === "sk" ? `Odstrániť zmenu zamestnanca ${deleteShift?.employee_name || ""} (${deleteShift?.date || ""})?` : `Delete the shift of ${deleteShift?.employee_name || ""} (${deleteShift?.date || ""})?`}
       />
     </div>
   );

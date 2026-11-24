@@ -26,7 +26,7 @@ import { toast } from "sonner";
 import StatusBadge from "@/components/shared/StatusBadge";
 import PageHeader from "@/components/shared/PageHeader";
 import ConfirmDeleteDialog from "@/components/shared/ConfirmDeleteDialog";
-import { useT } from "@/lib/translations";
+import { useT, pick } from "@/lib/translations";
 import { useLang } from "@/lib/LanguageContext";
 import { formatDate } from "@/lib/dateFormat";
 import { parseCoef } from "@/lib/coefficientInput";
@@ -83,7 +83,7 @@ function ConfirmDialog({ open, onClose, onConfirm, title, message, confirmLabel 
 export default function MonthlyPayroll() {
   const t = useT();
   const { lang } = useLang();
-  const L = (en, sr) => (lang === "rs" ? sr : en);
+  const L = (en, sr, sk) => pick(lang, en, sr, sk);
   const queryClient = useQueryClient();
   const [month, setMonth] = useMonthParam();
   const monthDate = parseISO(month);
@@ -211,22 +211,22 @@ export default function MonthlyPayroll() {
     }
   };
 
-  const lockMonth = () => act("lock", () => base44.rpc("lock_month", { p_month: month }), L("Month locked", "Mesec je zaključan"));
-  const unlockMonth = () => act("unlock", () => base44.rpc("unlock_month", { p_month: month }), L("Month unlocked", "Mesec je otključan"));
+  const lockMonth = () => act("lock", () => base44.rpc("lock_month", { p_month: month }), L("Month locked", "Mesec je zaključan", "Mesiac je uzamknutý"));
+  const unlockMonth = () => act("unlock", () => base44.rpc("unlock_month", { p_month: month }), L("Month unlocked", "Mesec je otključan", "Mesiac je odomknutý"));
 
   const generate = async () => {
     if (rate === null) {
       toast.error(L("Enter the EUR/RSD exchange rate for the month — no payroll without a rate.",
-        "Unesite kurs EUR/RSD za mesec — bez kursa nema obračuna."));
+        "Unesite kurs EUR/RSD za mesec — bez kursa nema obračuna.", "Zadajte kurz EUR/RSD za mesiac — bez kurzu nie je možné zúčtovanie."));
       return;
     }
     if (!locked) {
       toast.error(L("Lock the month first — payroll is made only for a locked month.",
-        "Prvo zaključajte mesec — obračun se pravi samo za zaključan mesec."));
+        "Prvo zaključajte mesec — obračun se pravi samo za zaključan mesec.", "Najprv uzamknite mesiac — zúčtovanie sa robí iba pre uzamknutý mesiac."));
       return;
     }
     if (run && run.status !== "draft") {
-      toast.error(L("An approved payroll can't be generated again.", "Odobren obračun ne može ponovo da se generiše."));
+      toast.error(L("An approved payroll can't be generated again.", "Odobren obračun ne može ponovo da se generiše.", "Schválené zúčtovanie nemožno vygenerovať znova."));
       return;
     }
     await act("generate", async () => {
@@ -240,24 +240,24 @@ export default function MonthlyPayroll() {
         month, eurRsdRate: rate, params: paramsFromRow(paramsRow), timesheets: ts, employees: emps, employmentHistory: hist, projects: prjs,
       });
       await base44.rpc("save_payroll_draft", { p_month: month, p_eur_rsd_rate: rate, p_params: paramsRow, p_payslips: draftPayload(result) });
-      toast.success(L(`Draft saved — payslips: ${result.payslips.length}`, `Nacrt je sačuvan — platnih listića: ${result.payslips.length}`));
+      toast.success(L(`Draft saved — payslips: ${result.payslips.length}`, `Nacrt je sačuvan — platnih listića: ${result.payslips.length}`, `Koncept bol uložený — výplatných pások: ${result.payslips.length}`));
       if (result.problems.length) {
         const names = [...new Set(result.problems.map((p) => p.employeeName))];
         toast.warning(L(`Without a payslip (see the list of problems): ${names.join(", ")}`,
-          `Bez platnog listića (vidite spisak problema): ${names.join(", ")}`), { duration: 12000 });
+          `Bez platnog listića (vidite spisak problema): ${names.join(", ")}`, `Bez výplatnej pásky (pozrite zoznam problémov): ${names.join(", ")}`), { duration: 12000 });
       }
     });
   };
 
-  const approve = () => act("approve", () => base44.rpc("approve_payroll_run", { p_run: run.id }), L("Payroll approved", "Obračun je odobren"));
-  const markPaid = () => act("paid", () => base44.rpc("mark_payroll_paid", { p_run: run.id }), L("Payroll marked as paid", "Obračun je označen kao isplaćen"));
+  const approve = () => act("approve", () => base44.rpc("approve_payroll_run", { p_run: run.id }), L("Payroll approved", "Obračun je odobren", "Zúčtovanie bolo schválené"));
+  const markPaid = () => act("paid", () => base44.rpc("mark_payroll_paid", { p_run: run.id }), L("Payroll marked as paid", "Obračun je označen kao isplaćen", "Zúčtovanie bolo označené ako vyplatené"));
   const deleteDraft = () => act("delete", async () => {
     const id = run.id;
     await base44.entities.PayrollRun.delete(id);
     // Obrisan nacrt se više ne proverava u bazi (inače greška „Obračun ne postoji").
     queryClient.setQueryData(["payroll-run", month], null);
     queryClient.removeQueries({ queryKey: ["payroll-run-problems", id] });
-  }, L("Draft deleted", "Nacrt je obrisan"), { skipProblems: true });
+  }, L("Draft deleted", "Nacrt je obrisan", "Koncept bol odstránený"), { skipProblems: true });
 
   // ───── platni listić (PDF) i spisak za banku (Excel) ─────
   const [exporting, setExporting] = useState(null); // "pdf-all" | id listića | "bank"
@@ -270,8 +270,8 @@ export default function MonthlyPayroll() {
       const filename = slips.length === 1 ? payslipFileName({ run, slip: slips[0], employee }) : payslipsFileName(run);
       await exportPayslipsPDF({ run, payslips: slips, employees, projects, vendorNames: vendorName, lang, filename });
       toast.success(runIsDraft(run)
-        ? L("Draft PDF downloaded — watermarked, not for payment", "PDF nacrta je preuzet — sa vodenim žigom, nije za isplatu")
-        : L("Payslip PDF downloaded", "PDF platnog listića je preuzet"));
+        ? L("Draft PDF downloaded — watermarked, not for payment", "PDF nacrta je preuzet — sa vodenim žigom, nije za isplatu", "PDF konceptu bolo stiahnuté — s vodoznakom, nie je určené na výplatu")
+        : L("Payslip PDF downloaded", "PDF platnog listića je preuzet", "PDF výplatnej pásky bolo stiahnuté"));
     } catch (e) {
       toast.error(e.message, { duration: 12000 });
     } finally {
@@ -280,7 +280,7 @@ export default function MonthlyPayroll() {
   };
   const downloadBank = async () => {
     if (!runIsFinal(run)) {
-      toast.error(L("The bank list is made only for an approved or paid payroll.", "Spisak za banku se pravi samo za odobren ili isplaćen obračun."));
+      toast.error(L("The bank list is made only for an approved or paid payroll.", "Spisak za banku se pravi samo za odobren ili isplaćen obračun.", "Zoznam pre banku sa vytvára iba pre schválené alebo vyplatené zúčtovanie."));
       return;
     }
     setExporting("bank");
@@ -289,26 +289,26 @@ export default function MonthlyPayroll() {
       const fresh = await employeesQ.refetch();
       if (fresh.error) throw fresh.error;
       const rows = exportBankExcel({ run, payslips: stored, employees: fresh.data || [], vendorNames: vendorName, lang });
-      toast.success(L(`Bank list downloaded — payments: ${rows.payments.length}`, `Spisak za banku je preuzet — isplata: ${rows.payments.length}`));
+      toast.success(L(`Bank list downloaded — payments: ${rows.payments.length}`, `Spisak za banku je preuzet — isplata: ${rows.payments.length}`, `Zoznam pre banku bol stiahnutý — platieb: ${rows.payments.length}`));
       if (rows.invalidAmount.length) {
         const names = rows.invalidAmount.map((r) => r.employeeName).join(", ");
         toast.warning(L(`Amount to pay is not above 0 — NOT in the bank list (sheet "Iznos nije za isplatu"): ${names}`,
-          `Iznos za isplatu nije veći od 0 — NISU u spisku za banku (list „Iznos nije za isplatu"): ${names}`), { duration: 20000 });
+          `Iznos za isplatu nije veći od 0 — NISU u spisku za banku (list „Iznos nije za isplatu"): ${names}`, `Suma na výplatu nie je väčšia ako 0 — NIE SÚ v zozname pre banku (hárok „Iznos nije za isplatu“): ${names}`), { duration: 20000 });
       }
       if (rows.missingAccount.length) {
         const names = rows.missingAccount.map((r) => r.employeeName).join(", ");
         toast.warning(L(`No bank account — NOT in the bank list (sheet "Nedostaje račun"): ${names}`,
-          `Bez računa — NISU u spisku za banku (list „Nedostaje račun"): ${names}`), { duration: 20000 });
+          `Bez računa — NISU u spisku za banku (list „Nedostaje račun"): ${names}`, `Bez bankového účtu — NIE SÚ v zozname pre banku (hárok „Nedostaje račun“): ${names}`), { duration: 20000 });
       }
       if (rows.missingJmbg.length) {
         const names = rows.missingJmbg.map((r) => r.employeeName).join(", ");
         toast.warning(L(`JMBG missing — still in the bank list, please add it (sheet "Nedostaje JMBG"): ${names}`,
-          `Nedostaje JMBG — ostaju u spisku za banku, dopunite ga (list „Nedostaje JMBG"): ${names}`), { duration: 20000 });
+          `Nedostaje JMBG — ostaju u spisku za banku, dopunite ga (list „Nedostaje JMBG"): ${names}`, `Chýba JMBG — zostávajú v zozname pre banku, doplňte ho (hárok „Nedostaje JMBG“): ${names}`), { duration: 20000 });
       }
       if (rows.subcontractors.length) {
         const names = rows.subcontractors.map((r) => r.employeeName).join(", ");
         toast.info(L(`Via a subcontractor — paid by the subcontractor's invoice, not in the salary list (sheet "Podizvođači"): ${names}`,
-          `Preko podizvođača — plaća se faktura podizvođača, nisu u spisku zarada (list „Podizvođači"): ${names}`), { duration: 20000 });
+          `Preko podizvođača — plaća se faktura podizvođača, nisu u spisku zarada (list „Podizvođači"): ${names}`, `Cez subdodávateľa — platí sa faktúrou subdodávateľa, nie sú v zozname miezd (hárok „Podizvođači“): ${names}`), { duration: 20000 });
       }
     } catch (e) {
       toast.error(e.message, { duration: 12000 });
@@ -329,10 +329,10 @@ export default function MonthlyPayroll() {
 
       {/* Month Selector */}
       <div className="flex flex-wrap items-center gap-3">
-        <Button variant="outline" size="icon" aria-label={L("Previous month", "Prethodni mesec")}
+        <Button variant="outline" size="icon" aria-label={L("Previous month", "Prethodni mesec", "Predchádzajúci mesiac")}
           onClick={() => setMonth(format(addMonths(monthDate, -1), "yyyy-MM-dd"))}><ChevronLeft className="w-4 h-4" /></Button>
         <span className="text-sm font-medium min-w-[160px] text-center" data-testid="payroll-month">{monthLabel}</span>
-        <Button variant="outline" size="icon" aria-label={L("Next month", "Sledeći mesec")}
+        <Button variant="outline" size="icon" aria-label={L("Next month", "Sledeći mesec", "Nasledujúci mesiac")}
           onClick={() => setMonth(format(addMonths(monthDate, 1), "yyyy-MM-dd"))}><ChevronRight className="w-4 h-4" /></Button>
         <Button variant="ghost" size="sm" onClick={() => setMonth(currentMonth())}>{t("This Month")}</Button>
         <Button variant="outline" size="sm" className="gap-2 ml-auto" onClick={generate}
@@ -347,7 +347,7 @@ export default function MonthlyPayroll() {
           <div className="space-y-1.5">
             <Label htmlFor="eur-rsd-rate">{t("EUR/RSD exchange rate")}</Label>
             <Input id="eur-rsd-rate" inputMode="decimal" value={rateText} onChange={(e) => setRateText(e.target.value)}
-              placeholder={L("e.g. 117.20", "npr. 117,20")} disabled={run && run.status !== "draft"}
+              placeholder={L("e.g. 117.20", "npr. 117,20", "napr. 117,20")} disabled={run && run.status !== "draft"}
               aria-invalid={rateInvalid || rate === null}
               className={rateInvalid ? "border-red-500 bg-red-50 text-red-700 focus-visible:ring-red-500" : ""} />
             <p className={`text-xs ${rate === null ? "text-red-600" : "text-muted-foreground"}`}>
@@ -358,7 +358,7 @@ export default function MonthlyPayroll() {
             <p className="text-sm font-medium">{locked ? t("Month locked") : t("Month not locked")}</p>
             {locked ? (
               <Button variant="outline" size="sm" className="gap-2" onClick={unlockMonth} disabled={busy !== null || Boolean(run)}
-                title={run ? L("Delete the draft payroll first", "Prvo obrišite nacrt obračuna") : undefined}>
+                title={run ? L("Delete the draft payroll first", "Prvo obrišite nacrt obračuna", "Najprv odstráňte koncept zúčtovania") : undefined}>
                 <Unlock className="w-4 h-4" /> {t("Unlock Month")}
               </Button>
             ) : (
@@ -413,7 +413,7 @@ export default function MonthlyPayroll() {
             {stale.length > 0 && (
               <p className="text-amber-800">
                 {L(`The draft no longer matches the data for: ${stale.join(", ")} — click Generate Payroll.`,
-                  `Nacrt više ne odgovara podacima za: ${stale.join(", ")} — kliknite Generiši obračun.`)}
+                  `Nacrt više ne odgovara podacima za: ${stale.join(", ")} — kliknite Generiši obračun.`, `Koncept už nezodpovedá údajom pre: ${stale.join(", ")} — kliknite na Vygenerovať zúčtovanie.`)}
               </p>
             )}
             {dbProblems.length > 0 && (
@@ -456,7 +456,7 @@ export default function MonthlyPayroll() {
                 </Button>
                 <Button variant="outline" size="sm" className="gap-2" data-testid="bank-excel"
                   onClick={downloadBank} disabled={!slipsReady || exporting !== null || !runIsFinal(run)}
-                  title={runIsFinal(run) ? undefined : L("Only for an approved or paid payroll", "Samo za odobren ili isplaćen obračun")}>
+                  title={runIsFinal(run) ? undefined : L("Only for an approved or paid payroll", "Samo za odobren ili isplaćen obračun", "Iba pre schválené alebo vyplatené zúčtovanie")}>
                   <FileSpreadsheet className="w-4 h-4" /> {t("Bank list (Excel)")}
                 </Button>
               </div>
@@ -465,7 +465,7 @@ export default function MonthlyPayroll() {
           {stored.length > 0 && runIsDraft(run) && (
             <p className="text-xs text-amber-700">
               {L("Draft: the payslip PDF carries the watermark “DRAFT — not for payment”; the bank list is available after approval.",
-                "Nacrt: PDF platnog listića ima vodeni žig „NACRT — nije za isplatu“; spisak za banku je dostupan posle odobravanja.")}
+                "Nacrt: PDF platnog listića ima vodeni žig „NACRT — nije za isplatu“; spisak za banku je dostupan posle odobravanja.", "Koncept: PDF výplatnej pásky nesie vodoznak „KONCEPT — nie je určené na výplatu“; zoznam pre banku je dostupný po schválení.")}
             </p>
           )}
         </CardHeader>
@@ -608,9 +608,9 @@ export default function MonthlyPayroll() {
             <p className={`text-xs mt-3 ${allocationOk ? "text-muted-foreground" : "text-red-600 font-medium"}`} data-testid="allocation-check">
               {allocationOk
                 ? L(`Sum of cost per project ${eur(totals.allocated)} = sum of gross 2 ${eur(totals.totalCost)}. Project costs (materials etc.) are not included.`,
-                  `Zbir troška po projektima ${eur(totals.allocated)} = zbir bruto 2 ${eur(totals.totalCost)}. Ostali troškovi projekta (materijal i sl.) nisu uključeni.`)
+                  `Zbir troška po projektima ${eur(totals.allocated)} = zbir bruto 2 ${eur(totals.totalCost)}. Ostali troškovi projekta (materijal i sl.) nisu uključeni.`, `Súčet nákladov podľa projektov ${eur(totals.allocated)} = súčet hrubej 2 ${eur(totals.totalCost)}. Náklady projektov (materiál a pod.) nie sú zahrnuté.`)
                 : L(`Sum of cost per project ${eur(totals.allocated)} ≠ sum of gross 2 ${eur(totals.totalCost)}`,
-                  `Zbir troška po projektima ${eur(totals.allocated)} ≠ zbir bruto 2 ${eur(totals.totalCost)}`)}
+                  `Zbir troška po projektima ${eur(totals.allocated)} ≠ zbir bruto 2 ${eur(totals.totalCost)}`, `Súčet nákladov podľa projektov ${eur(totals.allocated)} ≠ súčet hrubej 2 ${eur(totals.totalCost)}`)}
             </p>
           </CardContent>
         </Card>
@@ -618,19 +618,19 @@ export default function MonthlyPayroll() {
 
       <ConfirmDialog
         open={confirm === "approve"} onClose={() => setConfirm(null)} onConfirm={approve} confirmLabel={t("Approve Payroll")}
-        title={L(`Approve the payroll for ${monthLabel}?`, `Odobriti obračun za ${monthLabel}?`)}
+        title={L(`Approve the payroll for ${monthLabel}?`, `Odobriti obračun za ${monthLabel}?`, `Schváliť zúčtovanie za ${monthLabel}?`)}
         message={L("An approved payroll can't be changed or deleted, and the month can't be unlocked.",
-          "Odobren obračun više ne može da se menja ni briše, a mesec ne može da se otključa.")}
+          "Odobren obračun više ne može da se menja ni briše, a mesec ne može da se otključa.", "Schválené zúčtovanie už nemožno meniť ani odstrániť a mesiac nemožno odomknúť.")}
       />
       <ConfirmDialog
         open={confirm === "paid"} onClose={() => setConfirm(null)} onConfirm={markPaid} confirmLabel={t("Mark as Paid")}
-        title={L(`Mark the payroll for ${monthLabel} as paid?`, `Označiti obračun za ${monthLabel} kao isplaćen?`)}
-        message={L(`Total to pay: ${eur(totals.payout)}. This can't be undone.`, `Ukupno za isplatu: ${eur(totals.payout)}. Ovo ne može da se poništi.`)}
+        title={L(`Mark the payroll for ${monthLabel} as paid?`, `Označiti obračun za ${monthLabel} kao isplaćen?`, `Označiť zúčtovanie za ${monthLabel} ako vyplatené?`)}
+        message={L(`Total to pay: ${eur(totals.payout)}. This can't be undone.`, `Ukupno za isplatu: ${eur(totals.payout)}. Ovo ne može da se poništi.`, `Celkom na výplatu: ${eur(totals.payout)}. Toto nemožno vrátiť späť.`)}
       />
       <ConfirmDeleteDialog
         open={confirm === "delete"} onClose={() => setConfirm(null)} onConfirm={deleteDraft}
         message={L("The draft payroll and its payslips will be deleted. You can generate it again.",
-          "Nacrt obračuna i njegovi platni listići biće obrisani. Možete ga ponovo generisati.")}
+          "Nacrt obračuna i njegovi platni listići biće obrisani. Možete ga ponovo generisati.", "Koncept zúčtovania a jeho výplatné pásky budú odstránené. Môžete ho vygenerovať znova.")}
       />
     </div>
   );

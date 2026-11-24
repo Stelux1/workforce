@@ -103,3 +103,34 @@ Platni listić (PDF za jednog radnika ili svi listići obračuna u jednom fajlu)
 Satnicu radnika na projektu (`projects.assigned_employees` b2c/b2b), zanimanja sa tarifom (`job_roles`) i dodele radnika kome je admin odredio tarifu (red u Tarifama, pozicija sa tarifom ili satnica na projektu) menja samo admin — u bazi triggerima, ne samo skrivanjem na ekranu. Operater raspoređuje radnike bez tarife, ali ne na poziciju koja ima tarifu u Tarifama. `rates.assignment_id`/`rates.project_id` su `on delete restrict` (brisanje dodele ili projekta sa tarifom prvo traži brisanje tarife). Izbor zanimanja (utiče samo na tarifu klijenta) ostaje operateru.
 **Zašto:** pregled je dokazao da operater preko stranice projekta može da odredi tarifu koju baza bira pri odobravanju (99 €/h umesto 12 €/h).
 **Ne menjati:** ne vraćati kaskadno brisanje tarifa; svaka nova kolona koju čita `resolve_timesheet_rate` mora i u ove triggere.
+
+## D23 — Teamora: novi brend, tema i navigacija (2026-11-24, menja D12 u delu dizajna)
+Klijent (Filip) je tražio rebrend u Teamora sa slika (logo, dashboard, sidebar). D12 i dalje važi za funkcije (nijedan modul se ne izbacuje), ali izgled je sada Teamora: svetla tema sa ljubičastim akcentima kroz shadcn tokene u `src/index.css` (`--primary` 263 70% 51%, `--accent` 252 90% 96%, `--foreground` 243 47% 20%, radius 12px; `text-success`/`bg-success-soft`, `text-warning`/`bg-warning-soft`, `shadow-card`). Logo: `public/teamora-logo.png`, `teamora-mark.png`, `favicon.png`. Sidebar po slici 5 (Vendors = handshake, spec §11), zaglavlje: globalna pretraga, obaveštenja, korisnički meni; EN/RS i EUR/RSD prekidači uklonjeni iz zaglavlja. Značka na Timesheets = broj satnica `approval_status = 'submitted'`.
+Glavna kontrolna tabla (slika 2) računa iz `src/lib/payroll/dashboard.js`: Client Revenue = zbir `client_revenue` odobrenih satnica, Payroll Cost = zbir `worker_cost` (sati × tarifa radnika × koeficijent, kao spec §10 — NE bruto 2), Gross Profit = razlika (Labor Margin), bez dodatnih troškova projekta; satnica se deli po danu srazmerno satima. Operater ne vidi finansije.
+**Ne menjati:** boje se ne hardkoduju po stranicama — samo tokeni; brojevi na kontrolnoj tabli samo iz stvarnih podataka.
+
+## D24 — Jezik i valuta su podešavanje cele aplikacije (2026-11-24, dopuna D2)
+`app_settings` (jedan red): jezik `en` | `sk` | `rs`, valuta samo `EUR`; čitaju svi prijavljeni, menja samo admin (RLS, pgTAP 12). Stranica Podešavanja → „Language & Currency" (`/settings/general`). localStorage je samo keš. Novi tekst se piše kao `L(en, rs, sk)` ili `{ rs, sk }` u `translations.js`; slovački za stari set je u `translations.sk.js`. Polja za unos srpskog prevoda (odeljenja, pozicije, kategorije troškova) su uklonjena; kolone `translation` ostaju u bazi, ali se ne koriste.
+
+## D25 — Šifarnici i unos (2026-11-24)
+- Vendor ID dodeljuje baza: `VEN-NNN` (advisory lock + najveći postojeći + 1, unique); vrednost sa ekrana pri insertu i izmena postojećeg ID-a se ignorišu (migracija `20261124110000`, pgTAP 12_vendor_id).
+- CSV uvoz zaposlenih i vendora (`src/lib/csvImport.js`, `csvEmployees.js`, `vendorImport.js`): duplikati se preskaču, privatna polja zaposlenog uvozi samo admin (D3), Employee ID po istom pravilu kao forma (`nextEmployeeId`), red koji počinje sa `#` je komentar.
+- Podrazumevane kategorije troškova (12 kategorija / 86 podkategorija) su u `default_cost_categories()`; migracija dopunjava bez duplikata, „Restore default categories" (samo admin) vraća samo obrisane.
+- Podrazumevani evropski praznici (zapadni Uskrs, `src/lib/europeanHolidays.js`) za 2026–2027 u migraciji `20261124130000` + dugme za izabranu godinu; postojeći datum se nikad ne prepisuje.
+
+## D26 — Forma radnika bez tarifa; podaci firme i adresa projekta (2026-11-24, dopuna D4, D17, D18)
+- Forma radnika više ne unosi profilne tarife, osnovu (neto/bruto) ni udeo radnog vremena (zahtev klijenta, slika 3; tarife se vode po projektu). Novi radnik je neto sa udelom 1. Postojeće vrednosti u `employee_private` ostaju i i dalje se primenjuju (D4 poslednji nivo, D5 posebne satnice, D17); admin ih vidi kao napomenu „Legacy profile rate set". Izmena radnika te kolone ne šalje.
+- D18: firma je u Slovačkoj — PIB je ukinut, kolona `pib` preimenovana u `tax_id` (slobodan format, do 30 znakova), dodat `zip`. PDF zaglavlje: „Adresa, ZIP Grad" i „Tax ID: …" (migracija `20261124120000`, pgTAP 07).
+- Projekat ima `address`, `zip`, `city`; `location` je sastavljena adresa za stare izveštaje, prikaz uvek kroz `projectAddress()`.
+- Svaka izmena projekta osvežava `["project", id]` i `["projects"]`; dijalog satnice čita izabrani projekat sveže (uzrok buga „ne može da se izabere Employee", slika 16/17).
+- B2C > B2B je samo upozorenje adminu (spec §5), tarife se nikad ne menjaju automatski.
+
+## D27 — Koeficijenti u procentima (2026-11-24, dopuna D5)
+Na ekranu se koeficijenti unose u procentima (100% = 1,0; spec §5), u bazi ostaje koeficijent; baza dozvoljava 0 < k ≤ 10, vrednosti ≥ 10 su migracijom podeljene sa 100 (bile su uneti procenti). Prazan koeficijent i dalje blokira obračun.
+
+## D28 — Spec v1.4 klijenta (2026-11-24)
+`Teamora_Master_Development_Specification_v1.4` je funkcionalna osnova za dalji rad; stanje svakog zahteva je u `IMPLEMENTATION-MATRIX.md`, posao u `BACKLOG.md` Phase 7. Konflikti spec-a sa D2, D3, D7/D8/D17, D10, D13 i D16 (sekcija „Konflikti" u matrici) čekaju Lukinu odluku — dok se ne odluči, važe postojeće odluke.
+
+## D29 — Praznik vikendom: veći koeficijent (2026-11-24, izmena D5, dopuna D16/D17, spec §5)
+Svaki sat ide u jednu konačnu vrstu: praznik u subotu/nedelju = **praznik vikendom** (`praznik_vikend`) → praznik radnim danom → vikend → preko dnevnog praga prekovremeno → redovno. Praznik vikendom nema svoj koeficijent: primenjuje se **veći** od koeficijenata praznika i vikenda, posebno za radnika (veća satnica: posebna satnica iz profila ili tarifa × koeficijent) i za klijenta; bez sabiranja i dvostrukog množenja; jednaki → praznik; oba koeficijenta moraju biti upisana. Snimak upisuje `worker_from`/`client_from` (migracija `20261124150000_praznik_vikendom.sql`; isti primeri u `payroll.test.js` i `supabase/tests/14_praznik_vikendom.test.sql`). Snimak bez linije `praznik_vikend` (odobren ranije) mesečni obračun deli po starom pravilu (D10).
+**Otvoreno (Luka):** sati vikendom/praznikom preko dnevnog praga se i dalje ne dele na prekovremeno (D5).

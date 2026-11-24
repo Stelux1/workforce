@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 import { ArrowLeft, Save, Upload, User, Phone, Briefcase, Landmark, Heart, IdCard } from "lucide-react";
 import { toast } from "sonner";
@@ -11,6 +11,8 @@ import { useUnsavedUpload } from "@/lib/useUnsavedUpload";
 import { useT } from "@/lib/translations";
 import { useAuth } from "@/lib/AuthContext";
 import { privateFieldErrors, normalizePrivate } from "@/lib/employeePrivate";
+import { nextEmployeeId } from "@/lib/csvEmployees";
+import LegacyPayrollNotice from "@/components/employees/LegacyPayrollNotice";
 import {
   PersonalInfoFields, ContactInfoFields, EmploymentInfoFields,
   FinancialInfoFields, PrivateInfoFields, EmergencyContactFields,
@@ -36,7 +38,7 @@ export default function EmployeeForm() {
   // Auto-generate employee ID for new employees
   const { data: allEmployees } = useQuery({
     queryKey: ["employees-for-id"],
-    queryFn: () => base44.entities.Employee.list("-created_date", 100),
+    queryFn: () => base44.entities.Employee.list("-created_date"),
     enabled: !editId,
   });
 
@@ -46,14 +48,8 @@ export default function EmployeeForm() {
 
   useEffect(() => {
     if (editId || !allEmployees) return;
-    // Find the highest EMP-XXX number among existing employees
-    const nums = allEmployees
-      .map((e) => {
-        const match = e.employee_id?.match(/^EMP-(\d+)$/i);
-        return match ? parseInt(match[1], 10) : 0;
-      });
-    const next = (nums.length > 0 ? Math.max(...nums) : 0) + 1;
-    const nextId = `EMP-${String(next).padStart(3, "0")}`;
+    // Sledeća EMP-xxx posle najveće postojeće (isto pravilo koristi CSV uvoz — lib/csvEmployees.js).
+    const nextId = nextEmployeeId(allEmployees.map((e) => e.employee_id));
     setForm((prev) => prev.employee_id ? prev : { ...prev, employee_id: nextId });
   }, [allEmployees, editId]);
 
@@ -101,7 +97,7 @@ export default function EmployeeForm() {
       toast.error(errors.map((e) => T(e)).join(" · "));
       return;
     }
-    saveMutation.mutate(normalizePrivate(form));
+    saveMutation.mutate(normalizePrivate(form, { isNew: !editId }));
   };
 
   const sections = [
@@ -110,7 +106,16 @@ export default function EmployeeForm() {
     { title: T("Employment Information"), icon: Briefcase, content: <EmploymentInfoFields form={form} setForm={setForm} /> },
     ...(isAdmin ? [
       { title: T("Financial Information"), icon: Landmark, content: <FinancialInfoFields form={form} setForm={setForm} /> },
-      { title: T("ID Documents & Payroll Basis"), icon: IdCard, content: <PrivateInfoFields form={form} setForm={setForm} /> },
+      {
+        title: T("ID Documents"),
+        icon: IdCard,
+        content: (
+          <>
+            {editId && <LegacyPayrollNotice employee={existing?.[0]} className="mb-4" />}
+            <PrivateInfoFields form={form} setForm={setForm} />
+          </>
+        ),
+      },
     ] : []),
     { title: T("Emergency Contact"), icon: Heart, content: <EmergencyContactFields form={form} setForm={setForm} /> },
   ];

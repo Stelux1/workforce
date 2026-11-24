@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
-import { Building2, Search, Trash2, Edit, Mail, Phone, Clock, TrendingUp } from "lucide-react";
+import { Building2, Search, Trash2, Edit, Mail, Phone } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +12,7 @@ import EmptyState from "@/components/shared/EmptyState";
 import ViewToggle from "@/components/shared/ViewToggle";
 import { useViewPreference } from "@/hooks/useViewPreference";
 import SortSelect from "@/components/shared/SortSelect";
-import { useT } from "@/lib/translations";
+import { useT, pick } from "@/lib/translations";
 import { useLang } from "@/lib/LanguageContext";
 import ConfirmDeleteDialog from "@/components/shared/ConfirmDeleteDialog";
 import { totalsByClient } from "@/lib/payroll/reports";
@@ -20,7 +20,7 @@ import { totalsByClient } from "@/lib/payroll/reports";
 export default function Clients() {
   const t = useT();
   const { lang } = useLang();
-  const L = (en, sr) => (lang === "rs" ? sr : en);
+  const L = (en, sr, sk) => pick(lang, en, sr, sk);
   const queryClient = useQueryClient();
   const [deleteClient, setDeleteClient] = useState(null);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -49,7 +49,7 @@ export default function Clients() {
     mutationFn: (data) => form.id ? base44.entities.Client.update(form.id, data) : base44.entities.Client.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["clients"] });
-      toast.success(form.id ? L("Saved", "Sačuvano") : L("Client added", "Klijent dodat"));
+      toast.success(form.id ? L("Saved", "Sačuvano", "Uložené") : L("Client added", "Klijent dodat", "Klient bol pridaný"));
       setDialogOpen(false);
       setForm({});
     },
@@ -57,7 +57,7 @@ export default function Clients() {
 
   const deleteMutation = useMutation({
     mutationFn: (id) => base44.entities.Client.delete(id),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["clients"] }); toast.success(L("Client deleted", "Klijent obrisan")); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["clients"] }); toast.success(L("Client deleted", "Klijent obrisan", "Klient bol odstránený")); },
   });
 
   // Zbir po client_id (project_id → projects.client_id), u centima — src/lib/payroll/reports.js.
@@ -81,7 +81,7 @@ export default function Clients() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title={L("Clients", "Klijenti")} subtitle={L("Manage B2B client accounts", "Upravljanje klijentima (B2B)")} actionLabel={L("Add Client", "Dodaj klijenta")} onAction={() => { setForm({}); setDialogOpen(true); }}>
+      <PageHeader title={L("Clients", "Klijenti", "Klienti")} subtitle={L("Manage B2B client accounts", "Upravljanje klijentima (B2B)", "Správa klientov (B2B)")} actionLabel={L("Add Client", "Dodaj klijenta", "Pridať klienta")} onAction={() => { setForm({}); setDialogOpen(true); }}>
         <ViewToggle view={view} onViewChange={setView} />
       </PageHeader>
 
@@ -122,7 +122,7 @@ export default function Clients() {
                   </div>
                   <h3 className="font-semibold">{client.name}</h3>
                   {client.contact_name && <p className="text-xs text-muted-foreground">{client.contact_name}</p>}
-                  {client.default_b2b_rate && <p className="text-xs text-primary mt-1">€{client.default_b2b_rate}/h {L("billing rate", "tarifa za klijenta")}</p>}
+                  {client.default_b2b_rate && <p className="text-xs text-primary mt-1">€{client.default_b2b_rate}/h {L("billing rate", "tarifa za klijenta", "fakturačná sadzba")}</p>}
                   <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t">
                     <div>
                       <p className="text-xs text-muted-foreground">{t("Hours") || "Hours"}</p>
@@ -219,7 +219,7 @@ export default function Clients() {
         open={!!deleteClient}
         onClose={() => setDeleteClient(null)}
         onConfirm={() => deleteMutation.mutate(deleteClient.id)}
-        message={L(`Delete client "${deleteClient?.name}"? This cannot be undone.`, `Obrisati klijenta „${deleteClient?.name}"? Ova akcija se ne može poništiti.`)}
+        message={L(`Delete client "${deleteClient?.name}"? This cannot be undone.`, `Obrisati klijenta „${deleteClient?.name}"? Ova akcija se ne može poništiti.`, `Odstrániť klienta „${deleteClient?.name}“? Túto akciu nemožno vrátiť späť.`)}
       />
     </div>
   );

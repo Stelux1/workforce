@@ -16,7 +16,7 @@ export const queryClientInstance = new QueryClient({
 		onError: (error) => showError(error),
 	}),
 	queryCache: new QueryCache({
-		onError: (error) => showError(error, currentLang() === 'rs' ? 'Podaci nisu učitani' : 'Data not loaded'),
+		onError: (error) => showError(error, { rs: 'Podaci nisu učitani', sk: 'Údaje sa nenačítali' }[currentLang()] || 'Data not loaded'),
 	}),
 	defaultOptions: {
 		queries: {

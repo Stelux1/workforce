@@ -10,11 +10,14 @@ import { Plus, Search, MapPin, Calendar, Users, FolderOpen, LayoutGrid, List } f
 import ProjectFormModal from "@/components/projects/ProjectFormModal";
 import { format } from "date-fns";
 import { useL } from "@/lib/translations";
+import { useLang } from "@/lib/LanguageContext";
+import { pageTitle } from "@/lib/pageTitles";
+import { projectAddress } from "@/lib/projectSite";
 
 const STATUS_LABELS = {
-  active: { en: "Active", rs: "Aktivan" },
-  paused: { en: "Paused", rs: "Pauziran" },
-  completed: { en: "Completed", rs: "Završen" },
+  active: { en: "Active", rs: "Aktivan", sk: "Aktívny" },
+  paused: { en: "Paused", rs: "Pauziran", sk: "Pozastavený" },
+  completed: { en: "Completed", rs: "Završen", sk: "Dokončený" },
 };
 const STATUS_COLORS = {
   active: "bg-green-100 text-green-700 border-green-200",
@@ -24,7 +27,8 @@ const STATUS_COLORS = {
 
 export default function Projects() {
   const L = useL();
-  const statusLabel = (s) => (STATUS_LABELS[s] ? L(STATUS_LABELS[s].en, STATUS_LABELS[s].rs) : s);
+  const { lang } = useLang();
+  const statusLabel = (s) => (STATUS_LABELS[s] ? L(STATUS_LABELS[s].en, STATUS_LABELS[s].rs, STATUS_LABELS[s].sk) : s);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
@@ -46,7 +50,7 @@ export default function Projects() {
     .filter((p) =>
       p.name?.toLowerCase().includes(search.toLowerCase()) ||
       p.client_name?.toLowerCase().includes(search.toLowerCase()) ||
-      p.location?.toLowerCase().includes(search.toLowerCase())
+      projectAddress(p).toLowerCase().includes(search.toLowerCase())
     )
     .sort((a, b) => {
       if (sort === "name_asc") return (a.name || "").localeCompare(b.name || "");
@@ -58,12 +62,12 @@ export default function Projects() {
     <div className="p-6 max-w-7xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">{L("Projects", "Projekti")}</h1>
-          <p className="text-muted-foreground text-sm mt-1">{L("Manage projects and employees", "Upravljanje projektima i zaposlenima")}</p>
+          <h1 className="text-2xl font-bold text-foreground">{pageTitle("Projects", lang)}</h1>
+          <p className="text-muted-foreground text-sm mt-1">{L("Manage projects and employees", "Upravljanje projektima i zaposlenima", "Správa projektov a zamestnancov")}</p>
         </div>
         <Button onClick={() => setShowForm(true)}>
           <Plus className="w-4 h-4" />
-          {L("New project", "Novi projekat")}
+          {L("New project", "Novi projekat", "Nový projekt")}
         </Button>
       </div>
 
@@ -71,7 +75,7 @@ export default function Projects() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
-            placeholder={L("Search projects...", "Pretraži projekte...")}
+            placeholder={L("Search projects...", "Pretraži projekte...", "Hľadať projekty...")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9"
@@ -102,18 +106,18 @@ export default function Projects() {
       ) : filtered.length === 0 ? (
         <div className="text-center py-20 text-muted-foreground">
           <FolderOpen className="w-12 h-12 mx-auto mb-3 opacity-30" />
-          <p className="font-medium">{L("No projects", "Nema projekata")}</p>
-          <p className="text-sm mt-1">{L("Add your first project with the button above", "Dodajte prvi projekat klikom na dugme gore")}</p>
+          <p className="font-medium">{L("No projects", "Nema projekata", "Žiadne projekty")}</p>
+          <p className="text-sm mt-1">{L("Add your first project with the button above", "Dodajte prvi projekat klikom na dugme gore", "Pridajte prvý projekt tlačidlom hore")}</p>
         </div>
       ) : view === "list" && filtered.length > 0 ? (
        <div className="flex items-center justify-end mb-4 gap-2">
          <Select value={sort} onValueChange={setSort}>
            <SelectTrigger className="w-40">
-             <SelectValue placeholder={L("Sort", "Sortiraj")} />
+             <SelectValue placeholder={L("Sort", "Sortiraj", "Zoradiť")} />
            </SelectTrigger>
            <SelectContent>
-             <SelectItem value="name_asc">{L("Name A → Z", "Naziv A → Z")}</SelectItem>
-             <SelectItem value="name_desc">{L("Name Z → A", "Naziv Z → A")}</SelectItem>
+             <SelectItem value="name_asc">{L("Name A → Z", "Naziv A → Z", "Názov A → Z")}</SelectItem>
+             <SelectItem value="name_desc">{L("Name Z → A", "Naziv Z → A", "Názov Z → A")}</SelectItem>
            </SelectContent>
          </Select>
        </div>
@@ -140,10 +144,10 @@ export default function Projects() {
               {project.client_name && (
                 <p className="text-sm text-muted-foreground mb-2 font-medium">{project.client_name}</p>
               )}
-              {project.location && (
+              {projectAddress(project) && (
                 <div className="flex items-center gap-1.5 text-sm text-muted-foreground mb-2">
                   <MapPin className="w-3.5 h-3.5 shrink-0" />
-                  <span className="line-clamp-1">{project.location}</span>
+                  <span className="line-clamp-1">{projectAddress(project)}</span>
                 </div>
               )}
               {(project.start_date || project.end_date) && (
@@ -158,7 +162,7 @@ export default function Projects() {
               )}
               <div className="flex items-center gap-1.5 text-sm text-muted-foreground border-t pt-3 mt-2">
                 <Users className="w-3.5 h-3.5" />
-                <span>{project.assigned_employees?.length || 0} {L("employees", "zaposlenih")}</span>
+                <span>{project.assigned_employees?.length || 0} {L("employees", "zaposlenih", "zamestnancov")}</span>
               </div>
             </div>
           ))}
@@ -169,12 +173,12 @@ export default function Projects() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-muted/50">
-                  <th className="text-left px-4 py-3 font-medium">{L("Number", "Broj")}</th>
-                  <th className="text-left px-4 py-3 font-medium">{L("Name", "Naziv")}</th>
-                  <th className="text-left px-4 py-3 font-medium hidden sm:table-cell">{L("Client", "Klijent")}</th>
-                  <th className="text-left px-4 py-3 font-medium hidden md:table-cell">{L("Location", "Lokacija")}</th>
-                  <th className="text-left px-4 py-3 font-medium hidden lg:table-cell">{L("Dates", "Datumi")}</th>
-                  <th className="text-left px-4 py-3 font-medium">{L("Employees", "Zaposleni")}</th>
+                  <th className="text-left px-4 py-3 font-medium">{L("Number", "Broj", "Číslo")}</th>
+                  <th className="text-left px-4 py-3 font-medium">{L("Name", "Naziv", "Názov")}</th>
+                  <th className="text-left px-4 py-3 font-medium hidden sm:table-cell">{L("Client", "Klijent", "Klient")}</th>
+                  <th className="text-left px-4 py-3 font-medium hidden md:table-cell">{L("Location", "Lokacija", "Miesto")}</th>
+                  <th className="text-left px-4 py-3 font-medium hidden lg:table-cell">{L("Dates", "Datumi", "Dátumy")}</th>
+                  <th className="text-left px-4 py-3 font-medium">{L("Employees", "Zaposleni", "Zamestnanci")}</th>
                   <th className="text-left px-4 py-3 font-medium">Status</th>
                 </tr>
               </thead>
@@ -185,10 +189,10 @@ export default function Projects() {
                     <td className="px-4 py-3 font-medium text-foreground group hover:text-primary transition-colors">{project.name}</td>
                     <td className="px-4 py-3 text-muted-foreground hidden sm:table-cell">{project.client_name || "—"}</td>
                     <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">
-                      {project.location ? (
+                      {projectAddress(project) ? (
                         <div className="flex items-center gap-1.5">
                           <MapPin className="w-3.5 h-3.5" />
-                          <span>{project.location}</span>
+                          <span>{projectAddress(project)}</span>
                         </div>
                       ) : "—"}
                     </td>

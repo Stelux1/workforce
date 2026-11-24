@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 
 import { Link } from "react-router-dom";
-import { Search, Users, Mail, Phone, Pencil, X, Check, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { Search, Users, Mail, Phone, Pencil, Check, ArrowUpDown, ArrowUp, ArrowDown, Upload } from "lucide-react";
 
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -21,6 +21,7 @@ import { useViewPreference } from "@/hooks/useViewPreference";
 import { toast } from "sonner";
 import { useT } from "@/lib/translations";
 import { useLang } from "@/lib/LanguageContext";
+import ImportEmployeesDialog from "@/components/employees/ImportEmployeesDialog";
 
 export default function Employees() {
   const queryClient = useQueryClient();
@@ -33,6 +34,7 @@ export default function Employees() {
   const [selected, setSelected] = useState(new Set());
   const [massEditOpen, setMassEditOpen] = useState(false);
   const [massFields, setMassFields] = useState({});
+  const [importOpen, setImportOpen] = useState(false);
   // Izbor se poništava kad se promeni pretraga ili filter — inače masovna izmena dira i radnike koji se ne vide.
   useEffect(() => { setSelected(new Set()); }, [search, statusFilter, deptFilter]);
   const [sortCol, setSortCol] = useState("name");
@@ -40,7 +42,7 @@ export default function Employees() {
 
   const { data: employees = [], isLoading } = useQuery({
     queryKey: ["employees"],
-    queryFn: () => base44.entities.Employee.list("-created_date", 200),
+    queryFn: () => base44.entities.Employee.list("-created_date"),
   });
 
   const { data: deptConfigs = [] } = useQuery({
@@ -48,18 +50,10 @@ export default function Employees() {
     queryFn: () => base44.entities.DepartmentConfig.list("name", 200),
   });
 
-  const translateDept = (name) => {
-    if (lang !== "rs") return name;
-    const dept = deptConfigs.find((d) => d.name === name);
-    return dept?.translation || name;
-  };
+  // Odeljenja i pozicije se prikazuju po nazivu (srpski prevod se više ne unosi ni prikazuje — zahtev 6).
+  const translateDept = (name) => name;
 
-  const translatePos = (deptName, posName) => {
-    if (lang !== "rs") return posName;
-    const dept = deptConfigs.find((d) => d.name === deptName);
-    const pos = dept?.positions?.find((p) => p.name === posName);
-    return pos?.translation || posName;
-  };
+  const translatePos = (deptName, posName) => posName;
 
   const selectedMassDept = deptConfigs.find((d) => d.name === massFields.department);
   const massPositions = selectedMassDept?.positions || [];
@@ -140,7 +134,11 @@ export default function Employees() {
           </Button>
         )}
         <ViewToggle view={view} onViewChange={setView} />
+        <Button variant="outline" className="gap-2" onClick={() => setImportOpen(true)}>
+          <Upload className="w-4 h-4" /> {t("Import CSV")}
+        </Button>
       </PageHeader>
+      <ImportEmployeesDialog open={importOpen} onOpenChange={setImportOpen} />
 
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3">
@@ -353,10 +351,10 @@ export default function Employees() {
                 <Select value={massFields.position || ""} onValueChange={(v) => setMassFields((p) => ({ ...p, position: v }))}>
                   <SelectTrigger><SelectValue placeholder={t("Leave unchanged")} /></SelectTrigger>
                   <SelectContent>
-                    {/* Pozicija je objekat {name, translation} (ili stari string) — crtanje objekta je rušilo stranicu. */}
+                    {/* Pozicija je objekat {name} (ili stari string) — crtanje objekta je rušilo stranicu. */}
                     {massPositions.map((pos) => {
                       const value = typeof pos === "string" ? pos : pos.name;
-                      const label = typeof pos === "string" ? pos : (lang === "rs" ? pos.translation || pos.name : pos.name);
+                      const label = typeof pos === "string" ? pos : pos.name;
                       return <SelectItem key={value} value={value}>{label}</SelectItem>;
                     })}
                   </SelectContent>

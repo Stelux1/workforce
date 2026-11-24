@@ -50,7 +50,7 @@ export default function Documents() {
 
   const { data: employees = [] } = useQuery({
     queryKey: ["employees"],
-    queryFn: () => base44.entities.Employee.list("-created_date", 200),
+    queryFn: () => base44.entities.Employee.list("-created_date"),
   });
 
   const createMutation = useMutation({
@@ -106,15 +106,15 @@ export default function Documents() {
 
   const getEmployeeName = (id) => {
     const emp = employees.find((e) => e.id === id);
-    return emp ? `${emp.first_name} ${emp.last_name}` : L("Unknown", "Nepoznato");
+    return emp ? `${emp.first_name} ${emp.last_name}` : L("Unknown", "Nepoznato", "Neznáme");
   };
 
   const SORT_OPTIONS = [
-    { value: "title_asc", label: L("Title A → Z", "Naslov A → Z") },
-    { value: "title_desc", label: L("Title Z → A", "Naslov Z → A") },
-    { value: "employee_asc", label: L("Employee A → Z", "Radnik A → Z") },
-    { value: "expiry_asc", label: L("Expiry (earliest)", "Isticanje (najranije)") },
-    { value: "newest", label: L("Newest First", "Najnovije prvo") },
+    { value: "title_asc", label: L("Title A → Z", "Naslov A → Z", "Názov A → Z") },
+    { value: "title_desc", label: L("Title Z → A", "Naslov Z → A", "Názov Z → A") },
+    { value: "employee_asc", label: L("Employee A → Z", "Radnik A → Z", "Zamestnanec A → Z") },
+    { value: "expiry_asc", label: L("Expiry (earliest)", "Isticanje (najranije)", "Platnosť (najskôr)") },
+    { value: "newest", label: L("Newest First", "Najnovije prvo", "Najnovšie ako prvé") },
   ];
 
   const filtered = [...documents].filter((d) => {

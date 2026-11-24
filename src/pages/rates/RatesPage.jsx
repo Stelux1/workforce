@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Search } from "lucide-react";
@@ -44,6 +44,19 @@ const LABELS = {
     confirmAssignment: "Obrisati dodelu? Postojeći radni sati ostaju nepromenjeni.",
     direct: "Direktan zaposleni",
   },
+  sk: {
+    title: "Sadzby a pridelenia", subtitle: "Sadzby nákladov a tržieb s dátumom platnosti a kto pracuje na ktorom projekte",
+    rates: "Sadzby", assignments: "Pridelenia na projekty", addRate: "Pridať sadzbu", addAssignment: "Pridať pridelenie",
+    searchRates: "Hľadať sadzby...", searchAssignments: "Hľadať pridelenia...",
+    noRates: "Zatiaľ nie sú definované žiadne sadzby", noAssignments: "Zatiaľ nie sú žiadne pridelenia na projekty",
+    rateSaved: "Sadzba bola uložená", rateDeleted: "Sadzba bola odstránená", assignmentSaved: "Pridelenie bolo uložené", assignmentDeleted: "Pridelenie bolo odstránené",
+    errFrom: "Dátum platnosti je povinný", errAmount: "Suma je povinná", errNegative: "Suma nemôže byť záporná.", errDates: "Dátum ukončenia nemôže byť pred dátumom začiatku.", errEmployee: "Vyberte zamestnanca",
+    errProject: "Vyberte projekt", errAssignment: "Vyberte pridelenie",
+    errAssignmentFields: "Zamestnanec, projekt a dátum začiatku sú povinné",
+    confirmRate: "Odstrániť túto sadzbu? Už vypočítané pracovné výkazy si ponechávajú použitú sadzbu.",
+    confirmAssignment: "Odstrániť toto pridelenie na projekt? Historické riadky pracovných výkazov zostanú nezmenené.",
+    direct: "Priamy zamestnanec",
+  },
 };
 
 const nameOf = (e) => `${e?.last_name || ""} ${e?.first_name || ""}`.trim();
@@ -63,7 +76,7 @@ export default function RatesPage() {
 
   const { data: employees = [] } = useQuery({
     queryKey: ["employees"],
-    queryFn: () => base44.entities.Employee.list("last_name", 1000),
+    queryFn: () => base44.entities.Employee.list("last_name"),
   });
   const { data: projects = [] } = useQuery({
     queryKey: ["projects"],

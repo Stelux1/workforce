@@ -2,7 +2,7 @@
 //
 // Satnica je nedeljna (pon–ned, D5/D12), a obračun mesečni: nedelja koja prelazi u drugi mesec deli se PO DANU
 // (datum rada), pa svaki mesec dobija tačno svoje dane — i sate i iznose. Svaki dan se razvrstava istim pravilom
-// kao pri odobravanju (classifyWeek: praznik → vikend → preko dnevnog praga prekovremeno → redovno), ali sa pragom
+// kao pri odobravanju (classifyWeek: praznik vikendom → praznik → vikend → preko praga prekovremeno → redovno), ali sa pragom
 // i praznicima iz snimka odobrene satnice (rate_snapshot), a tarife, koeficijenti i posebne satnice po vrsti sati
 // takođe iz snimka — nikad trenutne tarife (D10). Kasnija promena tarife, koeficijenta, praga ili praznika zato ne
 // menja obračun.
@@ -19,15 +19,16 @@
 
 import { round2, sum2 } from "./money.js";
 import { computeWorkerMonth, ENGAGEMENT, MissingRateError, RATE_BASIS } from "./monthly.js";
-import { classifyWeek, HOUR_TYPES } from "./hours.js";
+import { classifyWeek, HOUR_TYPE_ORDER, HOUR_TYPES } from "./hours.js";
 import { paramsInEur } from "./params.js";
 import { DAY_FIELDS } from "./timesheetRow.js";
 import { validRate } from "./timesheet.js";
 
-const TYPE_ORDER = Object.freeze([HOUR_TYPES.REGULAR, HOUR_TYPES.OVERTIME, HOUR_TYPES.WEEKEND, HOUR_TYPES.HOLIDAY]);
+const TYPE_ORDER = HOUR_TYPE_ORDER;
 const TYPE_LABEL = Object.freeze({
-  rs: { redovni: "redovni", prekovremeni: "prekovremeni", vikend: "vikend", praznik: "praznik" },
-  en: { redovni: "regular", prekovremeni: "overtime", vikend: "weekend", praznik: "holiday" },
+  rs: { redovni: "redovni", prekovremeni: "prekovremeni", vikend: "vikend", praznik: "praznik", praznik_vikend: "praznik vikendom" },
+  sk: { redovni: "bežné", prekovremeni: "nadčas", vikend: "víkend", praznik: "sviatok", praznik_vikend: "sviatok cez víkend" },
+  en: { redovni: "regular", prekovremeni: "overtime", vikend: "weekend", praznik: "holiday", praznik_vikend: "holiday on weekend" },
 });
 
 /** Angažman iz employment_history → engagement za computeWorkerMonth. */
@@ -50,6 +51,12 @@ const WARNING_TEXT = {
     [PAYSLIP_WARNINGS.ABOVE_MAX_BASE]: "zarada iznad najviše osnovice — doprinosi na najvišu osnovicu",
     [PAYSLIP_WARNINGS.NEGATIVE_NET]: "neto je negativan",
     [PAYSLIP_WARNINGS.NET_NOT_EXACT]: "neto se zbog zaokruživanja razlikuje za 1 cent",
+  },
+  sk: {
+    [PAYSLIP_WARNINGS.BELOW_MIN_BASE]: "mzda pod minimálnym vymeriavacím základom — odvody z minimálneho základu",
+    [PAYSLIP_WARNINGS.ABOVE_MAX_BASE]: "mzda nad maximálnym vymeriavacím základom — odvody z maximálneho základu",
+    [PAYSLIP_WARNINGS.NEGATIVE_NET]: "čistá mzda je záporná",
+    [PAYSLIP_WARNINGS.NET_NOT_EXACT]: "čistá mzda sa kvôli zaokrúhleniu líši o 1 cent",
   },
   en: {
     [PAYSLIP_WARNINGS.BELOW_MIN_BASE]: "pay below the minimum base — contributions on the minimum base",
@@ -120,7 +127,8 @@ export const PROBLEM = Object.freeze({
   GROSS_BELOW_MIN_BASE: "gross_below_min_base",
 });
 
-const SIDE_LABEL = { rs: { worker: "radnika", client: "klijenta" }, en: { worker: "worker", client: "client" } };
+const SIDE_LABEL = { rs: { worker: "radnika", client: "klijenta" },
+  sk: { worker: "zamestnanca", client: "klienta" }, en: { worker: "worker", client: "client" } };
 
 /** Iznos u poruci: „192,00 €" (srpski) / „€192.00" (engleski). */
 const eurText = (n, lang = "rs") => {
@@ -148,6 +156,25 @@ const PROBLEM_TEXT = {
     [PROBLEM.GROSS_BELOW_MIN_BASE]: (p) =>
       `zarada po bruto satnici (${eurText(p.bruto)}) je ispod najniže osnovice (${eurText(p.minBase)}), a doprinosi na najnižu osnovicu bi isplatu sveli na ${eurText(p.payout)} — knjigovođa mora da potvrdi pravilo (srazmerna osnovica za deo meseca); do tada nema isplate`,
   },
+  sk: {
+    [PROBLEM.NO_SNAPSHOT]: () =>
+      "pracovný výkaz bol schválený bez uloženia sadzieb a koeficientov (pred rozdelením podľa druhov hodín) — vráťte ho do konceptu a schváľte znova",
+    [PROBLEM.SNAPSHOT_MISMATCH]: () => "hodiny v pracovnom výkaze nezodpovedajú záznamu zo schválenia — vráťte ho do konceptu a schváľte znova",
+    [PROBLEM.MISSING_RATE]: (p) =>
+      `v zázname chýba sadzba ${p.missing.map((m) => `${SIDE_LABEL.sk[m.side]} (${TYPE_LABEL.sk[m.code] || m.code})`).join(", ")} — vráťte pracovný výkaz do konceptu a schváľte ho znova`,
+    [PROBLEM.MISSING_COEF]: (p) =>
+      `v zázname chýba koeficient ${p.missing.map((m) => `${SIDE_LABEL.sk[m.side]} (${TYPE_LABEL.sk[m.code] || m.code})`).join(", ")} — vráťte pracovný výkaz do konceptu a schváľte ho znova`,
+    [PROBLEM.NO_PROJECT]: () => "pracovný výkaz nie je prepojený s projektom zo zoznamu",
+    [PROBLEM.BAD_HOURS]: (p) => `neplatné hodiny (${p.detail})`,
+    [PROBLEM.NO_ENGAGEMENT]: (p) =>
+      `žiadny pracovný vzťah (zamestnanec alebo cez subdodávateľa) k dátumu ${formatDay(p.date)} — pridajte ho v profile zamestnanca (Pracovný vzťah)`,
+    [PROBLEM.ENGAGEMENT_CHANGES]: (p) =>
+      `pracovný vzťah sa počas mesiaca mení (${formatDay(p.date)}) — zúčtovanie v1 nepodporuje zmenu pracovného vzťahu v priebehu mesiaca`,
+    [PROBLEM.CALC_ERROR]: (p) => `zúčtovanie sa nedá vypočítať (${p.detail})`,
+    [PROBLEM.NEGATIVE_PAYOUT]: (p) => `výplata by bola záporná (${eurText(p.payout, "sk")}) — suma pod nulou sa nevypláca`,
+    [PROBLEM.GROSS_BELOW_MIN_BASE]: (p) =>
+      `mzda pri hrubej sadzbe (${eurText(p.bruto, "sk")}) je pod minimálnym vymeriavacím základom (${eurText(p.minBase, "sk")}) a odvody z minimálneho základu by znížili výplatu na ${eurText(p.payout, "sk")} — pravidlo musí potvrdiť účtovník (pomerný základ za časť mesiaca); dovtedy sa nevypláca`,
+  },
   en: {
     [PROBLEM.NO_SNAPSHOT]: () =>
       "the timesheet was approved without a rate and coefficient snapshot (before hour types) — set it back to draft and approve it again",
@@ -174,7 +201,7 @@ export function problemMessage(p, lang = "rs") {
   const L = PROBLEM_TEXT[lang] || PROBLEM_TEXT.rs;
   const text = (L[p.code] || (() => p.code))(p);
   const where = p.weekStart
-    ? `${lang === "en" ? "week of" : "nedelja od"} ${formatDay(p.weekStart)}${p.projectName ? ` (${p.projectName})` : ""}`
+    ? `${lang === "en" ? "week of" : lang === "sk" ? "týždeň od" : "nedelja od"} ${formatDay(p.weekStart)}${p.projectName ? ` (${p.projectName})` : ""}`
     : "";
   return `${p.employeeName}${where ? `, ${where}` : ""}: ${text}`;
 }
@@ -234,12 +261,15 @@ export function timesheetMonthLines(row, month) {
   }
   const holidays = Array.isArray(snap.holidays) ? snap.holidays : [];
   const byCode = new Map(snap.lines.filter(Boolean).map((l) => [l.code, l]));
+  // Snimak bez linije „praznik vikendom" je odobren po starom pravilu (praznik vikendom = praznik) ili nema takvih
+  // sati — u oba slučaja dan se deli kao praznik, pa odobrene satnice i obračuni ostaju isti (D10).
+  const holidayWeekend = byCode.has(HOUR_TYPES.HOLIDAY_WEEKEND);
 
   // Cela nedelja po pravilima iz snimka mora da da iste sate po vrsti kao pri odobravanju; inače snimak nije
   // snimak ovih sati i deljenje po danu ne bi bilo tačno.
   let week;
   try {
-    week = classifyWeek({ weekStart, dayHours, holidays, dailyThreshold: threshold });
+    week = classifyWeek({ weekStart, dayHours, holidays, dailyThreshold: threshold, holidayWeekend });
   } catch (e) {
     out.problems.push({ code: PROBLEM.BAD_HOURS, detail: e.message });
     return out;
@@ -259,7 +289,7 @@ export function timesheetMonthLines(row, month) {
   for (const d of inMonth) {
     const one = [0, 0, 0, 0, 0, 0, 0];
     one[d.i] = d.hours;
-    const types = classifyWeek({ weekStart, dayHours: one, holidays, dailyThreshold: threshold });
+    const types = classifyWeek({ weekStart, dayHours: one, holidays, dailyThreshold: threshold, holidayWeekend });
     for (const code of TYPE_ORDER) {
       const hours = types[code];
       if (!(hours > 0)) continue;

@@ -1,5 +1,11 @@
 // Generisano iz lokalne baze: npm run gen:schema. Ne menjati ručno.
 export const TABLE_COLUMNS = {
+  "app_settings": [
+    "id",
+    "language",
+    "currency",
+    "updated_date"
+  ],
   "attendance_records": [
     "id",
     "employee_id",
@@ -34,13 +40,14 @@ export const TABLE_COLUMNS = {
   "company_settings": [
     "id",
     "name",
-    "pib",
+    "tax_id",
     "registration_number",
     "address",
     "city",
     "bank_account",
     "logo_url",
-    "updated_date"
+    "updated_date",
+    "zip"
   ],
   "cost_categories": [
     "id",
@@ -342,7 +349,10 @@ export const TABLE_COLUMNS = {
     "assigned_employees",
     "created_date",
     "updated_date",
-    "created_by"
+    "created_by",
+    "address",
+    "zip",
+    "city"
   ],
   "rates": [
     "id",

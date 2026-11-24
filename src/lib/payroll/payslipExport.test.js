@@ -156,6 +156,13 @@ describe("platni listić: iznosi su polja iz baze, bez preračunavanja", () => {
     expect(m.draft).toBe(false);
     expect(payslipModel({ run: run("draft"), slip: SLIP_EMP }).draft).toBe(true);
   });
+  it("praznik vikendom je posebna vrsta sa svojim nazivom, posle praznika", () => {
+    const slip = { ...SLIP_EMP, hours_by_type: { praznik_vikend: 8, redovni: 152, praznik: 8 } };
+    const m = payslipModel({ run: run("approved"), slip, projects: PROJECTS, lang: "en" });
+    expect(m.hoursByType.map((h) => [h.code, h.label])).toEqual([
+      ["redovni", "Regular"], ["praznik", "Public holiday"], ["praznik_vikend", "Holiday on weekend"],
+    ]);
+  });
 });
 
 describe("spisak isplata za banku", () => {
@@ -248,20 +255,20 @@ describe("spisak isplata za banku", () => {
 describe("zaglavlje firme", () => {
   it("prazni podaci firme → nema zaglavlja (bez izmišljenog teksta)", () => {
     expect(companyHeader(null)).toBe(null);
-    expect(companyHeader({ id: true, name: null, pib: "", logo_url: null })).toBe(null);
+    expect(companyHeader({ id: true, name: null, tax_id: "", logo_url: null })).toBe(null);
   });
   it("samo uneta polja", () => {
     expect(companyHeader({ name: "Firma d.o.o." })).toEqual({ name: "Firma d.o.o.", city: "", lines: [], footer: "Firma d.o.o.", logoUrl: null });
-    const full = companyHeader({ name: "Firma d.o.o.", pib: "123456789", registration_number: "12345678", address: "Ulica 1", city: "Beograd", logo_url: "https://x/logo.png" });
-    expect(full.lines).toEqual(["Ulica 1, Beograd", "PIB: 123456789  ·  MB: 12345678"]);
-    expect(full.footer).toBe("Firma d.o.o.  ·  Ulica 1, Beograd  ·  PIB: 123456789  ·  MB: 12345678");
+    const full = companyHeader({ name: "Firma d.o.o.", tax_id: "SK2020123456", registration_number: "12345678", address: "Ulica 1", zip: "821 06", city: "Bratislava", logo_url: "https://x/logo.png" });
+    expect(full.lines).toEqual(["Ulica 1, 821 06 Bratislava", "Tax ID: SK2020123456  ·  MB: 12345678"]);
+    expect(full.footer).toBe("Firma d.o.o.  ·  Ulica 1, 821 06 Bratislava  ·  Tax ID: SK2020123456  ·  MB: 12345678");
     expect(full.logoUrl).toBe("https://x/logo.png");
     expect(companyHeader({ logo_url: "https://x/logo.png" })).toMatchObject({ name: "", lines: [], logoUrl: "https://x/logo.png" });
   });
 });
 
 describe("PDF platnog listića", () => {
-  const company = { ...companyHeader({ name: "Firma d.o.o.", pib: "123456789", city: "Beograd" }), logo: null };
+  const company = { ...companyHeader({ name: "Firma d.o.o.", tax_id: "SK2020123456", city: "Bratislava" }), logo: null };
   const pdfText = (doc) => doc.output();
 
   it("ima iznose iz baze, jedan listić po strani", () => {
@@ -272,13 +279,13 @@ describe("PDF platnog listića", () => {
       expect(out).toContain(`(${formatMoney(v)})`);
     }
     expect(out).toContain("(Firma d.o.o.)");
-    expect(out).toContain("PIB: 123456789");
+    expect(out).toContain("Tax ID: SK2020123456");
     expect(out).not.toContain("nije za isplatu");
   });
   it("nacrt dobija vodeni žig, bez podataka firme nema zaglavlja", () => {
     const out = pdfText(buildPayslipsPdf({ run: run("draft"), payslips: [SLIP_LOW], employees: EMPLOYEES, projects: PROJECTS, company: null }));
     expect(out).toContain("nije za isplatu");
-    expect(out).not.toContain("PIB:");
+    expect(out).not.toContain("Tax ID:");
   });
   it("bez listića nema PDF-a", () => {
     expect(() => buildPayslipsPdf({ run: run("approved"), payslips: [] })).toThrow();

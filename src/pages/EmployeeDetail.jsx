@@ -12,19 +12,18 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   ArrowLeft, Edit, Trash2, User, Phone, Briefcase, Landmark,
-  Heart, FileText, Clock, Calendar, Upload, Download, Plus, Eye
+  Heart, FileText, Upload, Download, Plus, Eye
 } from "lucide-react";
 import { parseISO } from "date-fns";
 import { toast } from "sonner";
 import StatusBadge from "@/components/shared/StatusBadge";
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel,
-  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
-  AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
+
 import { useT } from "@/lib/translations";
 import { useLang } from "@/lib/LanguageContext";
-import { formatDate, shortDatePattern, longDatePattern } from "@/lib/dateFormat";
+import { NATIONALITY_SK, COUNTRY_SK } from "@/lib/geoNames.sk";
+import { formatDate, longDatePattern } from "@/lib/dateFormat";
+import { useAuth } from "@/lib/AuthContext";
+import LegacyPayrollNotice from "@/components/employees/LegacyPayrollNotice";
 
 const NATIONALITY_RS = {
   "Afghan": "Avganistanog", "Albanian": "Albanac", "Algerian": "Alžirac", "American": "Amerikanac",
@@ -42,7 +41,7 @@ const NATIONALITY_RS = {
   "Lithuanian": "Litvanac", "Malaysian": "Malezijac", "Mexican": "Meksikanac", "Moldovan": "Moldavac",
   "Montenegrin": "Crnogorac", "Moroccan": "Marokanac", "New Zealander": "Novozelandjanin",
   "Nigerian": "Nigerijac", "Norwegian": "Norvežanin", "Pakistani": "Pakistanac", "Polish": "Poljakin",
-  "Portuguese": "Portugaac", "Romanian": "Rumun", "Russian": "Rus", "Serbian": "Srbin",
+  "Portuguese": "Portugalac", "Romanian": "Rumun", "Russian": "Rus", "Serbian": "Srbin",
   "Singaporean": "Singapurac", "Slovak": "Slovak", "Slovenian": "Slovenac", "South African": "Južnoafrikanac",
   "South Korean": "Južnokoreanac", "Spanish": "Španac", "Swedish": "Šveđanin", "Swiss": "Švajcarac",
   "Syrian": "Sirijac", "Thai": "Tajlanđanin", "Turkish": "Turčin", "Ukrainian": "Ukraninac",
@@ -101,13 +100,15 @@ export default function EmployeeDetail() {
   const { id: empId } = useParams();
   const t = useT();
   const { lang } = useLang();
+  const { isAdmin } = useAuth();
 
   const translateGender = (g) => {
+    if (lang === "sk") return g === "male" ? "Muž" : g === "female" ? "Žena" : g === "other" ? "Iné" : g;
     if (lang !== "rs") return g;
     return g === "male" ? "Muški" : g === "female" ? "Ženski" : g === "other" ? "Ostalo" : g;
   };
-  const translateNationality = (n) => lang === "rs" ? (NATIONALITY_RS[n] || n) : n;
-  const translateCountry = (c) => lang === "rs" ? (COUNTRY_RS[c] || c) : c;
+  const translateNationality = (n) => lang === "rs" ? (NATIONALITY_RS[n] || n) : lang === "sk" ? (NATIONALITY_SK[n] || n) : n;
+  const translateCountry = (c) => lang === "rs" ? (COUNTRY_RS[c] || c) : lang === "sk" ? (COUNTRY_SK[c] || c) : c;
 
   // Neispravan ID u adresi ne šalje upite (ranije: tri poruke o grešci i večni spinner).
   const validId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(empId || "");
@@ -134,18 +135,10 @@ export default function EmployeeDetail() {
     queryFn: () => base44.entities.DepartmentConfig.list("name", 200),
   });
 
-  const translateDepartment = (name) => {
-    if (lang !== "rs") return name;
-    const dept = deptConfigs.find((d) => d.name === name);
-    return dept?.translation || name;
-  };
+  // Odeljenja i pozicije se prikazuju po nazivu (srpski prevod se više ne unosi ni prikazuje — zahtev 6).
+  const translateDepartment = (name) => name;
 
-  const translatePosition = (deptName, posName) => {
-    if (lang !== "rs") return posName;
-    const dept = deptConfigs.find((d) => d.name === deptName);
-    const pos = dept?.positions?.find((p) => p.name === posName);
-    return pos?.translation || posName;
-  };
+  const translatePosition = (deptName, posName) => posName;
 
   const EMPLOYMENT_TYPE_RS = {
     full_time: "Puno radno vreme",
@@ -154,9 +147,17 @@ export default function EmployeeDetail() {
     contractor: "Ugovor o delu",
   };
 
+  const EMPLOYMENT_TYPE_SK = {
+    full_time: "Plný úväzok",
+    part_time: "Čiastočný úväzok",
+    temporary: "Dočasný",
+    contractor: "Dohoda o vykonaní práce",
+  };
+
   const translateEmploymentType = (val) => {
     if (!val) return null;
     if (lang === "rs") return EMPLOYMENT_TYPE_RS[val] || val.replace(/_/g, " ");
+    if (lang === "sk") return EMPLOYMENT_TYPE_SK[val] || val.replace(/_/g, " ");
     return val.replace(/_/g, " ");
   };
 
@@ -285,7 +286,7 @@ export default function EmployeeDetail() {
         <TabsList className="w-full justify-start overflow-x-auto">
           <TabsTrigger value="personal">{t("Personal Tab")}</TabsTrigger>
           <TabsTrigger value="employment">{t("Employment")}</TabsTrigger>
-          <TabsTrigger value="engagements">{lang === "rs" ? "Angažovanja" : "Engagements"}</TabsTrigger>
+          <TabsTrigger value="engagements">{lang === "rs" ? "Angažovanja" : lang === "sk" ? "Pracovné vzťahy" : "Engagements"}</TabsTrigger>
           <TabsTrigger value="financial">{t("Financial")}</TabsTrigger>
           <TabsTrigger value="emergency">{t("Emergency")}</TabsTrigger>
           <TabsTrigger value="documents">{t("Documents")} ({documents.length})</TabsTrigger>
@@ -357,23 +358,17 @@ export default function EmployeeDetail() {
             </CardContent>
           </Card>
           <Card className="mt-4">
-            <CardHeader className="pb-2"><CardTitle className="text-base flex items-center gap-2"><FileText className="w-4 h-4" /> {t("ID Documents & Payroll Basis")}</CardTitle></CardHeader>
+            <CardHeader className="pb-2"><CardTitle className="text-base flex items-center gap-2"><FileText className="w-4 h-4" /> {t("ID Documents")}</CardTitle></CardHeader>
+            {isAdmin && <div className="px-6"><LegacyPayrollNotice employee={emp} className="mb-2" /></div>}
             <CardContent className="grid grid-cols-1 md:grid-cols-2">
               <div className="divide-y pr-4">
                 <InfoRow label={t("JMBG")} value={emp.jmbg} />
                 <InfoRow label={t("ID Card Number")} value={emp.id_card_number} />
                 <InfoRow label={t("ID Card Expiry")} value={emp.id_card_expiry ? formatDate(parseISO(emp.id_card_expiry), longDatePattern(lang), lang) : null} />
-                <InfoRow label={t("Passport Number")} value={emp.passport_number} />
-                <InfoRow label={t("Passport Expiry")} value={emp.passport_expiry ? formatDate(parseISO(emp.passport_expiry), longDatePattern(lang), lang) : null} />
-                <InfoRow label={t("Rate Basis")} value={emp.rate_basis ? (emp.rate_basis === "bruto" ? t("Gross") : t("Net")) : null} />
-                <InfoRow label={t("Work Fraction")} value={emp.work_fraction != null ? String(emp.work_fraction) : null} />
               </div>
               <div className="divide-y pl-0 md:pl-4">
-                <InfoRow label={t("B2C Rate")} value={emp.b2c_hourly_rate != null ? `€${emp.b2c_hourly_rate}` : null} />
-                <InfoRow label={t("B2B Rate")} value={emp.b2b_hourly_rate != null ? `€${emp.b2b_hourly_rate}` : null} />
-                <InfoRow label={t("Overtime Rate")} value={emp.overtime_rate != null ? `€${emp.overtime_rate}` : null} />
-                <InfoRow label={t("Weekend Rate")} value={emp.weekend_rate != null ? `€${emp.weekend_rate}` : null} />
-                <InfoRow label={t("Holiday Rate")} value={emp.holiday_rate != null ? `€${emp.holiday_rate}` : null} />
+                <InfoRow label={t("Passport Number")} value={emp.passport_number} />
+                <InfoRow label={t("Passport Expiry")} value={emp.passport_expiry ? formatDate(parseISO(emp.passport_expiry), longDatePattern(lang), lang) : null} />
               </div>
             </CardContent>
           </Card>

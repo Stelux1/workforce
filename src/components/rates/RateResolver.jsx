@@ -49,6 +49,25 @@ const LABELS = {
       [S.PROFILE]: "Satnica iz profila radnika",
     },
   },
+  sk: {
+    title: "Kontrola určenia sadzby", employee: "Zamestnanec", project: "Projekt", date: "Dátum práce",
+    worker: "Sadzba zamestnanca (náklad)", client: "Sadzba klienta (tržba)", perHour: "EUR za hodinu", level: "Zdroj",
+    missing_rate: "Pre tento dátum nie je sadzba na žiadnej úrovni — pracovný výkaz nemožno vypočítať ani schváliť.",
+    unit: (source, amount, currency, unit) => `${source}: ${amount} ${currency} ${unit}. Akceptuje sa iba EUR za hodinu — opravte túto sadzbu (nepoužije sa namiesto nej nasledujúca úroveň).`,
+    noEmployee: "Vyberte zamestnanca", noDate: "Vyberte dátum práce",
+    conflict: "Dve aktívne sadzby rovnakej úrovne sú v konflikte — vyriešte pred fakturáciou.",
+    position: "pozícia", validFrom: "od",
+    order: "Poradie: ", orderNote: " (pracovná rola iba pre klienta).",
+    hint: "Sadzby sa určujú podľa dátumu práce, takže neskoršia zmena sadzby nikdy neprepíše skoršiu prácu.",
+    sources: {
+      [S.ASSIGNMENT_RATE]: "Sadzba pridelenia (Sadzby)",
+      [S.PROJECT_EMPLOYEE]: "Sadzba zamestnanca na projekte",
+      [S.PROJECT_RATE]: "Sadzba projektu / pozície (Sadzby)",
+      [S.JOB_ROLE]: "Pracovná rola na projekte",
+      [S.EMPLOYEE_RATE]: "Sadzba zamestnanca (Sadzby)",
+      [S.PROFILE]: "Sadzba z profilu zamestnanca",
+    },
+  },
 };
 
 // Jedna strana kroz zajednički izbor tarife (src/lib/payroll/rates.js) — greška se prikazuje umesto broja.

@@ -24,6 +24,16 @@ const TEXT = {
     account: 'Nalog',
     logout: 'Odjavi se',
   },
+  sk: {
+    inactiveTitle: 'Účet ešte nie je aktivovaný',
+    inactive: 'Váš účet bol vytvorený, ale administrátor ho ešte neaktivoval. Požiadajte administrátora o aktiváciu.',
+    missingTitle: 'Prístup obmedzený',
+    missing: 'Nie ste zaregistrovaný na používanie tejto aplikácie. Obráťte sa na administrátora aplikácie so žiadosťou o prístup.',
+    hintTitle: 'Ak si myslíte, že ide o chybu, môžete:',
+    hints: ['Skontrolovať, či ste prihlásený správnym účtom', 'Obrátiť sa na administrátora aplikácie so žiadosťou o prístup', 'Po aktivácii sa odhlásiť a znova prihlásiť'],
+    account: 'Účet',
+    logout: 'Odhlásiť sa',
+  },
 };
 
 const UserNotRegisteredError = () => {

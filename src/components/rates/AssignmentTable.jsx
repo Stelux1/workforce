@@ -10,6 +10,10 @@ const LABELS = {
     employee: "Zaposleni", project: "Projekat", role: "Radno mesto", vendor: "Dobavljač na početku", period: "Period", status: "Status",
     planned: "Planirano", active: "Aktivno", completed: "Završeno", cancelled: "Otkazano", direct: "Direktno", noVendor: "Bez angažovanja",
   },
+  sk: {
+    employee: "Zamestnanec", project: "Projekt", role: "Rola", vendor: "Dodávateľ na začiatku", period: "Obdobie", status: "Stav",
+    planned: "Plánované", active: "Aktívne", completed: "Dokončené", cancelled: "Zrušené", direct: "Priamy", noVendor: "Bez pracovného vzťahu",
+  },
 };
 
 const fmtDate = (d) => (d ? d.split("-").reverse().join(".") : "—");

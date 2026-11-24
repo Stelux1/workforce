@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
-import { Mail, Send, Users, FileText, Plus, Trash2, Edit2, Check, X } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Mail, Send, FileText, Plus, Trash2, Edit2 } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,6 +15,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import PageHeader from "@/components/shared/PageHeader";
 import { useL } from "@/lib/translations";
+import { useLang } from "@/lib/LanguageContext";
+import { pageTitle } from "@/lib/pageTitles";
 import { companyNameOf, fillEmailTemplate, COMPANY_NAME_MISSING } from "@/lib/emailTemplate";
 
 const TEMPLATE_TYPES = [
@@ -60,6 +62,7 @@ const DEFAULT_TEMPLATES = {
 
 export default function EmailNotifications() {
   const L = useL();
+  const { lang } = useLang();
   const typeLabel = (t) => L(t.label, t.rs);
   const queryClient = useQueryClient();
   const [templateDialog, setTemplateDialog] = useState(false);
@@ -85,22 +88,22 @@ export default function EmailNotifications() {
 
   const { data: employees = [] } = useQuery({
     queryKey: ["employees"],
-    queryFn: () => base44.entities.Employee.list("-created_date", 200),
+    queryFn: () => base44.entities.Employee.list("-created_date"),
   });
 
   const createTemplate = useMutation({
     mutationFn: (data) => base44.entities.EmailTemplate.create(data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["email_templates"] }); toast.success(L("Template saved", "Šablon sačuvan")); setTemplateDialog(false); setTemplateForm({}); setEditingTemplate(null); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["email_templates"] }); toast.success(L("Template saved", "Šablon sačuvan", "Šablóna bola uložená")); setTemplateDialog(false); setTemplateForm({}); setEditingTemplate(null); },
   });
 
   const updateTemplate = useMutation({
     mutationFn: ({ id, data }) => base44.entities.EmailTemplate.update(id, data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["email_templates"] }); toast.success(L("Template updated", "Šablon ažuriran")); setTemplateDialog(false); setEditingTemplate(null); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["email_templates"] }); toast.success(L("Template updated", "Šablon ažuriran", "Šablóna bola aktualizovaná")); setTemplateDialog(false); setEditingTemplate(null); },
   });
 
   const deleteTemplate = useMutation({
     mutationFn: (id) => base44.entities.EmailTemplate.delete(id),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["email_templates"] }); toast.success(L("Deleted", "Obrisano")); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["email_templates"] }); toast.success(L("Deleted", "Obrisano", "Odstránené")); },
   });
 
   const openNewTemplate = () => {
@@ -122,7 +125,7 @@ export default function EmailNotifications() {
 
   const handleSaveTemplate = () => {
     if (!templateForm.name || !templateForm.type || !templateForm.subject || !templateForm.body) {
-      toast.error(L("All fields required", "Sva polja su obavezna")); return;
+      toast.error(L("All fields required", "Sva polja su obavezna", "Všetky polia sú povinné")); return;
     }
     if (editingTemplate) {
       updateTemplate.mutate({ id: editingTemplate.id, data: templateForm });
@@ -148,13 +151,13 @@ export default function EmailNotifications() {
       : employees.filter((e) => selectedEmployees.includes(e.id) && e.email);
 
     if (targets.length === 0) {
-      toast.error(sendToAll ? L("No active employees with an email address", "Nema aktivnih radnika sa email adresom") : L("Select at least one recipient (or tick “Send to all active employees”)", "Izaberite bar jednog primaoca (ili označite „Pošalji svim aktivnim radnicima“)"));
+      toast.error(sendToAll ? L("No active employees with an email address", "Nema aktivnih radnika sa email adresom", "Žiadni aktívni zamestnanci s e-mailovou adresou") : L("Select at least one recipient (or tick “Send to all active employees”)", "Izaberite bar jednog primaoca (ili označite „Pošalji svim aktivnim radnicima“)", "Vyberte aspoň jedného príjemcu (alebo zaškrtnite „Odoslať všetkým aktívnym zamestnancom“)"));
       return;
     }
-    if (!sendForm.subject || !sendForm.body) { toast.error(L("Subject and body required", "Naslov i tekst su obavezni")); return; }
+    if (!sendForm.subject || !sendForm.body) { toast.error(L("Subject and body required", "Naslov i tekst su obavezni", "Predmet a text sú povinné")); return; }
 
     if (!companyName && /{company_name}/.test(`${sendForm.subject} ${sendForm.body}`)) {
-      toast.error(L(`Company name is not entered (Settings → Company details) — the message would go out with “${COMPANY_NAME_MISSING}”.`, `Naziv firme nije unet (Podešavanja → Podaci firme) — poruka bi otišla sa „${COMPANY_NAME_MISSING}“.`), { duration: 12000 });
+      toast.error(L(`Company name is not entered (Settings → Company details) — the message would go out with “${COMPANY_NAME_MISSING}”.`, `Naziv firme nije unet (Podešavanja → Podaci firme) — poruka bi otišla sa „${COMPANY_NAME_MISSING}“.`, `Názov firmy nie je zadaný (Nastavenia → Údaje o firme) — správa by odišla s textom „${COMPANY_NAME_MISSING}“.`), { duration: 12000 });
       return;
     }
 
@@ -174,7 +177,7 @@ export default function EmailNotifications() {
       }
     } finally {
       setSending(false); // greška se prikazuje globalno (lib/errorToasts.js)
-      if (successCount) toast.success(L(`Email sent to ${successCount} employee(s)`, `Email poslat na ${successCount} radnika`));
+      if (successCount) toast.success(L(`Email sent to ${successCount} employee(s)`, `Email poslat na ${successCount} radnika`, `E-mail bol odoslaný ${successCount} zamestnancom`));
     }
     setSendDialog(false);
   };
@@ -184,16 +187,16 @@ export default function EmailNotifications() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={L("Email Notifications", "Email obaveštenja")}
-        subtitle={L("Send emails to employees and manage templates", "Slanje emailova radnicima i upravljanje šablonima")}
-        actionLabel={L("Compose Email", "Napiši email")}
+        title={pageTitle("Email Notifications", lang)}
+        subtitle={L("Send emails to employees and manage templates", "Slanje emailova radnicima i upravljanje šablonima", "Odosielanie e-mailov zamestnancom a správa šablón")}
+        actionLabel={L("Compose Email", "Napiši email", "Napísať e-mail")}
         onAction={() => openSendDialog()}
       />
 
       <Tabs defaultValue="send">
         <TabsList>
-          <TabsTrigger value="send"><Send className="w-4 h-4 mr-2" />{L("Send Email", "Pošalji email")}</TabsTrigger>
-          <TabsTrigger value="templates"><FileText className="w-4 h-4 mr-2" />{L("Templates", "Šabloni")}</TabsTrigger>
+          <TabsTrigger value="send"><Send className="w-4 h-4 mr-2" />{L("Send Email", "Pošalji email", "Odoslať e-mail")}</TabsTrigger>
+          <TabsTrigger value="templates"><FileText className="w-4 h-4 mr-2" />{L("Templates", "Šabloni", "Šablóny")}</TabsTrigger>
         </TabsList>
 
         {/* Send Tab */}
@@ -209,8 +212,8 @@ export default function EmailNotifications() {
                     </div>
                     <div>
                       <p className="font-medium text-sm">{typeLabel(t)}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">{L("Click to send using this template", "Kliknite da pošaljete pomoću ovog šablona")}</p>
-                      {saved && <Badge className="mt-1 text-[10px] bg-emerald-100 text-emerald-700 border-0">{L("Custom template", "Prilagođeni šablon")}</Badge>}
+                      <p className="text-xs text-muted-foreground mt-0.5">{L("Click to send using this template", "Kliknite da pošaljete pomoću ovog šablona", "Kliknutím odošlete pomocou tejto šablóny")}</p>
+                      {saved && <Badge className="mt-1 text-[10px] bg-emerald-100 text-emerald-700 border-0">{L("Custom template", "Prilagođeni šablon", "Vlastná šablóna")}</Badge>}
                     </div>
                   </CardContent>
                 </Card>
@@ -222,10 +225,10 @@ export default function EmailNotifications() {
         {/* Templates Tab */}
         <TabsContent value="templates" className="mt-4 space-y-4">
           <div className="flex justify-end">
-            <Button onClick={openNewTemplate}><Plus className="w-4 h-4 mr-2" />{L("New Template", "Novi šablon")}</Button>
+            <Button onClick={openNewTemplate}><Plus className="w-4 h-4 mr-2" />{L("New Template", "Novi šablon", "Nová šablóna")}</Button>
           </div>
           {templates.length === 0 ? (
-            <Card><CardContent className="p-8 text-center text-muted-foreground">{L("No templates yet. Create one to get started.", "Još nema šablona. Napravite prvi.")}</CardContent></Card>
+            <Card><CardContent className="p-8 text-center text-muted-foreground">{L("No templates yet. Create one to get started.", "Još nema šablona. Napravite prvi.", "Zatiaľ nie sú žiadne šablóny. Vytvorte prvú.")}</CardContent></Card>
           ) : (
             <div className="space-y-3">
               {templates.map((t) => (
@@ -239,9 +242,9 @@ export default function EmailNotifications() {
                       <p className="text-xs text-muted-foreground mt-0.5 truncate">{t.subject}</p>
                     </div>
                     <div className="flex gap-2 shrink-0">
-                      <Button size="sm" variant="outline" onClick={() => openSendDialog(t)}><Send className="w-3 h-3 mr-1" />{L("Send", "Pošalji")}</Button>
+                      <Button size="sm" variant="outline" onClick={() => openSendDialog(t)}><Send className="w-3 h-3 mr-1" />{L("Send", "Pošalji", "Odoslať")}</Button>
                       <Button size="icon" variant="outline" className="h-8 w-8" onClick={() => openEditTemplate(t)}><Edit2 className="w-3 h-3" /></Button>
-                      <Button size="icon" variant="outline" className="h-8 w-8 text-red-500" onClick={() => { if (confirm(L("Delete template?", "Obrisati šablon?"))) deleteTemplate.mutate(t.id); }}><Trash2 className="w-3 h-3" /></Button>
+                      <Button size="icon" variant="outline" className="h-8 w-8 text-red-500" onClick={() => { if (confirm(L("Delete template?", "Obrisati šablon?", "Odstrániť šablónu?"))) deleteTemplate.mutate(t.id); }}><Trash2 className="w-3 h-3" /></Button>
                     </div>
                   </CardContent>
                 </Card>
@@ -254,32 +257,32 @@ export default function EmailNotifications() {
       {/* Template Edit Dialog */}
       <Dialog open={templateDialog} onOpenChange={setTemplateDialog}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>{editingTemplate ? L("Edit Template", "Uredi šablon") : L("New Template", "Novi šablon")}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{editingTemplate ? L("Edit Template", "Uredi šablon", "Upraviť šablónu") : L("New Template", "Novi šablon", "Nová šablóna")}</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>{L("Template Name *", "Naziv šablona *")}</Label>
-              <Input value={templateForm.name || ""} onChange={(e) => setTemplateForm((p) => ({ ...p, name: e.target.value }))} placeholder={L("e.g. Weekly Timesheet Reminder", "npr. Nedeljni podsetnik za satnicu")} />
+              <Label>{L("Template Name *", "Naziv šablona *", "Názov šablóny *")}</Label>
+              <Input value={templateForm.name || ""} onChange={(e) => setTemplateForm((p) => ({ ...p, name: e.target.value }))} placeholder={L("e.g. Weekly Timesheet Reminder", "npr. Nedeljni podsetnik za satnicu", "napr. Týždenná pripomienka pracovného výkazu")} />
             </div>
             <div className="space-y-2">
-              <Label>{L("Type *", "Tip *")}</Label>
+              <Label>{L("Type *", "Tip *", "Typ *")}</Label>
               <Select value={templateForm.type || ""} onValueChange={handleTypeChange}>
-                <SelectTrigger><SelectValue placeholder={L("Select type", "Izaberite tip")} /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder={L("Select type", "Izaberite tip", "Vyberte typ")} /></SelectTrigger>
                 <SelectContent>{TEMPLATE_TYPES.map((t) => <SelectItem key={t.value} value={t.value}>{typeLabel(t)}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>{L("Subject *", "Naslov *")}</Label>
+              <Label>{L("Subject *", "Naslov *", "Predmet *")}</Label>
               <Input value={templateForm.subject || ""} onChange={(e) => setTemplateForm((p) => ({ ...p, subject: e.target.value }))} />
             </div>
             <div className="space-y-2">
-              <Label>{L("Body *", "Tekst *")}</Label>
+              <Label>{L("Body *", "Tekst *", "Text *")}</Label>
               <Textarea value={templateForm.body || ""} onChange={(e) => setTemplateForm((p) => ({ ...p, body: e.target.value }))} rows={8} className="font-mono text-sm" />
-              <p className="text-xs text-muted-foreground">{L("Filled in automatically:", "Popunjava se automatski:")} {"{employee_name}"}, {"{company_name}"}. {L("Other placeholders in the default templates (e.g.", "Ostale oznake u podrazumevanim šablonima (npr.")} {"{week_start}"}, {"{amount}"}) {L("must be replaced by hand before sending.", "moraju se ručno zameniti pre slanja.")}</p>
+              <p className="text-xs text-muted-foreground">{L("Filled in automatically:", "Popunjava se automatski:", "Dopĺňa sa automaticky:")} {"{employee_name}"}, {"{company_name}"}. {L("Other placeholders in the default templates (e.g.", "Ostale oznake u podrazumevanim šablonima (npr.", "Ostatné zástupné znaky v predvolených šablónach (napr.")} {"{week_start}"}, {"{amount}"}) {L("must be replaced by hand before sending.", "moraju se ručno zameniti pre slanja.", "sa musia pred odoslaním nahradiť ručne.")}</p>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setTemplateDialog(false)}>{L("Cancel", "Otkaži")}</Button>
-            <Button onClick={handleSaveTemplate}>{L("Save Template", "Sačuvaj šablon")}</Button>
+            <Button variant="outline" onClick={() => setTemplateDialog(false)}>{L("Cancel", "Otkaži", "Zrušiť")}</Button>
+            <Button onClick={handleSaveTemplate}>{L("Save Template", "Sačuvaj šablon", "Uložiť šablónu")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -287,34 +290,34 @@ export default function EmailNotifications() {
       {/* Send Email Dialog */}
       <Dialog open={sendDialog} onOpenChange={setSendDialog}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>{L("Send Email", "Pošalji email")}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{L("Send Email", "Pošalji email", "Odoslať e-mail")}</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>{L("Subject *", "Naslov *")}</Label>
+              <Label>{L("Subject *", "Naslov *", "Predmet *")}</Label>
               <Input value={sendForm.subject || ""} onChange={(e) => setSendForm((p) => ({ ...p, subject: e.target.value }))} />
             </div>
             <div className="space-y-2">
-              <Label>{L("Body *", "Tekst *")}</Label>
+              <Label>{L("Body *", "Tekst *", "Text *")}</Label>
               <Textarea value={sendForm.body || ""} onChange={(e) => setSendForm((p) => ({ ...p, body: e.target.value }))} rows={7} className="text-sm" />
-              <p className="text-xs text-muted-foreground">{"{employee_name}"} {L("will be replaced automatically for each recipient", "se automatski zamenjuje za svakog primaoca")}</p>
+              <p className="text-xs text-muted-foreground">{"{employee_name}"} {L("will be replaced automatically for each recipient", "se automatski zamenjuje za svakog primaoca", "sa automaticky nahradí pre každého príjemcu")}</p>
               <div className="rounded-md border bg-muted/40 p-3" data-testid="email-preview">
-                <p className="text-xs font-medium text-muted-foreground mb-1">{L("Preview", "Pregled")}</p>
+                <p className="text-xs font-medium text-muted-foreground mb-1">{L("Preview", "Pregled", "Náhľad")}</p>
                 <p className="text-sm whitespace-pre-wrap">{fillEmailTemplate(sendForm.body || "", { companyName })}</p>
                 {!companyName && (
-                  <p className="text-xs text-destructive mt-2">{L("Company name is not entered (Settings → Company details).", "Naziv firme nije unet (Podešavanja → Podaci firme).")}</p>
+                  <p className="text-xs text-destructive mt-2">{L("Company name is not entered (Settings → Company details).", "Naziv firme nije unet (Podešavanja → Podaci firme).", "Názov firmy nie je zadaný (Nastavenia → Údaje o firme).")}</p>
                 )}
               </div>
             </div>
             <div className="space-y-3">
-              <Label>{L("Recipients", "Primaoci")}</Label>
+              <Label>{L("Recipients", "Primaoci", "Príjemcovia")}</Label>
               <div className="flex items-center gap-2">
                 <Checkbox id="all" checked={sendToAll} onCheckedChange={setSendToAll} />
-                <label htmlFor="all" className="text-sm font-medium cursor-pointer">{L("Send to all active employees", "Pošalji svim aktivnim radnicima")} ({activeEmployees.length})</label>
+                <label htmlFor="all" className="text-sm font-medium cursor-pointer">{L("Send to all active employees", "Pošalji svim aktivnim radnicima", "Odoslať všetkým aktívnym zamestnancom")} ({activeEmployees.length})</label>
               </div>
               {!sendToAll && (
                 <div className="border rounded-lg max-h-48 overflow-y-auto divide-y">
                   {activeEmployees.length === 0 ? (
-                    <p className="text-sm text-muted-foreground p-3">{L("No employees with email addresses", "Nema radnika sa email adresama")}</p>
+                    <p className="text-sm text-muted-foreground p-3">{L("No employees with email addresses", "Nema radnika sa email adresama", "Žiadni zamestnanci s e-mailovou adresou")}</p>
                   ) : (
                     activeEmployees.map((e) => (
                       <div key={e.id} className="flex items-center gap-2 px-3 py-2 hover:bg-muted/50">
@@ -331,9 +334,9 @@ export default function EmailNotifications() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setSendDialog(false)}>{L("Cancel", "Otkaži")}</Button>
+            <Button variant="outline" onClick={() => setSendDialog(false)}>{L("Cancel", "Otkaži", "Zrušiť")}</Button>
             <Button onClick={handleSendEmails} disabled={sending}>
-              {sending ? L("Sending...", "Slanje...") : <><Send className="w-4 h-4 mr-2" />{L("Send Email", "Pošalji email")}</>}
+              {sending ? L("Sending...", "Slanje...", "Odosielanie...") : <><Send className="w-4 h-4 mr-2" />{L("Send Email", "Pošalji email", "Odoslať e-mail")}</>}
             </Button>
           </DialogFooter>
         </DialogContent>

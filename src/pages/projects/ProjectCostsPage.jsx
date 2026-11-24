@@ -12,8 +12,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import PageHeader from "@/components/shared/PageHeader";
-import { useT } from "@/lib/translations";
+import { useT, pick } from "@/lib/translations";
 import { useLang } from "@/lib/LanguageContext";
+import { pageTitle } from "@/lib/pageTitles";
 import { costCurrency, costInEur, rsdToEur, sumCostsEur, validExchangeRate } from "@/lib/payroll/costs";
 import { round2 } from "@/lib/payroll/money";
 import { toast } from "sonner";
@@ -23,7 +24,7 @@ const EMPTY_FORM = { amount: "", currency: "EUR", eur_rsd_rate: "", category: ""
 export default function ProjectCostsPage() {
   const t = useT();
   const { lang } = useLang();
-  const l = (en, rs) => (lang === "rs" ? rs : en);
+  const l = (en, rs, sk) => pick(lang, en, rs, sk);
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
@@ -33,7 +34,7 @@ export default function ProjectCostsPage() {
 
   const { data: projects = [] } = useQuery({
     queryKey: ["projects"],
-    queryFn: () => base44.entities.Project.list("-created_date", 200),
+    queryFn: () => base44.entities.Project.list("-created_date"),
   });
 
   const { data: costCategories = [] } = useQuery({
@@ -81,7 +82,7 @@ export default function ProjectCostsPage() {
     const rate = isEur ? null : validExchangeRate(formData.eur_rsd_rate);
     if (!isEur && rate === null) {
       toast.error(l(`Enter the exchange rate greater than 0 (how many ${formData.currency} is 1 EUR).`,
-                    `Unesite kurs veći od 0 (koliko ${formData.currency} vredi 1 EUR).`));
+                    `Unesite kurs veći od 0 (koliko ${formData.currency} vredi 1 EUR).`, `Zadajte kurz väčší ako 0 (koľko ${formData.currency} je 1 EUR).`));
       return;
     }
     createMutation.mutate({
@@ -121,7 +122,7 @@ export default function ProjectCostsPage() {
 
   const getCategoryLabel = (key) => {
     const found = costCategories.find((c) => c.name.toLowerCase() === key?.toLowerCase() || c.id === key);
-    if (found) return lang === "rs" ? (found.translation || found.name) : found.name;
+    if (found) return found.name;
     return key || "—";
   };
 
@@ -129,14 +130,14 @@ export default function ProjectCostsPage() {
     if (!subcategoryKey) return null;
     const cat = costCategories.find((c) => c.name.toLowerCase() === categoryKey?.toLowerCase() || c.id === categoryKey);
     const sub = cat?.subcategories?.find((s) => s.name.toLowerCase() === subcategoryKey.toLowerCase());
-    if (sub) return lang === "rs" ? (sub.translation || sub.name) : sub.name;
+    if (sub) return sub.name;
     return subcategoryKey;
   };
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title={t("Project Costs") || "Projektni Troškovi"}
+        title={pageTitle("Project Costs", lang)}
         subtitle={`${costs.length} ${t("total costs") || "ukupno troškova"}`}
         actionLabel={t("Add Cost") || "Dodaj Trošak"}
         onAction={() => setDialogOpen(true)}
@@ -158,7 +159,7 @@ export default function ProjectCostsPage() {
             <SelectValue placeholder={t("All projects") || "Svi projekti"} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">{lang === "rs" ? "Svi projekti" : "All projects"}</SelectItem>
+            <SelectItem value="all">{lang === "rs" ? "Svi projekti" : lang === "sk" ? "Všetky projekty" : "All projects"}</SelectItem>
             {projects.map((p) => (
               <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
             ))}
@@ -172,17 +173,17 @@ export default function ProjectCostsPage() {
           <div className="flex flex-col sm:flex-row gap-6 items-center">
             <div className="flex flex-col sm:flex-row gap-6 flex-1">
               <div className="flex-1 text-center p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
-                <p className="text-xs text-muted-foreground mb-1">{lang === "rs" ? "Ukupno EUR" : "Total EUR"}</p>
+                <p className="text-xs text-muted-foreground mb-1">{lang === "rs" ? "Ukupno EUR" : lang === "sk" ? "Spolu EUR" : "Total EUR"}</p>
                 <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{totalEUR.toFixed(2)} €</p>
                 {fromRsd.eur > 0 && (
                   <p className="text-xs text-muted-foreground mt-1">
-                    {l(`incl. RSD costs at the entered rate: ${fromRsd.eur.toFixed(2)} €`, `uključeni RSD troškovi po unetom kursu: ${fromRsd.eur.toFixed(2)} €`)}
+                    {l(`incl. RSD costs at the entered rate: ${fromRsd.eur.toFixed(2)} €`, `uključeni RSD troškovi po unetom kursu: ${fromRsd.eur.toFixed(2)} €`, `vrátane nákladov v RSD podľa zadaného kurzu: ${fromRsd.eur.toFixed(2)} €`)}
                   </p>
                 )}
               </div>
               {(fromRsd.amount > 0 || missingRsd > 0) && (
                 <div className="flex-1 text-center p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
-                  <p className="text-xs text-muted-foreground mb-1">{lang === "rs" ? "Ukupno RSD" : "Total RSD"}</p>
+                  <p className="text-xs text-muted-foreground mb-1">{lang === "rs" ? "Ukupno RSD" : lang === "sk" ? "Spolu RSD" : "Total RSD"}</p>
                   <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">{(fromRsd.amount + missingRsd).toFixed(2)} RSD</p>
                   {fromRsd.amount > 0 && (
                     <p className="text-xs text-muted-foreground mt-1">{fromRsd.amount.toFixed(2)} RSD = {fromRsd.eur.toFixed(2)} €</p>
@@ -190,7 +191,7 @@ export default function ProjectCostsPage() {
                   {missingRsd > 0 && (
                     <p className="text-xs font-medium text-red-600 dark:text-red-400 mt-1">
                       {l(`${missingRsd.toFixed(2)} RSD missing an exchange rate — not included in the EUR total (${sums.missingRate.length})`,
-                         `${missingRsd.toFixed(2)} RSD nedostaje kurs — nije uračunato u EUR zbir (${sums.missingRate.length})`)}
+                         `${missingRsd.toFixed(2)} RSD nedostaje kurs — nije uračunato u EUR zbir (${sums.missingRate.length})`, `${missingRsd.toFixed(2)} RSD bez kurzu — nezapočítané do súčtu v EUR (${sums.missingRate.length})`)}
                     </p>
                   )}
                 </div>
@@ -203,7 +204,7 @@ export default function ProjectCostsPage() {
                     <XAxis dataKey="currency" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
                     <YAxis hide />
                     <Tooltip
-                      formatter={(value, name, props) => [`${value.toFixed(2)} €`, props.payload.currency === "RSD" ? l("From RSD", "Iz RSD") : (lang === "rs" ? "Ukupno" : "Total")]}
+                      formatter={(value, name, props) => [`${value.toFixed(2)} €`, props.payload.currency === "RSD" ? l("From RSD", "Iz RSD", "Z RSD") : (lang === "rs" ? "Ukupno" : lang === "sk" ? "Spolu" : "Total")]}
                       contentStyle={{ fontSize: 12 }}
                     />
                     <Bar dataKey="total" radius={[6, 6, 0, 0]}>
@@ -246,10 +247,10 @@ export default function ProjectCostsPage() {
                   <div className="text-right">
                     <p className="text-lg font-semibold text-primary">{Number(cost.amount).toFixed(2)} {costCurrency(cost)}</p>
                     {costCurrency(cost) !== "EUR" && (costInEur(cost) === null ? (
-                      <p className="text-xs font-medium text-red-600 dark:text-red-400">{l("missing exchange rate", "nedostaje kurs")}</p>
+                      <p className="text-xs font-medium text-red-600 dark:text-red-400">{l("missing exchange rate", "nedostaje kurs", "chýba kurz")}</p>
                     ) : (
                       <p className="text-xs text-muted-foreground">
-                        = {costInEur(cost).toFixed(2)} € · {l("rate", "kurs")} {Number(cost.eur_rsd_rate)}
+                        = {costInEur(cost).toFixed(2)} € · {l("rate", "kurs", "kurz")} {Number(cost.eur_rsd_rate)}
                       </p>
                     ))}
                   </div>
@@ -280,7 +281,7 @@ export default function ProjectCostsPage() {
               <Label>{t("Project")} *</Label>
               <Select value={formData.project_id} onValueChange={(v) => setFormData({ ...formData, project_id: v })}>
                 <SelectTrigger>
-                  <SelectValue placeholder={lang === "rs" ? "Izaberi projekat" : "Select project"} />
+                  <SelectValue placeholder={lang === "rs" ? "Izaberi projekat" : lang === "sk" ? "Vyberte projekt" : "Select project"} />
                 </SelectTrigger>
                 <SelectContent>
                   {projects.map((p) => (
@@ -319,18 +320,18 @@ export default function ProjectCostsPage() {
               const preview = formData.amount ? rsdToEur(formData.amount, formData.eur_rsd_rate) : null;
               return (
                 <div className="space-y-2">
-                  <Label>{l(`Exchange rate (${formData.currency} for 1 EUR)`, `Kurs (${formData.currency} za 1 EUR)`)} *</Label>
+                  <Label>{l(`Exchange rate (${formData.currency} for 1 EUR)`, `Kurs (${formData.currency} za 1 EUR)`, `Kurz (${formData.currency} za 1 EUR)`)} *</Label>
                   <Input
                     type="number"
                     step="0.0001"
                     min="0"
-                    placeholder={l("e.g. 117.2", "npr. 117,2")}
+                    placeholder={l("e.g. 117.2", "npr. 117,2", "napr. 117,2")}
                     value={formData.eur_rsd_rate}
                     onChange={(e) => setFormData({ ...formData, eur_rsd_rate: e.target.value })}
                   />
                   <p className="text-xs text-muted-foreground">
                     {preview === null
-                      ? l("The cost is counted in EUR at this rate. No default rate.", "Trošak se u EUR računa po ovom kursu. Nema podrazumevanog kursa.")
+                      ? l("The cost is counted in EUR at this rate. No default rate.", "Trošak se u EUR računa po ovom kursu. Nema podrazumevanog kursa.", "Náklad sa v EUR počíta podľa tohto kurzu. Predvolený kurz neexistuje.")
                       : `= ${preview.toFixed(2)} €`}
                   </p>
                 </div>
@@ -345,7 +346,7 @@ export default function ProjectCostsPage() {
                 <SelectContent>
                   {costCategories.map((cat) => (
                     <SelectItem key={cat.id} value={cat.name}>
-                      {lang === "rs" ? (cat.translation || cat.name) : cat.name}
+                      {cat.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -365,7 +366,7 @@ export default function ProjectCostsPage() {
                     <SelectContent>
                       {subs.map((sub) => (
                         <SelectItem key={sub.name} value={sub.name}>
-                          {lang === "rs" ? (sub.translation || sub.name) : sub.name}
+                          {sub.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -392,18 +393,18 @@ export default function ProjectCostsPage() {
       <AlertDialog open={!!deleteConfirmId} onOpenChange={(open) => !open && setDeleteConfirmId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{lang === "rs" ? "Obriši trošak" : "Delete cost"}</AlertDialogTitle>
+            <AlertDialogTitle>{lang === "rs" ? "Obriši trošak" : lang === "sk" ? "Odstrániť náklad" : "Delete cost"}</AlertDialogTitle>
             <AlertDialogDescription>
-              {lang === "rs" ? "Da li ste sigurni da želite da obrišete ovaj trošak? Ova akcija se ne može poništiti." : "Are you sure you want to delete this cost? This action cannot be undone."}
+              {lang === "rs" ? "Da li ste sigurni da želite da obrišete ovaj trošak? Ova akcija se ne može poništiti." : lang === "sk" ? "Naozaj chcete odstrániť tento náklad? Túto akciu nemožno vrátiť späť." : "Are you sure you want to delete this cost? This action cannot be undone."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>{lang === "rs" ? "Otkaži" : "Cancel"}</AlertDialogCancel>
+            <AlertDialogCancel>{lang === "rs" ? "Otkaži" : lang === "sk" ? "Zrušiť" : "Cancel"}</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={() => { deleteMutation.mutate(deleteConfirmId); setDeleteConfirmId(null); }}
             >
-              {lang === "rs" ? "Obriši" : "Delete"}
+              {lang === "rs" ? "Obriši" : lang === "sk" ? "Odstrániť" : "Delete"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

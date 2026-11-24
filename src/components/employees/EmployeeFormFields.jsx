@@ -2,12 +2,12 @@ import { useId } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { useT } from "@/lib/translations";
 import { useLang } from "@/lib/LanguageContext";
 import { jmbgValid } from "@/lib/jmbg";
+import { NATIONALITY_SK, COUNTRY_SK } from "@/lib/geoNames.sk";
 
 const NATIONALITIES = [
   { en: "Afghan", rs: "Afganistanog" },
@@ -211,7 +211,7 @@ export function PersonalInfoFields({ form, setForm }) {
           <SelectContent className="max-h-64 overflow-y-auto">
             {NATIONALITIES.map((n) => (
               <SelectItem key={n.en} value={n.en}>
-                {lang === "rs" ? n.rs : n.en}
+                {lang === "rs" ? n.rs : lang === "sk" ? (NATIONALITY_SK[n.en] || n.en) : n.en}
               </SelectItem>
             ))}
           </SelectContent>
@@ -256,7 +256,7 @@ export function ContactInfoFields({ form, setForm }) {
           <SelectContent className="max-h-64 overflow-y-auto">
             {COUNTRIES.map((c) => (
               <SelectItem key={c.en} value={c.en}>
-                {lang === "rs" ? c.rs : c.en}
+                {lang === "rs" ? c.rs : lang === "sk" ? (COUNTRY_SK[c.en] || c.en) : c.en}
               </SelectItem>
             ))}
           </SelectContent>
@@ -281,9 +281,6 @@ export function EmploymentInfoFields({ form, setForm }) {
   const positions = selectedDept?.positions || [];
 
   const getDisplayName = (item, translateKey) => {
-    if (lang === "rs" && item.translation) {
-      return item.translation;
-    }
     return translateKey ? T(item.name) : item.name;
   };
 
@@ -407,12 +404,6 @@ export function PrivateInfoFields({ form, setForm }) {
   const uid = useId();
   const T = useT();
   const update = (field, value) => setForm((prev) => ({ ...prev, [field]: value }));
-  const num = (field, label, props = {}) => (
-    <div className="space-y-2">
-      <Label htmlFor={`${uid}-${field}`}>{T(label)}</Label>
-      <Input id={`${uid}-${field}`} type="number" step="0.01" min="0" value={form[field] ?? ""} onChange={(e) => update(field, e.target.value)} {...props} />
-    </div>
-  );
   const jmbgBad = !jmbgValid(String(form.jmbg ?? "").trim());
 
   return (
@@ -446,90 +437,6 @@ export function PrivateInfoFields({ form, setForm }) {
       <div className="space-y-2">
         <Label htmlFor={`${uid}-passport_expiry`}>{T("Passport Expiry")}</Label>
         <Input id={`${uid}-passport_expiry`} type="date" value={form.passport_expiry || ""} onChange={(e) => update("passport_expiry", e.target.value)} />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor={`${uid}-rate_basis`}>{T("Rate Basis")}</Label>
-        <Select value={form.rate_basis || "neto"} onValueChange={(v) => update("rate_basis", v)}>
-          <SelectTrigger id={`${uid}-rate_basis`}><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="neto">{T("Net")}</SelectItem>
-            <SelectItem value="bruto">{T("Gross")}</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-      {num("work_fraction", "Work Fraction (0.5 = half time)", { min: "0.01", max: "1", step: "0.01", placeholder: "1" })}
-      {num("b2c_hourly_rate", "B2C Hourly Rate (€) — Worker Pay")}
-      {num("b2b_hourly_rate", "B2B Hourly Rate (€) — Client Billing")}
-      {num("overtime_rate", "Overtime Rate (€/h)")}
-      {num("weekend_rate", "Weekend Rate (€/h)")}
-      {num("holiday_rate", "Holiday Rate (€/h)")}
-    </div>
-  );
-}
-
-export function PayrollInfoFields({ form, setForm }) {
-  const uid = useId();
-  const T = useT();
-  const update = (field, value) => setForm((prev) => ({ ...prev, [field]: value }));
-
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <div className="space-y-2">
-        <Label htmlFor={`${uid}-b2c_hourly_rate`}>{T("B2C Hourly Rate (€) — Worker Pay")}</Label>
-        <Input id={`${uid}-b2c_hourly_rate`} type="number" step="0.01" value={form.b2c_hourly_rate || ""} onChange={(e) => update("b2c_hourly_rate", parseFloat(e.target.value) || 0)} placeholder={T("e.g. 20.00")} />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor={`${uid}-b2b_hourly_rate`}>{T("B2B Hourly Rate (€) — Client Billing")}</Label>
-        <Input id={`${uid}-b2b_hourly_rate`} type="number" step="0.01" value={form.b2b_hourly_rate || ""} onChange={(e) => update("b2b_hourly_rate", parseFloat(e.target.value) || 0)} placeholder={T("e.g. 35.00")} />
-      </div>
-      {(form.b2c_hourly_rate || form.b2b_hourly_rate) ? (
-        <div className="md:col-span-2 bg-muted/50 rounded-lg p-3 text-sm flex gap-6">
-          <span>{T("Profit/hour")}: <strong className="text-emerald-600">€{((form.b2b_hourly_rate || 0) - (form.b2c_hourly_rate || 0)).toFixed(2)}</strong></span>
-          <span>{T("Margin")}: <strong>{form.b2b_hourly_rate > 0 ? ((((form.b2b_hourly_rate || 0) - (form.b2c_hourly_rate || 0)) / form.b2b_hourly_rate) * 100).toFixed(1) : 0}%</strong></span>
-        </div>
-      ) : null}
-      <div className="space-y-2">
-        <Label htmlFor={`${uid}-overtime_rate`}>{T("Overtime Rate (€/h)")}</Label>
-        <Input id={`${uid}-overtime_rate`} type="number" step="0.01" value={form.overtime_rate || ""} onChange={(e) => update("overtime_rate", parseFloat(e.target.value) || 0)} />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor={`${uid}-weekend_rate`}>{T("Weekend Rate (€/h)")}</Label>
-        <Input id={`${uid}-weekend_rate`} type="number" step="0.01" value={form.weekend_rate || ""} onChange={(e) => update("weekend_rate", parseFloat(e.target.value) || 0)} />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor={`${uid}-holiday_rate`}>{T("Holiday Rate (€/h)")}</Label>
-        <Input id={`${uid}-holiday_rate`} type="number" step="0.01" value={form.holiday_rate || ""} onChange={(e) => update("holiday_rate", parseFloat(e.target.value) || 0)} />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor={`${uid}-payment_type`}>{T("Payment Type")}</Label>
-        <Select value={form.payment_type || "hourly"} onValueChange={(v) => update("payment_type", v)}>
-          <SelectTrigger id={`${uid}-payment_type`}><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="hourly">{T("Hourly")}</SelectItem>
-            <SelectItem value="daily">{T("Daily")}</SelectItem>
-            <SelectItem value="weekly">{T("Weekly")}</SelectItem>
-            <SelectItem value="monthly">{T("Monthly")}</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor={`${uid}-payroll_status`}>{T("Payroll Status")}</Label>
-        <Select value={form.payroll_status || "active"} onValueChange={(v) => update("payroll_status", v)}>
-          <SelectTrigger id={`${uid}-payroll_status`}><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="active">{T("Active")}</SelectItem>
-            <SelectItem value="on_hold">{T("On Hold")}</SelectItem>
-            <SelectItem value="closed">{T("Closed")}</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor={`${uid}-preferred_payment_method`}>{T("Preferred Payment Method")}</Label>
-        <Input id={`${uid}-preferred_payment_method`} value={form.preferred_payment_method || ""} onChange={(e) => update("preferred_payment_method", e.target.value)} placeholder={T("e.g. Bank Transfer")} />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor={`${uid}-vat_number`}>{T("VAT Number")}</Label>
-        <Input id={`${uid}-vat_number`} value={form.vat_number || ""} onChange={(e) => update("vat_number", e.target.value)} />
       </div>
     </div>
   );

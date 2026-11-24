@@ -5,6 +5,7 @@ import { RATE_LABELS } from "@/lib/rateEngine";
 const HEAD = {
   en: { employee: "Employee", project: "Project", role: "Role", kind: "Type", rate: "Rate", effective: "Effective", level: "Level", status: "Status" },
   rs: { employee: "Zaposleni", project: "Projekat", role: "Radno mesto", kind: "Tip", rate: "Tarifa", effective: "Važenje", level: "Nivo", status: "Status" },
+  sk: { employee: "Zamestnanec", project: "Projekt", role: "Rola", kind: "Typ", rate: "Sadzba", effective: "Platnosť", level: "Úroveň", status: "Stav" },
 };
 
 const fmtDate = (d) => (d ? d.split("-").reverse().join(".") : "—");

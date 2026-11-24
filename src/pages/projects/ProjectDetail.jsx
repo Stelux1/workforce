@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, MapPin, Calendar, Edit, Trash2, Users, BarChart2 } from "lucide-react";
+import { ArrowLeft, MapPin, Calendar, Edit, Trash2, BarChart2 } from "lucide-react";
 import { format } from "date-fns";
 import { useT } from "@/lib/translations";
 import { useLang } from "@/lib/LanguageContext";
@@ -13,6 +13,7 @@ import ProjectFormModal from "@/components/projects/ProjectFormModal";
 import ProjectEmployees from "@/components/projects/ProjectEmployees";
 import ProjectRoles from "@/components/projects/ProjectRoles";
 import ProjectFinancialReport from "@/components/projects/ProjectFinancialReport";
+import { projectAddress, projectQueryKeys } from "@/lib/projectSite";
 
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel,
@@ -32,6 +33,8 @@ export default function ProjectDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  // Izmena radnika/zanimanja/podataka projekta osvežava i listu projekata (Satnica, Projekti) — bug 16/17.
+  const refreshProject = () => projectQueryKeys(id).forEach((queryKey) => queryClient.invalidateQueries({ queryKey }));
   const [showEdit, setShowEdit] = useState(false);
   const [activeTab, setActiveTab] = useState("overview");
   
@@ -39,7 +42,8 @@ export default function ProjectDetail() {
     if (!project?.status) return "";
     const labels = { active: "Active", paused: "Paused", completed: "Completed" };
     const labelSr = { active: "Aktivan", paused: "Pauziran", completed: "Završen" };
-    return (lang === "rs" ? labelSr : labels)[project.status] || project.status;
+    const labelSk = { active: "Aktívny", paused: "Pozastavený", completed: "Dokončený" };
+    return (lang === "rs" ? labelSr : lang === "sk" ? labelSk : labels)[project.status] || project.status;
   };
 
   const validId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id || "");
@@ -54,7 +58,7 @@ export default function ProjectDetail() {
     mutationFn: () => base44.entities.Project.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["projects"] });
-      toast.success(lang === "rs" ? "Projekat obrisan" : "Project deleted");
+      toast.success(lang === "rs" ? "Projekat obrisan" : lang === "sk" ? "Projekt bol odstránený" : "Project deleted");
       navigate("/projects");
     },
   });
@@ -72,9 +76,9 @@ export default function ProjectDetail() {
     // Nepostojeći projekat (ranije: prazna stranica).
     return (
       <div className="max-w-md mx-auto text-center py-20 space-y-3">
-        <h2 className="text-xl font-semibold">{lang === "rs" ? "Projekat nije pronađen" : "Project not found"}</h2>
-        <p className="text-sm text-muted-foreground">{lang === "rs" ? "Projekat ne postoji ili je obrisan." : "The project does not exist or was deleted."}</p>
-        <Button variant="outline" onClick={() => navigate("/projects")}>{lang === "rs" ? "Nazad na projekte" : "Back to projects"}</Button>
+        <h2 className="text-xl font-semibold">{lang === "rs" ? "Projekat nije pronađen" : lang === "sk" ? "Projekt sa nenašiel" : "Project not found"}</h2>
+        <p className="text-sm text-muted-foreground">{lang === "rs" ? "Projekat ne postoji ili je obrisan." : lang === "sk" ? "Projekt neexistuje alebo bol odstránený." : "The project does not exist or was deleted."}</p>
+        <Button variant="outline" onClick={() => navigate("/projects")}>{lang === "rs" ? "Nazad na projekte" : lang === "sk" ? "Späť na projekty" : "Back to projects"}</Button>
       </div>
     );
   }
@@ -128,14 +132,14 @@ export default function ProjectDetail() {
 
       {/* Info cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        {project.location && (
+        {projectAddress(project) && (
           <div className="bg-card border rounded-xl p-4 flex items-start gap-3">
             <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
               <MapPin className="w-4 h-4 text-primary" />
             </div>
             <div>
               <p className="text-xs text-muted-foreground mb-0.5">{t("Location") || "Lokacija"}</p>
-              <p className="font-medium text-sm">{project.location}</p>
+              <p className="font-medium text-sm">{projectAddress(project)}</p>
             </div>
           </div>
         )}
@@ -174,8 +178,8 @@ export default function ProjectDetail() {
       {/* Tabs */}
       <div className="flex gap-1 border-b mb-6">
         {[
-          { key: "overview", label: lang === "rs" ? "Pregled" : "Overview" },
-          { key: "financials", label: lang === "rs" ? "Finansijski izveštaj" : "Financial Report", icon: BarChart2 },
+          { key: "overview", label: lang === "rs" ? "Pregled" : lang === "sk" ? "Prehľad" : "Overview" },
+          { key: "financials", label: lang === "rs" ? "Finansijski izveštaj" : lang === "sk" ? "Finančný prehľad" : "Financial Report", icon: BarChart2 },
         ].map((tab) => (
           <button
             key={tab.key}
@@ -196,10 +200,10 @@ export default function ProjectDetail() {
         <>
           {/* Job Roles / Tariffs */}
           <div className="mb-6">
-            <ProjectRoles project={project} onUpdated={() => queryClient.invalidateQueries({ queryKey: ["project", id] })} />
+            <ProjectRoles project={project} onUpdated={refreshProject} />
           </div>
           {/* Employees section */}
-          <ProjectEmployees project={project} onUpdated={() => queryClient.invalidateQueries({ queryKey: ["project", id] })} />
+          <ProjectEmployees project={project} onUpdated={refreshProject} />
         </>
       )}
 
@@ -213,8 +217,7 @@ export default function ProjectDetail() {
           onClose={() => setShowEdit(false)}
           onSaved={() => {
             setShowEdit(false);
-            queryClient.invalidateQueries({ queryKey: ["project", id] });
-            queryClient.invalidateQueries({ queryKey: ["projects"] });
+            refreshProject();
           }}
         />
       )}

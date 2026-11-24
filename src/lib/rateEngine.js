@@ -20,6 +20,13 @@ export const RATE_LABELS = {
     missing_rate: "Nema primenjive tarife",
     conflict: "Konfliktne tarife na istom nivou",
   },
+  sk: {
+    hourly: "Za hodinu", daily: "Za deň", weekly: "Za týždeň", monthly: "Za mesiac",
+    cost: "Náklad", revenue: "Tržba",
+    assignment: "Sadzba pridelenia", project: "Sadzba projektu / roly", employee: "Predvolená sadzba zamestnanca",
+    missing_rate: "Žiadna použiteľná sadzba",
+    conflict: "Konfliktné sadzby na rovnakej úrovni",
+  },
 };
 
 /** The affiliation (engagement) in force on a given date. */

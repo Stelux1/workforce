@@ -15,7 +15,7 @@
 //  - radnik preko podizvođača nema zaradu (neto je prazan): plaća se faktura podizvođača, pa ide na poseban spisak
 //    („Podizvođači") sa iznosom `payslips.payout`, ne u spisak zarada.
 
-import { HOUR_TYPES } from "./hours.js";
+import { HOUR_TYPE_ORDER } from "./hours.js";
 import { warningLabel } from "./payrollMonth.js";
 
 export const FINAL_STATUSES = Object.freeze(["approved", "paid"]);
@@ -25,7 +25,7 @@ export const runIsDraft = (run) => run?.status === "draft";
 /** Valuta isplate: svi iznosi u aplikaciji su u EUR (D2). */
 export const PAYOUT_CURRENCY = "EUR";
 
-const TYPE_ORDER = Object.freeze([HOUR_TYPES.REGULAR, HOUR_TYPES.OVERTIME, HOUR_TYPES.WEEKEND, HOUR_TYPES.HOLIDAY]);
+const TYPE_ORDER = HOUR_TYPE_ORDER;
 const EMPLOYEE = "direct_employee";
 const SUBCONTRACTOR = "subcontractor_worker";
 
@@ -33,7 +33,8 @@ const clean = (v) => (v === null || v === undefined ? "" : String(v).trim());
 const isEmptyValue = (v) => v === null || v === undefined || v === "";
 
 // ───────────────────────── formatiranje ─────────────────────────
-const SEPARATORS = { rs: { group: ".", decimal: "," }, en: { group: ",", decimal: "." } };
+const SEPARATORS = { rs: { group: ".", decimal: "," },
+  sk: { group: "\u00a0", decimal: "," }, en: { group: ",", decimal: "." } };
 const sepOf = (lang) => SEPARATORS[lang] || SEPARATORS.rs;
 
 function groupDigits(intPart, group) {
@@ -137,7 +138,7 @@ export const paymentDescription = (run) => `Zarada ${monthNumeric(run?.month)}`;
 // ───────────────────────── platni listić ─────────────────────────
 const LABELS = {
   rs: {
-    hourType: { redovni: "Redovni rad", prekovremeni: "Prekovremeni rad", vikend: "Rad vikendom", praznik: "Rad na praznik" },
+    hourType: { redovni: "Redovni rad", prekovremeni: "Prekovremeni rad", vikend: "Rad vikendom", praznik: "Rad na praznik", praznik_vikend: "Praznik vikendom" },
     basis: { neto: "Zarada po satnici (neto)", bruto: "Zarada po satnici (bruto)", sub: "Iznos sati (podizvođač)" },
     bruto: "Bruto zarada",
     emp_pio: "Doprinos za PIO — zaposleni",
@@ -151,8 +152,23 @@ const LABELS = {
     payout: { employee: "ZA ISPLATU", sub: "ZA ISPLATU (podizvođaču)" },
     groups: { pay: "Zarada", employer: "Na teret poslodavca", payout: "Isplata" },
   },
+  sk: {
+    hourType: { redovni: "Bežné", prekovremeni: "Nadčas", vikend: "Víkend", praznik: "Sviatok", praznik_vikend: "Sviatok cez víkend" },
+    basis: { neto: "Mzda podľa hodinovej sadzby (čistá)", bruto: "Mzda podľa hodinovej sadzby (hrubá)", sub: "Suma za hodiny (subdodávateľ)" },
+    bruto: "Hrubá mzda",
+    emp_pio: "Dôchodkový odvod — zamestnanec",
+    emp_health: "Odvod na zdravotné poistenie — zamestnanec",
+    emp_unemployment: "Odvod na poistenie v nezamestnanosti — zamestnanec",
+    tax: "Daň z príjmu",
+    neto: "Čistá mzda",
+    er_pio: "Dôchodkový odvod — zamestnávateľ",
+    er_health: "Odvod na zdravotné poistenie — zamestnávateľ",
+    total_cost: { employee: "Hrubá 2 (celkové náklady zamestnávateľa)", sub: "Náklad (faktúra subdodávateľa)" },
+    payout: { employee: "NA VÝPLATU", sub: "NA VÝPLATU (subdodávateľovi)" },
+    groups: { pay: "Mzda", employer: "Odvody zamestnávateľa", payout: "Platba" },
+  },
   en: {
-    hourType: { redovni: "Regular", prekovremeni: "Overtime", vikend: "Weekend", praznik: "Public holiday" },
+    hourType: { redovni: "Regular", prekovremeni: "Overtime", vikend: "Weekend", praznik: "Public holiday", praznik_vikend: "Holiday on weekend" },
     basis: { neto: "Pay at hourly rate (net)", bruto: "Pay at hourly rate (gross)", sub: "Hours amount (subcontractor)" },
     bruto: "Gross pay",
     emp_pio: "Pension contribution — employee",
@@ -272,6 +288,21 @@ const BANK_LABELS = {
     invalidNote: "Iznos za isplatu nije veći od 0 — nije u spisku za banku; proverite obračun",
     jmbg: ["Rb.", "Ime i prezime", "Šifra radnika", "Banka", "Račun (IBAN)", "Iznos", "Valuta", "Napomena"],
     jmbgNote: "Nedostaje JMBG u profilu radnika — ostaje u spisku za banku (banka plaća po računu), dopunite JMBG",
+    missingSheet: "Nedostaje račun",
+    invalidSheet: "Iznos nije za isplatu",
+    subcontractorSheet: "Podizvođači",
+    jmbgSheet: "Nedostaje JMBG",
+  },
+  sk: {
+    payments: ["Č.", "Meno a priezvisko", "ID zamestnanca", "JMBG", "Banka", "Účet (IBAN)", "Suma", "Mena", "Popis platby"],
+    missing: ["Č.", "Meno a priezvisko", "ID zamestnanca", "JMBG", "Suma", "Mena", "Popis platby", "Poznámka"],
+    missingNote: "V profile zamestnanca nie je bankový účet (Financie → IBAN) — nie je v zozname pre banku",
+    subcontractors: ["Č.", "Meno a priezvisko", "ID zamestnanca", "Subdodávateľ", "Suma", "Mena", "Poznámka"],
+    subcontractorNote: "Pracovník cez subdodávateľa — platí sa faktúra subdodávateľa, nie mzda",
+    invalid: ["Č.", "Meno a priezvisko", "ID zamestnanca", "JMBG", "Suma", "Mena", "Popis platby", "Poznámka"],
+    invalidNote: "Suma na výplatu nie je väčšia ako 0 — nie je v zozname pre banku; skontrolujte zúčtovanie",
+    jmbg: ["Č.", "Meno a priezvisko", "ID zamestnanca", "Banka", "Účet (IBAN)", "Suma", "Mena", "Poznámka"],
+    jmbgNote: "V profile zamestnanca chýba JMBG — zostáva v zozname pre banku (banka platí podľa účtu), doplňte JMBG",
     missingSheet: "Nedostaje račun",
     invalidSheet: "Iznos nije za isplatu",
     subcontractorSheet: "Podizvođači",

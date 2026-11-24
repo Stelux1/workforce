@@ -18,6 +18,12 @@ const LABELS = {
     start: "Važi od", end: "Važi do", status: "Status", active: "Aktivno", ended: "Završeno",
     notes: "Napomene", save: "Sačuvaj", cancel: "Otkaži", open: "ostavite prazno za neograničeno",
   },
+  sk: {
+    add: "Pridať pracovný vzťah", edit: "Upraviť pracovný vzťah", type: "Typ pracovného vzťahu",
+    direct: "Priamy zamestnanec", subcontractor: "Pracovník subdodávateľa", vendor: "Dodávateľ",
+    start: "Platí od", end: "Platí do", status: "Stav", active: "Aktívny", ended: "Ukončený",
+    notes: "Poznámky", save: "Uložiť", cancel: "Zrušiť", open: "nechajte prázdne pre neurčitú dobu",
+  },
 };
 
 export default function AffiliationDialog({ open, onOpenChange, form, setForm, onSave, saving, vendors = [], lang }) {

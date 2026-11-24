@@ -33,7 +33,7 @@ export default function Attendance() {
 
   const { data: employees = [] } = useQuery({
     queryKey: ["employees"],
-    queryFn: () => base44.entities.Employee.list("-created_date", 200),
+    queryFn: () => base44.entities.Employee.list("-created_date"),
   });
 
   const createMutation = useMutation({
@@ -110,7 +110,7 @@ export default function Attendance() {
                   </div>
                   <div>
                     <p className="font-medium text-sm">{getEmployeeName(rec.employee_id)}</p>
-                    <p className="text-xs text-muted-foreground">{formatDate(parseISO(rec.date), lang === "rs" ? "EEE, d. MMM yyyy." : "EEE, MMM d, yyyy", lang)}</p>
+                    <p className="text-xs text-muted-foreground">{formatDate(parseISO(rec.date), lang === "rs" ? "EEE, d. MMM yyyy." : lang === "sk" ? "EEE, d. MMM yyyy" : "EEE, MMM d, yyyy", lang)}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-4">

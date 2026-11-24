@@ -82,7 +82,7 @@ export function exportReportExcel({ report, columns, headGroups, viewMode, meta 
 
 export async function exportReportPDF({ report, columns, headGroups, viewMode, meta }) {
   const L = meta.labels;
-  const lang = meta.lang === "rs" ? "rs" : "en";
+  const lang = ["rs", "sk"].includes(meta.lang) ? meta.lang : "en";
   const days = WEEKDAY_LABELS[lang] || WEEKDAY_LABELS.en;
 
   const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });

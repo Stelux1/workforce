@@ -80,7 +80,7 @@ export default function TimesheetDashboard() {
 
   const { data: employees = [] } = useQuery({
     queryKey: ["employees"],
-    queryFn: () => base44.entities.Employee.list("last_name", 1000),
+    queryFn: () => base44.entities.Employee.list("last_name"),
   });
 
   const years = useMemo(() => {

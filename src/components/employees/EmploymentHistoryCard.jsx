@@ -35,6 +35,17 @@ const LABELS = {
     hint: "Radni sati čuvaju dobavljača koji je važio na datum rada, pa kasniji prelasci ne menjaju istoriju.",
     adminOnly: "Angažovanje menja samo admin — od njega zavise porez, doprinosi i kome se plaća.",
   },
+  sk: {
+    title: "História pracovných vzťahov a dodávateľov", add: "Pridať pracovný vzťah", none: "Zatiaľ nie je zaznamenaná žiadna história pracovných vzťahov.",
+    current: "Aktuálny", direct: "Priamy zamestnanec", subcontractor: "Pracovník subdodávateľa",
+    vendor: "Dodávateľ", open: "na neurčito", overlap: "Tento pracovný vzťah sa prekrýva s existujúcim pracovným vzťahom tohto zamestnanca.",
+    vendorRequired: "Vyberte dodávateľa pre pracovníka subdodávateľa.", datesRequired: "Dátum začiatku je povinný.",
+    saved: "Pracovný vzťah bol uložený", deleted: "Pracovný vzťah bol odstránený",
+    confirm: "Odstrániť tento záznam o pracovnom vzťahu? Historické pracovné výkazy si ponechávajú vlastný záznam o dodávateľovi.",
+    noVendor: "Dodávateľ nie je nastavený", review: "Vyžaduje kontrolu",
+    hint: "Pracovné výkazy si ponechávajú dodávateľa platného v deň práce, takže neskoršie presuny nikdy neprepíšu históriu.",
+    adminOnly: "Pracovný vzťah mení iba administrátor — závisí od neho daň, odvody a to, komu sa platí.",
+  },
 };
 
 export default function EmploymentHistoryCard({ employeeId, employeeName }) {

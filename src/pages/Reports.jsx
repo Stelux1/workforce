@@ -17,7 +17,7 @@ export default function Reports() {
 
   const { data: employees = [], isLoading: loadEmp } = useQuery({
     queryKey: ["employees"],
-    queryFn: () => base44.entities.Employee.list("-created_date", 500),
+    queryFn: () => base44.entities.Employee.list("-created_date"),
   });
 
   const { data: attendance = [], isLoading: loadAtt } = useQuery({
@@ -34,7 +34,7 @@ export default function Reports() {
 
   const deptCounts = {};
   employees.forEach((e) => {
-    const d = e.department || (lang === "rs" ? "Bez odeljenja" : "Unassigned");
+    const d = e.department || (lang === "rs" ? "Bez odeljenja" : lang === "sk" ? "Bez oddelenia" : "Unassigned");
     deptCounts[d] = (deptCounts[d] || 0) + 1;
   });
   const deptData = Object.entries(deptCounts).map(([name, value]) => ({ name, value }));
@@ -49,6 +49,7 @@ export default function Reports() {
   const typeCounts = {};
   employees.forEach((e) => {
     const TYPES = { rs: { full_time: "Puno radno vreme", part_time: "Skraćeno radno vreme", temporary: "Privremeno", contractor: "Ugovorac", unknown: "Nije uneto" },
+  sk: { full_time: "Plný úväzok", part_time: "Čiastočný úväzok", temporary: "Dočasný", contractor: "Dodávateľ", unknown: "Nezadané" },
       en: { full_time: "Full time", part_time: "Part time", temporary: "Temporary", contractor: "Contractor", unknown: "Not set" } };
     const tp = (TYPES[lang] || TYPES.en)[e.employment_type || "unknown"] || e.employment_type;
     typeCounts[tp] = (typeCounts[tp] || 0) + 1;

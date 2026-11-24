@@ -1,14 +1,27 @@
-// Podaci firme: provere unosa (iste kao CHECK u bazi, migracija 20261114210000_podaci_firme.sql) i logotip.
+// Podaci firme: provere unosa (iste kao CHECK u bazi, migracije 20261114210000_podaci_firme.sql i
+// 20261124120000_adrese_firme_projekta.sql) i logotip.
 // Prazno polje je dozvoljeno — podaci firme se unose naknadno, a do tada PDF nema zaglavlje firme.
 
 export const LOGO_MAX_BYTES = 2 * 1024 * 1024;
 
 const clean = (v) => (v === null || v === undefined ? "" : String(v).trim());
 
-// PIB: tačno 9 cifara (ako je popunjen).
-export function pibValid(value) {
-  const v = clean(value);
-  return v === "" || /^[0-9]{9}$/.test(v);
+// Tax ID: slobodan format (firma je u Slovačkoj, npr. „SK2020123456"), samo razumna dužina — kao CHECK u bazi.
+export const TAX_ID_MAX = 30;
+export function taxIdValid(value) {
+  return clean(value).length <= TAX_ID_MAX;
+}
+
+// Poštanski broj (ZIP): slobodan format („821 06", „11000"), do 12 znakova — kao CHECK u bazi.
+export const ZIP_MAX = 12;
+export function zipValid(value) {
+  return clean(value).length <= ZIP_MAX;
+}
+
+// „Adresa, ZIP Grad" — samo uneti delovi (bez praznih zareza); isto za firmu i za projekat.
+export function formatAddress({ address, zip, city } = {}) {
+  const place = [clean(zip), clean(city)].filter(Boolean).join(" ");
+  return [clean(address), place].filter(Boolean).join(", ");
 }
 
 // Matični broj: tačno 8 cifara (ako je popunjen).
@@ -17,7 +30,7 @@ export function registrationNumberValid(value) {
   return v === "" || /^[0-9]{8}$/.test(v);
 }
 
-export const COMPANY_FIELDS = ["name", "pib", "registration_number", "address", "city", "bank_account"];
+export const COMPANY_FIELDS = ["name", "tax_id", "registration_number", "address", "zip", "city", "bank_account"];
 
 // Prazno polje se čuva kao null (ne kao ""), da „popunjeno" ima jedno značenje.
 export function normalizeCompany(form) {
@@ -26,10 +39,11 @@ export function normalizeCompany(form) {
   return out;
 }
 
-// Greške po polju (ključ = polje, vrednost = "pib" | "registration_number").
+// Greške po polju (ključ = polje, vrednost = "tax_id" | "zip" | "registration_number").
 export function companyErrors(form) {
   const errors = {};
-  if (!pibValid(form?.pib)) errors.pib = "pib";
+  if (!taxIdValid(form?.tax_id)) errors.tax_id = "tax_id";
+  if (!zipValid(form?.zip)) errors.zip = "zip";
   if (!registrationNumberValid(form?.registration_number)) errors.registration_number = "registration_number";
   return errors;
 }
@@ -44,8 +58,8 @@ export function companyIsEmpty(row) {
 export function companyHeader(row) {
   if (companyIsEmpty(row)) return null;
   const name = clean(row.name);
-  const place = [clean(row.address), clean(row.city)].filter(Boolean).join(", ");
-  const ids = [clean(row.pib) && `PIB: ${clean(row.pib)}`, clean(row.registration_number) && `MB: ${clean(row.registration_number)}`]
+  const place = formatAddress(row);
+  const ids = [clean(row.tax_id) && `Tax ID: ${clean(row.tax_id)}`, clean(row.registration_number) && `MB: ${clean(row.registration_number)}`]
     .filter(Boolean)
     .join("  ·  ");
   return {

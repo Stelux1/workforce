@@ -43,6 +43,8 @@ module.exports = {
           DEFAULT: 'hsl(var(--destructive))',
           foreground: 'hsl(var(--destructive-foreground))',
         },
+        success: { DEFAULT: 'hsl(var(--success))', soft: 'hsl(var(--success-soft))' },
+        warning: { DEFAULT: 'hsl(var(--warning))', soft: 'hsl(var(--warning-soft))' },
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',
         ring: 'hsl(var(--ring))',
@@ -63,6 +65,9 @@ module.exports = {
           border: 'hsl(var(--sidebar-border))',
           ring: 'hsl(var(--sidebar-ring))',
         },
+      },
+      boxShadow: {
+        card: '0 1px 2px hsl(255 40% 30% / 0.04), 0 4px 16px hsl(255 40% 30% / 0.05)',
       },
       keyframes: {
         'accordion-down': {

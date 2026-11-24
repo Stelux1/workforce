@@ -4,6 +4,7 @@ import { useLang } from "@/lib/LanguageContext";
 const TEXT = {
   en: { title: "Page not found", body: (p) => `The page "${p}" does not exist.`, home: "Go to Dashboard" },
   rs: { title: "Stranica nije pronađena", body: (p) => `Stranica „${p}" ne postoji.`, home: "Na početnu" },
+  sk: { title: "Stránka sa nenašla", body: (p) => `Stránka "${p}" neexistuje.`, home: "Prejsť na úvodnú stránku" },
 };
 
 export default function PageNotFound() {

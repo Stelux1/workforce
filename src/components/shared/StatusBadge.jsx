@@ -43,6 +43,14 @@ const LABELS = {
     valid: "Važi", expiring_soon: "Uskoro ističe", expired: "Istekao", no_expiry: "Bez roka", unknown: "Nepoznato",
     low: "Nizak", medium: "Srednji", high: "Visok", urgent: "Hitno", planned: "Planirano", ended: "Završeno", paused: "Pauziran",
   },
+  sk: {
+    active: "Aktívny", inactive: "Neaktívny", suspended: "Pozastavený", on_leave: "Na dovolenke", terminated: "Ukončený",
+    present: "Prítomný", absent: "Neprítomný", late: "Mešká", half_day: "Pol dňa", holiday: "Sviatok",
+    pending: "Čaká sa", approved: "Schválené", rejected: "Zamietnuté", paid: "Vyplatené", delayed: "Odložené", cancelled: "Zrušené",
+    draft: "Koncept", submitted: "Odoslané", todo: "Na vykonanie", in_progress: "Rozpracované", review: "V kontrole", completed: "Dokončené",
+    valid: "Platné", expiring_soon: "Čoskoro vyprší", expired: "Platnosť vypršala", no_expiry: "Bez skončenia platnosti", unknown: "Neznáme",
+    low: "Nízka", medium: "Stredná", high: "Vysoká", urgent: "Naliehavá", planned: "Plánované", ended: "Ukončené", paused: "Pozastavené",
+  },
   en: {
     active: "Active", inactive: "Inactive", suspended: "Suspended", on_leave: "On leave", terminated: "Terminated",
     present: "Present", absent: "Absent", late: "Late", half_day: "Half day", holiday: "Holiday",

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
-import { ChevronLeft, ChevronRight, Check, X, Trash2, Send, Download, Eye, Clock, User, Pencil, Paperclip, FileText } from "lucide-react";
+import { ChevronLeft, ChevronRight, Check, X, Trash2, Send, Download, Eye, Clock, Pencil, Paperclip, FileText } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,10 +20,12 @@ import { useViewPreference } from "@/hooks/useViewPreference";
 import SortSelect from "@/components/shared/SortSelect";
 import { exportTimesheetPDF } from "@/lib/timesheetPdf";
 import TimesheetPreviewModal from "@/components/timesheets/TimesheetPreviewModal";
+import NegativeMarginNote from "@/components/projects/NegativeMarginNote";
 import { useUnsavedUpload } from "@/lib/useUnsavedUpload";
 import ConfirmDeleteDialog from "@/components/shared/ConfirmDeleteDialog";
 import { resolveAffiliation } from "@/lib/rateEngine";
-import { useT } from "@/lib/translations";
+import { useT, useL } from "@/lib/translations";
+import { employeesForProject, negativeLabourMargin } from "@/lib/projectSite";
 import { useLang } from "@/lib/LanguageContext";
 import { formatDate } from "@/lib/dateFormat";
 import { useAuth } from "@/lib/AuthContext";
@@ -39,10 +41,11 @@ import { loadHourRules, loadRateInputs } from "@/lib/timesheetInputs";
 const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 const DAY_LABELS_EN = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const DAY_LABELS_RS = ["Pon", "Uto", "Sre", "Čet", "Pet", "Sub", "Ned"];
+const DAY_LABELS_SK = ["Po", "Ut", "St", "Št", "Pi", "So", "Ne"];
 
 const UI = {
   en: {
-    title: "Weekly Timesheets",
+    title: "Timesheets",
     subtitle: "Enter hours per day for each employee and project",
     addRow: "Add Row",
     editSelected: (n) => `Edit ${n} selected`,
@@ -50,6 +53,7 @@ const UI = {
     thisWeek: "This Week",
     totalHours: "Total Hours",
     workerCost: "Worker Cost",
+    missingRate: (n) => `${n} without rate`,
     clientRevenue: "Client Revenue",
     profit: "Profit",
     noEntries: 'No entries for this week. Click "Add Row" to start.',
@@ -96,7 +100,7 @@ const UI = {
     missingRate: "No rate for this employee at any level (Rates & Assignments, project, profile) — the row is saved without a rate and can't be approved until a rate is entered.",
     noRate: "no rate",
     selectProjectError: "Select a project",
-    hourType: { redovni: "Regular", prekovremeni: "Overtime", vikend: "Weekend", praznik: "Holiday" },
+    hourType: { redovni: "Regular", prekovremeni: "Overtime", vikend: "Weekend", praznik: "Holiday", praznik_vikend: "Holiday on weekend" },
     sideWorker: "worker",
     sideClient: "client",
     rateOfWorker: "worker",
@@ -108,7 +112,7 @@ const UI = {
     skippedApproved: (n) => `${n} approved row(s) skipped — only an admin can change them.`,
   },
   rs: {
-    title: "Nedeljni radni sati",
+    title: "Radni sati",
     subtitle: "Unesite sate po danu za svakog radnika i projekat",
     addRow: "Dodaj unos",
     editSelected: (n) => `Uredi ${n} stavki`,
@@ -116,6 +120,7 @@ const UI = {
     thisWeek: "Ova nedelja",
     totalHours: "Ukupno sati",
     workerCost: "Trošak radnika",
+    missingRate: (n) => `${n} bez tarife`,
     clientRevenue: "Prihod od klijenta",
     profit: "Zarada",
     noEntries: 'Nema unosa za ovu nedelju. Kliknite "Dodaj unos".',
@@ -162,7 +167,7 @@ const UI = {
     missingRate: "Radnik nema tarifu ni na jednom nivou (Tarife i angažmani, projekat, profil) — unos se čuva bez tarife i ne može da se odobri dok se tarifa ne upiše.",
     noRate: "nema tarife",
     selectProjectError: "Izaberite projekat",
-    hourType: { redovni: "Redovni", prekovremeni: "Prekovremeni", vikend: "Vikend", praznik: "Praznik" },
+    hourType: { redovni: "Redovni", prekovremeni: "Prekovremeni", vikend: "Vikend", praznik: "Praznik", praznik_vikend: "Praznik vikendom" },
     sideWorker: "radnik",
     sideClient: "klijent",
     rateOfWorker: "radnika",
@@ -172,6 +177,73 @@ const UI = {
     rateUnit: (amount, currency, unit) => `Izabrana tarifa je ${amount} ${currency} / ${unit} — obračun prima samo EUR po satu. Ispravite je u Tarifama i angažmanima.`,
     and: " i ",
     skippedApproved: (n) => `Preskočeno ${n} odobrenih unosa — njih može da menja samo admin.`,
+  },
+  sk: {
+    title: "Pracovné výkazy",
+    subtitle: "Zadajte hodiny za deň pre každého zamestnanca a projekt",
+    addRow: "Pridať riadok",
+    editSelected: (n) => `Upraviť ${n} vybraných`,
+    deleteSelected: (n) => `Odstrániť ${n}`,
+    thisWeek: "Tento týždeň",
+    totalHours: "Hodiny spolu",
+    workerCost: "Náklady na zamestnanca",
+    missingRate: (n) => `${n} bez sadzby`,
+    clientRevenue: "Tržby od klienta",
+    profit: "Zisk",
+    noEntries: 'Na tento týždeň nie sú žiadne záznamy. Kliknite na „Pridať riadok“.',
+    loading: "Načítava sa...",
+    weeklyTotals: "Týždenné súčty",
+    refId: "Ref. ID",
+    employee: "Zamestnanec",
+    projectClient: "Projekt / klient",
+    total: "Spolu",
+    ot: "Nadčas",
+    status: "Stav",
+    exportAllPdf: "Exportovať všetko do PDF",
+    approvalStatus: "Stav schválenia",
+    selectStatus: "Vyberte stav na použitie",
+    apply: (n) => `Použiť na ${n}`,
+    cancel: "Zrušiť",
+    massEdit: (n) => `Hromadná úprava — ${n} riadok`,
+    massEditDesc: "Zmeniť stav všetkých vybraných riadkov.",
+    draft: "Koncept",
+    submitted: "Odoslané",
+    approved: "Schválené",
+    rejected: "Zamietnuté",
+    addTimesheetRow: "Pridať riadok výkazu",
+    employeeLabel: "Zamestnanec *",
+    selectEmployee: "Vyberte zamestnanca",
+    clientLabel: "Klient",
+    selectClient: "Vyberte klienta",
+    other: "Iné",
+    projectWorksite: "Projekt / pracovisko",
+    projectPlaceholder: "napr. Kovin / SC26014",
+    hoursPerDay: "Hodiny za deň",
+    notes: "Poznámky",
+    deleteConfirm: "Odstrániť tento riadok?",
+    deleteSelected_confirm: (n) => `Odstrániť ${n} vybraných riadkov?`,
+    rowAdded: "Riadok bol pridaný",
+    saved: "Uložené",
+    deleted: "Odstránené",
+    updated: (n, s) => `Aktualizovaných riadkov: ${n} na stav „${s}“`,
+    pdfExported: "PDF bolo exportované",
+    pdfDownloaded: "PDF bolo stiahnuté",
+    selectEmployeeError: "Vyberte zamestnanca",
+    selectStatusError: "Vyberte stav na použitie",
+    cost: "Náklad", revenue: "Tržba", rev: "Trž.", margin: "Rozpätie", totalShort: "Spolu",
+    missingRate: "Pre tohto zamestnanca nie je sadzba na žiadnej úrovni (Sadzby a pridelenia, projekt, profil) — riadok sa uloží bez sadzby a nemožno ho schváliť, kým sa sadzba nezadá.",
+    noRate: "bez sadzby",
+    selectProjectError: "Vyberte projekt",
+    hourType: { redovni: "Bežné", prekovremeni: "Nadčas", vikend: "Víkend", praznik: "Sviatok", praznik_vikend: "Sviatok cez víkend" },
+    sideWorker: "zamestnanca",
+    sideClient: "klienta",
+    rateOfWorker: "zamestnanca",
+    rateOfClient: "klienta",
+    missingCoef: (list) => `Chýba koeficient pre druh hodín: ${list} — zadáva ho administrátor v Nastaveniach → Koeficienty a sviatky.`,
+    noRateFor: (sides) => `Na tento týždeň nie je sadzba ${sides} na žiadnej úrovni (Sadzby a pridelenia, projekt, profil) — pracovný výkaz nemožno schváliť.`,
+    rateUnit: (amount, currency, unit) => `Vybraná sadzba je ${amount} ${currency} / ${unit} — možno použiť iba EUR za hodinu. Opravte ju v Sadzbách a pridelených.`,
+    and: " a ",
+    skippedApproved: (n) => `Preskočených schválených riadkov: ${n} — môže ich meniť iba administrátor.`,
   },
 };
 
@@ -242,8 +314,9 @@ export default function Timesheets() {
   const [approving, setApproving] = useState(false);
 
   const { isAdmin } = useAuth();
+  const L = useL();
   const T = UI[lang] || UI.en;
-  const DAY_LABELS = lang === "rs" ? DAY_LABELS_RS : DAY_LABELS_EN;
+  const DAY_LABELS = lang === "rs" ? DAY_LABELS_RS : lang === "sk" ? DAY_LABELS_SK : DAY_LABELS_EN;
 
   const weekStartStr = format(weekDate, "yyyy-MM-dd");
   const isoWeek = getISOWeek(weekDate);
@@ -258,7 +331,7 @@ export default function Timesheets() {
     weekend: i >= 5,
   }));
 
-  const weekLabel = `W${String(isoWeek).padStart(2, "0")} · ${formatDate(weekDate, lang === "rs" ? "d. MMM" : "MMM d", lang)} – ${formatDate(weekEnd, lang === "rs" ? "d. MMM yyyy." : "MMM d, yyyy", lang)}`;
+  const weekLabel = `W${String(isoWeek).padStart(2, "0")} · ${formatDate(weekDate, lang === "rs" ? "d. MMM" : lang === "sk" ? "d. MMM" : "MMM d", lang)} – ${formatDate(weekEnd, lang === "rs" ? "d. MMM yyyy." : lang === "sk" ? "d. MMM yyyy" : "MMM d, yyyy", lang)}`;
 
   // Samo izabrana nedelja (ranije 1000 najnovijih redova za sve nedelje — starije nedelje su nestajale).
   const { data: timesheets = [], isLoading } = useQuery({
@@ -268,17 +341,17 @@ export default function Timesheets() {
 
   const { data: employees = [] } = useQuery({
     queryKey: ["employees"],
-    queryFn: () => base44.entities.Employee.list("-created_date", 200),
+    queryFn: () => base44.entities.Employee.list("-created_date"),
   });
 
   const { data: clients = [] } = useQuery({
     queryKey: ["clients"],
-    queryFn: () => base44.entities.Client.list("-created_date", 100),
+    queryFn: () => base44.entities.Client.list("-created_date"),
   });
 
   const { data: projects = [] } = useQuery({
     queryKey: ["projects"],
-    queryFn: () => base44.entities.Project.list("-created_date", 200),
+    queryFn: () => base44.entities.Project.list("-created_date"),
   });
 
   // Pravila razvrstavanja sati (D5) — vidi ih i operater; isti ključevi kao Podešavanja → Koeficijenti i praznici.
@@ -295,6 +368,16 @@ export default function Timesheets() {
     queryFn: () => base44.entities.Holiday.filter({ date: { $gte: weekStartStr, $lte: format(weekEnd, "yyyy-MM-dd") } }, "date"),
   });
   const hourRules = { holidays: weekHolidays, dailyThreshold: dailyThresholdOf(workRules) };
+
+  // Projekat izabran u dijalogu „Add Timesheet Row" — uvek sveže iz baze (isti ključ kao stranica projekta), jer
+  // lista ["projects"] može biti iz keša od pre dodele radnika na projekat (bug 16/17: prazan izbor radnika).
+  const dialogProjectId = dialogOpen && !manualProject ? newRowForm._project_id || null : null;
+  const { data: dialogProject } = useQuery({
+    queryKey: ["project", dialogProjectId],
+    queryFn: () => base44.entities.Project.get(dialogProjectId),
+    enabled: Boolean(dialogProjectId),
+    staleTime: 0,
+  });
 
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.Timesheet.create(data),
@@ -335,13 +418,12 @@ export default function Timesheets() {
     };
   };
 
-  const rsLang = lang === "rs";
   const TS_SORT_OPTIONS = [
-    { value: "name_asc", label: rsLang ? "Radnik A → Ž" : "Employee A → Z" },
-    { value: "name_desc", label: rsLang ? "Radnik Ž → A" : "Employee Z → A" },
-    { value: "hours_desc", label: rsLang ? "Najviše sati" : "Most Hours" },
-    { value: "hours_asc", label: rsLang ? "Najmanje sati" : "Least Hours" },
-    { value: "status_asc", label: rsLang ? "Status A → Ž" : "Status A → Z" },
+    { value: "name_asc", label: L("Employee A → Z", "Radnik A → Ž", "Zamestnanec A → Z") },
+    { value: "name_desc", label: L("Employee Z → A", "Radnik Ž → A", "Zamestnanec Z → A") },
+    { value: "hours_desc", label: L("Most Hours", "Najviše sati", "Najviac hodín") },
+    { value: "hours_asc", label: L("Least Hours", "Najmanje sati", "Najmenej hodín") },
+    { value: "status_asc", label: L("Status A → Z", "Status A → Ž", "Stav A → Z") },
   ];
 
   const weekTimesheets = [...timesheets.filter((t) => t.week_start === weekStartStr)].sort((a, b) => {
@@ -478,6 +560,11 @@ export default function Timesheets() {
   const totalCost = weekTimesheets.reduce((s, t) => s + (t.worker_cost || 0), 0);
   const totalRevenue = weekTimesheets.reduce((s, t) => s + (t.client_revenue || 0), 0);
   const totalProfit = weekTimesheets.reduce((s, t) => s + (t.profit || 0), 0);
+  // D11: red sa satima bez izračunatog iznosa (fali tarifa/koeficijent) nije 0 — broji se i prikazuje.
+  const hasHours = (t) => (Number(t.total_hours) || 0) > 0;
+  const missingCost = weekTimesheets.filter((t) => hasHours(t) && t.worker_cost == null).length;
+  const missingRevenue = weekTimesheets.filter((t) => hasHours(t) && t.client_revenue == null).length;
+  const missingProfit = Math.max(missingCost, missingRevenue);
 
   const exportAllPDF = async () => {
     await exportTimesheetPDF(
@@ -593,16 +680,17 @@ export default function Timesheets() {
           // Novac vidi samo admin (D3); operater unosi sate.
           ...(isAdmin
             ? [
-                { label: T.workerCost, value: "€" + totalCost.toFixed(0) },
-                { label: T.clientRevenue, value: "€" + totalRevenue.toFixed(0) },
-                { label: T.profit, value: "€" + totalProfit.toFixed(0), green: true },
+                { label: T.workerCost, value: "€" + totalCost.toFixed(0), missing: missingCost },
+                { label: T.clientRevenue, value: "€" + totalRevenue.toFixed(0), missing: missingRevenue },
+                { label: T.profit, value: missingProfit ? "—" : "€" + totalProfit.toFixed(0), green: !missingProfit, missing: missingProfit },
               ]
             : []),
         ].map((k) => (
           <Card key={k.label}>
             <CardContent className="p-4">
               <p className="text-xs text-muted-foreground">{k.label}</p>
-              <p className={`text-xl font-bold ${k.green ? "text-emerald-600" : ""}`}>{k.value}</p>
+              <p className={`text-xl font-bold ${k.green ? "text-success" : ""}`}>{k.value}</p>
+              {k.missing > 0 && <p className="text-xs font-medium text-warning mt-0.5">{T.missingRate(k.missing)}</p>}
             </CardContent>
           </Card>
         ))}
@@ -978,7 +1066,7 @@ export default function Timesheets() {
                     }
                   }}
                 >
-                  <SelectTrigger><SelectValue placeholder={lang === "rs" ? "Izaberite projekat" : "Select project"} /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder={lang === "rs" ? "Izaberite projekat" : lang === "sk" ? "Vyberte projekt" : "Select project"} /></SelectTrigger>
                   <SelectContent>
                     {projects.filter((p) => p.status !== "completed").map((p) => (
                       <SelectItem key={p.id} value={p.id}>
@@ -987,10 +1075,10 @@ export default function Timesheets() {
                     ))}
                     {projects.filter((p) => p.status === "completed").map((p) => (
                       <SelectItem key={p.id} value={p.id} className="text-muted-foreground">
-                        {p.project_number ? `${p.project_number} · ` : ""}{p.name} ({lang === "rs" ? "završen" : "completed"})
+                        {p.project_number ? `${p.project_number} · ` : ""}{p.name} ({lang === "rs" ? "završen" : lang === "sk" ? "dokončený" : "completed"})
                       </SelectItem>
                     ))}
-                    <SelectItem value="__other__">{lang === "rs" ? "— Ručni unos —" : "— Manual entry —"}</SelectItem>
+                    <SelectItem value="__other__">{lang === "rs" ? "— Ručni unos —" : lang === "sk" ? "— Ručné zadanie —" : "— Manual entry —"}</SelectItem>
                   </SelectContent>
                 </Select>
               ) : (
@@ -1010,12 +1098,11 @@ export default function Timesheets() {
 
             {/* 2. Employee + Client (shown after project is selected) */}
             {(newRowForm._project_id || manualProject) && (() => {
-              const selectedProject = projects.find((p) => p.id === newRowForm._project_id);
-              const assignedEmps = selectedProject?.assigned_employees || [];
-              // Filter employees to those assigned to project (or all active if manual)
-              const availableEmps = manualProject
-                ? employees.filter((e) => e.status === "active")
-                : employees.filter((e) => e.status === "active" && assignedEmps.some((a) => a.employee_id === e.id));
+              const selectedProject =
+                (dialogProject?.id === newRowForm._project_id ? dialogProject : null) ||
+                projects.find((p) => p.id === newRowForm._project_id);
+              // Aktivni radnici dodati na projekat, po ID-u (ručni unos projekta → svi aktivni).
+              const availableEmps = employeesForProject(selectedProject, employees, { manual: manualProject });
 
               return (
                 <div className="grid grid-cols-2 gap-4">
@@ -1031,8 +1118,16 @@ export default function Timesheets() {
                     >
                       <SelectTrigger><SelectValue placeholder={T.selectEmployee} /></SelectTrigger>
                       <SelectContent>
-                        {availableEmps.map((e) => {
-                          const assignment = assignedEmps.find((a) => a.employee_id === e.id);
+                        {availableEmps.length === 0 && (
+                          <div className="px-2 py-1.5 text-sm text-muted-foreground" data-testid="no-project-employees">
+                            {L(
+                              "No active employees on this project. Add them in the project's \"Employees on the project\" card.",
+                              "Na ovom projektu nema aktivnih radnika. Dodajte ih na kartici „Radnici na projektu“ u projektu.",
+                              "Na tomto projekte nie sú aktívni zamestnanci. Pridajte ich na karte „Zamestnanci na projekte“ v projekte."
+                            )}
+                          </div>
+                        )}
+                        {availableEmps.map(({ employee: e, assignment }) => {
                           return (
                             <SelectItem key={e.id} value={e.id}>
                               {e.last_name} {e.first_name}
@@ -1058,9 +1153,12 @@ export default function Timesheets() {
                             <div className="flex gap-3 text-xs text-muted-foreground bg-muted/50 rounded-lg p-2">
                               <span className={b2c === null ? "text-red-600 font-medium" : ""}>B2C: {b2c === null ? T.noRate : `€${b2c}/h`}</span>
                               <span className={b2b === null ? "text-red-600 font-medium" : ""}>B2B: {b2b === null ? T.noRate : `€${b2b}/h`}</span>
-                              {b2c !== null && b2b !== null && <span className="text-emerald-600">{T.margin}: €{(b2b - b2c).toFixed(2)}/h</span>}
+                              {b2c !== null && b2b !== null && (
+                                <span className={b2b - b2c < 0 ? "text-red-600 font-medium" : "text-emerald-600"}>{T.margin}: €{(b2b - b2c).toFixed(2)}/h</span>
+                              )}
                             </div>
                           )}
+                          {isAdmin && r && negativeLabourMargin(b2c, b2b) && <NegativeMarginNote L={L} />}
                         </div>
                       ) : null;
                     })()}
@@ -1120,6 +1218,7 @@ export default function Timesheets() {
                       {byType?.prekovremeni > 0 && <span className="text-amber-600">{T.ot}: {byType.prekovremeni.toFixed(1)}h</span>}
                       {byType?.vikend > 0 && <span className="text-amber-600">{T.hourType.vikend}: {byType.vikend.toFixed(1)}h</span>}
                       {byType?.praznik > 0 && <span className="text-amber-600">{T.hourType.praznik}: {byType.praznik.toFixed(1)}h</span>}
+                      {byType?.praznik_vikend > 0 && <span className="text-amber-600">{T.hourType.praznik_vikend}: {byType.praznik_vikend.toFixed(1)}h</span>}
                       {showMoney && fin && (
                         <>
                           <span>{T.cost}: {money(fin.worker_cost)}</span>
@@ -1142,7 +1241,7 @@ export default function Timesheets() {
             <div className="space-y-2">
               <Label className="flex items-center gap-2">
                 <Paperclip className="w-3.5 h-3.5" />
-                {lang === "rs" ? "Prilog (PDF)" : "Attachment (PDF)"}
+                {lang === "rs" ? "Prilog (PDF)" : lang === "sk" ? "Príloha (PDF)" : "Attachment (PDF)"}
               </Label>
               {newRowForm.attachment_url ? (
                 <div className="flex items-center gap-2 p-2 bg-muted rounded-lg text-sm">
@@ -1167,8 +1266,8 @@ export default function Timesheets() {
                   <Paperclip className="w-4 h-4 text-muted-foreground" />
                   <span className="text-sm text-muted-foreground">
                     {uploadingFile
-                      ? (lang === "rs" ? "Uploading..." : "Uploading...")
-                      : (lang === "rs" ? "Klikni da dodaš PDF" : "Click to attach PDF")}
+                      ? (lang === "rs" ? "Uploading..." : lang === "sk" ? "Nahráva sa..." : "Uploading...")
+                      : (lang === "rs" ? "Klikni da dodaš PDF" : lang === "sk" ? "Kliknutím pripojíte PDF" : "Click to attach PDF")}
                   </span>
                 </label>
               )}

@@ -254,14 +254,17 @@ const formatMonth = (month) => formatDay(month).slice(3);
 /** Poruka problema izveštaja na izabranom jeziku. */
 export function reportProblemMessage(p, lang = "rs") {
   const en = lang === "en";
+  const sk = lang === "sk";
   if (p.code === REPORT_PROBLEM.SPLIT_BY_HOURS) {
     const cause = problemMessage({ ...p.cause, employeeName: p.employeeName, weekStart: p.weekStart }, lang);
-    const months = (p.months || []).map(formatMonth).join(en ? " and " : " i ");
+    const months = (p.months || []).map(formatMonth).join(en ? " and " : sk ? " a " : " i ");
+    if (sk) return `${cause}. Týždeň zasahuje do mesiacov ${months}, preto sú jeho sumy rozdelené pomerne podľa hodín za deň (odhad).`;
     return en
       ? `${cause}. The week spans ${months}, so its amounts are split by hours per day (estimate).`
       : `${cause}. Nedelja prelazi ${months}, pa su iznosi podeljeni srazmerno satima po danu (procena).`;
   }
   if (p.code === REPORT_PROBLEM.PAYROLL_HOURS_MISMATCH) {
+    if (sk) return `${formatMonth(p.month)}: schválené zúčtovanie má na tomto projekte ${p.payrollHours} h, schválené pracovné výkazy ${p.timesheetHours} h.`;
     return en
       ? `${formatMonth(p.month)}: approved payroll has ${p.payrollHours} h on this project, approved timesheets ${p.timesheetHours} h.`
       : `${formatMonth(p.month)}: odobren obračun ima ${p.payrollHours} h na ovom projektu, odobrene satnice ${p.timesheetHours} h.`;

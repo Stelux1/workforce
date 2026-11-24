@@ -35,7 +35,7 @@ export default function Tasks() {
 
   const { data: employees = [] } = useQuery({
     queryKey: ["employees"],
-    queryFn: () => base44.entities.Employee.list("-created_date", 200),
+    queryFn: () => base44.entities.Employee.list("-created_date"),
   });
 
   // Dvostruki klik je pravio dva ista zadatka (QA 14.11.2026): drugi klik dok prvi čuvanje traje se ignoriše.
@@ -139,7 +139,7 @@ export default function Tasks() {
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     {(task.assigned_to && task.assigned_to_name) || t("Unassigned")}
-                    {task.due_date && ` · ${t("Due")} ${formatDate(parseISO(task.due_date), lang === "rs" ? "d. MMM" : "MMM d", lang)}`}
+                    {task.due_date && ` · ${t("Due")} ${formatDate(parseISO(task.due_date), lang === "rs" ? "d. MMM" : lang === "sk" ? "d. MMM" : "MMM d", lang)}`}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">

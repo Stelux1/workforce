@@ -34,7 +34,7 @@ function CompanyForm({ row, L }) {
     onSuccess: () => {
       upload.commit();
       queryClient.invalidateQueries({ queryKey: ["company-settings"] });
-      toast.success(L("Company details saved", "Podaci firme su sačuvani"));
+      toast.success(L("Company details saved", "Podaci firme su sačuvani", "Údaje o firme boli uložené"));
     },
   });
   const upload = useUnsavedUpload(save.isPending);
@@ -48,15 +48,15 @@ function CompanyForm({ row, L }) {
     e.target.value = "";
     if (!file) return;
     const problem = await logoProblem(file);
-    if (problem === "tooBig") return toast.error(L("The logo is too large (max 2 MB).", "Logotip je prevelik (najviše 2 MB)."));
-    if (problem) return toast.error(L("The logo must be a PNG or JPG image.", "Logotip mora biti PNG ili JPG slika."));
+    if (problem === "tooBig") return toast.error(L("The logo is too large (max 2 MB).", "Logotip je prevelik (najviše 2 MB).", "Logo je príliš veľké (max. 2 MB)."));
+    if (problem) return toast.error(L("The logo must be a PNG or JPG image.", "Logotip mora biti PNG ili JPG slika.", "Logo musí byť obrázok vo formáte PNG alebo JPG."));
     setUploading(true);
     try {
       const { file_url } = await base44.integrations.Core.UploadFile({ file, maxBytes: LOGO_MAX_BYTES });
       upload.track(file_url); // prethodni nesačuvan logotip se briše
       setLogo(file_url);
     } catch (err) {
-      toast.error(err?.message || L("Upload failed", "Otpremanje nije uspelo"));
+      toast.error(err?.message || L("Upload failed", "Otpremanje nije uspelo", "Nahrávanie zlyhalo"));
     } finally {
       setUploading(false);
     }
@@ -88,9 +88,11 @@ function CompanyForm({ row, L }) {
       />
       {errors[key] && (
         <p className="text-xs text-red-600" data-testid={`company-${key}-error`}>
-          {key === "pib"
-            ? L("PIB must have exactly 9 digits.", "PIB mora imati tačno 9 cifara.")
-            : L("Registration number must have exactly 8 digits.", "Matični broj mora imati tačno 8 cifara.")}
+          {key === "tax_id"
+            ? L("Tax ID can have at most 30 characters.", "Tax ID može imati najviše 30 znakova.", "Daňové ID môže mať najviac 30 znakov.")
+            : key === "zip"
+              ? L("ZIP can have at most 12 characters.", "Poštanski broj može imati najviše 12 znakova.", "PSČ môže mať najviac 12 znakov.")
+              : L("Registration number must have exactly 8 digits.", "Matični broj mora imati tačno 8 cifara.", "IČO musí mať presne 8 číslic.")}
         </p>
       )}
     </div>
@@ -106,49 +108,50 @@ function CompanyForm({ row, L }) {
           <p>
             {L(
               "Company details are not entered yet. Payslip and timesheet PDFs will show no company header until they are filled in.",
-              "Podaci firme još nisu uneti. PDF platnog lista i satnice neće imati zaglavlje firme dok se ne popune."
+              "Podaci firme još nisu uneti. PDF platnog lista i satnice neće imati zaglavlje firme dok se ne popune.", "Údaje o firme zatiaľ nie sú zadané. PDF výplatnej pásky a pracovného výkazu nebudú mať hlavičku firmy, kým sa nevyplnia."
             )}
           </p>
         </div>
       )}
 
       <Card className="p-5 space-y-4">
-        <h2 className="font-semibold text-base">{L("Company", "Firma")}</h2>
+        <h2 className="font-semibold text-base">{L("Company", "Firma", "Firma")}</h2>
         <div className="grid gap-4 sm:grid-cols-2">
-          {field("name", L("Company name", "Naziv firme"), { autoComplete: "off" })}
-          {field("pib", L("PIB (tax ID)", "PIB"), { inputMode: "numeric", maxLength: 9 })}
-          {field("registration_number", L("Registration number", "Matični broj"), { inputMode: "numeric", maxLength: 8 })}
-          {field("bank_account", L("Bank account", "Tekući račun"), { autoComplete: "off" })}
-          {field("address", L("Address", "Adresa"))}
-          {field("city", L("City", "Mesto"))}
+          {field("name", L("Company name", "Naziv firme", "Názov firmy"), { autoComplete: "off" })}
+          {field("tax_id", L("Tax ID", "Poreski broj (Tax ID)", "Daňové ID"), { autoComplete: "off", maxLength: 30 })}
+          {field("registration_number", L("Registration number", "Matični broj", "IČO"), { inputMode: "numeric", maxLength: 8 })}
+          {field("bank_account", L("Bank account", "Tekući račun", "Bankový účet"), { autoComplete: "off" })}
+          {field("address", L("Address", "Adresa", "Adresa"), { autoComplete: "street-address" })}
+          {field("city", L("City", "Mesto", "Mesto"))}
+          {field("zip", L("ZIP (Postal code)", "Poštanski broj", "PSČ"), { autoComplete: "postal-code", maxLength: 12 })}
         </div>
       </Card>
 
       <Card className="p-5 space-y-4">
         <div>
-          <h2 className="font-semibold text-base">{L("Logo", "Logotip")}</h2>
+          <h2 className="font-semibold text-base">{L("Logo", "Logotip", "Logo")}</h2>
           <p className="text-xs text-muted-foreground mt-1">
-            {L("PNG or JPG, up to 2 MB. Shown in the header of PDF documents.", "PNG ili JPG, do 2 MB. Prikazuje se u zaglavlju PDF dokumenata.")}
+            {L("PNG or JPG, up to 2 MB. Shown in the header of PDF documents.", "PNG ili JPG, do 2 MB. Prikazuje se u zaglavlju PDF dokumenata.", "PNG alebo JPG, do 2 MB. Zobrazuje sa v hlavičke PDF dokumentov.")}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-4">
           {logo ? (
-            <img src={logo} alt={L("Company logo", "Logotip firme")} className="h-20 max-w-[16rem] object-contain rounded border bg-white p-1" data-testid="company-logo-preview" />
+            <img src={logo} alt={L("Company logo", "Logotip firme", "Logo firmy")} className="h-20 max-w-[16rem] object-contain rounded border bg-white p-1" data-testid="company-logo-preview" />
           ) : (
             <div className="h-20 w-40 rounded border border-dashed flex items-center justify-center text-xs text-muted-foreground">
-              {L("No logo", "Nema logotipa")}
+              {L("No logo", "Nema logotipa", "Bez loga")}
             </div>
           )}
           <div className="flex gap-2">
             <input ref={fileInput} type="file" accept="image/png,image/jpeg" className="hidden" onChange={onFile} data-testid="company-logo-input" />
             <Button type="button" variant="outline" className="gap-2" disabled={uploading || save.isPending} onClick={() => fileInput.current?.click()}>
               <Upload className="w-4 h-4" />
-              {logo ? L("Replace logo", "Zameni logotip") : L("Upload logo", "Otpremi logotip")}
+              {logo ? L("Replace logo", "Zameni logotip", "Vymeniť logo") : L("Upload logo", "Otpremi logotip", "Nahrať logo")}
             </Button>
             {logo && (
               <Button type="button" variant="ghost" className="gap-2 text-destructive hover:text-destructive" disabled={uploading || save.isPending} onClick={removeLogo}>
                 <Trash2 className="w-4 h-4" />
-                {L("Remove", "Ukloni")}
+                {L("Remove", "Ukloni", "Odstrániť")}
               </Button>
             )}
           </div>
@@ -156,10 +159,10 @@ function CompanyForm({ row, L }) {
       </Card>
 
       <div className="flex justify-end gap-2">
-        <Button variant="outline" onClick={cancel} disabled={save.isPending}>{L("Cancel", "Otkaži")}</Button>
+        <Button variant="outline" onClick={cancel} disabled={save.isPending}>{L("Cancel", "Otkaži", "Zrušiť")}</Button>
         <Button onClick={() => save.mutate()} disabled={hasErrors || uploading || save.isPending} className="gap-2" data-testid="company-save">
           <Save className="w-4 h-4" />
-          {L("Save", "Sačuvaj")}
+          {L("Save", "Sačuvaj", "Uložiť")}
         </Button>
       </div>
     </div>
@@ -173,10 +176,10 @@ export default function CompanySettings() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={L("Company Details", "Podaci firme")}
+        title={L("Company Details", "Podaci firme", "Údaje o firme")}
         subtitle={L(
           "Company name, tax numbers, address, bank account and logo used on PDF documents",
-          "Naziv, brojevi, adresa, tekući račun i logotip firme koji se koriste na PDF dokumentima"
+          "Naziv, brojevi, adresa, tekući račun i logotip firme koji se koriste na PDF dokumentima", "Názov firmy, daňové čísla, adresa, bankový účet a logo používané v PDF dokumentoch"
         )}
       />
       {isLoading ? <Skeleton className="h-64 rounded-xl" /> : <CompanyForm row={(data || [])[0]} L={L} />}

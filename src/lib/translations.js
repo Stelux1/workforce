@@ -1,10 +1,14 @@
 /**
- * Centralized translations for EN / RS.
+ * Centralized translations for EN / SK / RS (app language: Settings → Language & Currency).
  * Usage: import { useT } from "@/lib/translations";
  *        const T = useT();
- *        T("Employees") → "Zaposleni" (when lang = "rs")
+ *        T("Employees") → "Zaposleni" (rs), "Zamestnanci" (sk), "Employees" (en)
+ * Each entry is { rs, sk } (key = English text, or { en } when the English text differs from the key).
+ * Slovak for the entries below lives in translations.sk.js (same keys); a missing translation falls back to English.
+ * New strings: add { rs, sk } here. In components use `const L = useL(); L("English", "Srpski", "Slovenčina")`.
  */
 import { useLang } from "@/lib/LanguageContext";
+import { SK } from "@/lib/translations.sk";
 
 const TRANSLATIONS = {
   // ── EmployeeDetail ──────────────────────────────────────
@@ -68,7 +72,7 @@ const TRANSLATIONS = {
   "Upload": { rs: "Otpremi" },
   "Search": { rs: "Pretraži" },
   "Status": { rs: "Status" },
-  "Employee": { rs: "Radnik" },
+  "Employee": { rs: "Radnik", sk: "Zamestnanec" },
   "Department": { rs: "Odeljenje" },
   "Position": { rs: "Pozicija" },
   "Notes": { rs: "Napomena" },
@@ -224,7 +228,7 @@ const TRANSLATIONS = {
   "Completed tasks": { rs: "Završeni zadaci" },
   "Back to Tasks": { rs: "Nazad na zadatke" },
   "Search archive...": { rs: "Pretraži arhivu..." },
-  "Project": { rs: "Projekat" },
+  "Project": { rs: "Projekat", sk: "Projekt" },
 
   // ── Leave Requests ───────────────────────────────────────
   "Leave Requests": { rs: "Odsustva" },
@@ -273,13 +277,13 @@ const TRANSLATIONS = {
   "Total Client Revenue": { rs: "Ukupni prihod od klijenata" },
   "B2B billing": { rs: "B2B naplata" },
   "Net Profit": { rs: "Neto zarada" },
-  "Profit Margin": { rs: "Marža profita" },
+  "Profit Margin": { rs: "Marža profita", sk: "Ziskové rozpätie" },
   "Payroll Due": { rs: "Plate na čekanju" },
   "Pending Approvals": { rs: "Na čekanju odobrenja" },
   "Timesheets awaiting review": { rs: "Satnice čekaju pregled" },
-  "Active Employees": { rs: "Aktivni radnici" },
-  "Top Profitable Workers": { rs: "Najisplativiji radnici" },
-  "Top Profitable Clients": { rs: "Najisplativiji klijenti" },
+  "Active Employees": { rs: "Aktivni radnici", sk: "Aktívni zamestnanci" },
+  "Top Profitable Workers": { rs: "Najisplativiji radnici", sk: "Najziskovejší pracovníci" },
+  "Top Profitable Clients": { rs: "Najisplativiji klijenti", sk: "Najziskovejší klienti" },
   "Pending Payroll": { rs: "Plate na čekanju" },
   "No pending payments": { rs: "Nema čekajućih isplata" },
   "Awaiting Approval": { rs: "Čeka odobrenje" },
@@ -315,8 +319,8 @@ const TRANSLATIONS = {
   "Create Department": { rs: "Kreiraj odeljenje" },
   "Grid view": { rs: "Mrežni prikaz" },
   "List view": { rs: "Prikaz liste" },
-  "Position in English": { rs: "Pozicija na engleskom" },
-  "Translation (Serbian) - optional": { rs: "Prevod (srpski) - opciono" },
+  // ── Podrazumevani šifarnici, koeficijenti u %, praznici (zahtevi 6, 8/9, 10, 11) ──
+  "Position name": { rs: "Naziv pozicije", sk: "Názov pozície" },
   "Add Position": { rs: "Dodaj poziciju" },
 
   // ── Payroll Reports ─────────────────────────────────────
@@ -324,7 +328,7 @@ const TRANSLATIONS = {
   "Financial analysis and insights": { rs: "Finansijska analiza i uvidi" },
   "Total Hours": { rs: "Ukupno sati" },
   "Worker Cost": { rs: "Trošak radnika" },
-  "Client Revenue": { rs: "Prihod od klijenta" },
+  "Client Revenue": { rs: "Prihod od klijenta", sk: "Tržby od klientov" },
   "Cost vs Revenue vs Profit by Worker": { rs: "Trošak vs Prihod vs Zarada po radniku" },
   "Worker Payroll": { rs: "Plate radnika" },
   "Client Billing": { rs: "Naplata klijentu" },
@@ -333,14 +337,14 @@ const TRANSLATIONS = {
   "Hours": { rs: "Sati" },
   "Hourly Rate": { rs: "Satnica" },
   "Total Salary": { rs: "Ukupna plata" },
-  "Client": { rs: "Klijent" },
+  "Client": { rs: "Klijent", sk: "Klient" },
   "Billable Hours": { rs: "Naplativi sati" },
   "B2B Rate": { rs: "B2B satnica" },
   "Invoice Total": { rs: "Ukupno na računu" },
   "Worker": { rs: "Radnik" },
   "Week": { rs: "Nedelja" },
-  "Revenue": { rs: "Prihod" },
-  "Profit": { rs: "Zarada" },
+  "Revenue": { rs: "Prihod", sk: "Tržby" },
+  "Profit": { rs: "Zarada", sk: "Zisk" },
   "No data": { rs: "Nema podataka" },
   "No payroll records": { rs: "Nema zapisa o platama" },
 
@@ -390,7 +394,7 @@ const TRANSLATIONS = {
   "Monthly Payroll": { rs: "Mesečni obračun" },
   "Net, gross, taxes, contributions and cost per project for the month": { rs: "Neto, bruto, porez, doprinosi i trošak po projektima za mesec" },
   "Generate Payroll": { rs: "Generiši obračun" },
-  "This Month": { rs: "Ovaj mesec" },
+  "This Month": { rs: "Ovaj mesec", sk: "Tento mesiac" },
   "EUR/RSD exchange rate": { rs: "Kurs EUR/RSD" },
   "1 EUR in RSD, entered by the admin for this month": { rs: "Koliko dinara vredi 1 EUR — unosi admin za ovaj mesec" },
   "No payroll without an exchange rate": { rs: "Bez kursa nema obračuna" },
@@ -515,7 +519,7 @@ const TRANSLATIONS = {
   "B2C Hourly Rate (€) — Worker Pay": { rs: "B2C satnica (€) — Isplata radniku" },
   "B2B Hourly Rate (€) — Client Billing": { rs: "B2B satnica (€) — Naplata klijenta" },
   "Profit/hour": { rs: "Zarada/sat" },
-  "Margin": { rs: "Marža" },
+  "Margin": { rs: "Marža", sk: "Marža" },
   "Overtime Rate (€/h)": { rs: "Prekovremena stopa (€/h)" },
   "Weekend Rate (€/h)": { rs: "Stopa vikenda (€/h)" },
   "Holiday Rate (€/h)": { rs: "Stopa praznika (€/h)" },
@@ -532,28 +536,167 @@ const TRANSLATIONS = {
   "Select subcategory": { rs: "Odaberi podkategoriju" },
   "Additional notes (optional)": { rs: "Dodatne napomene (opciono)" },
 
+  // ── Dashboard (Teamora) ─────────────────────────────────
+  "Good morning": { rs: "Dobro jutro", sk: "Dobré ráno" },
+  "Good afternoon": { rs: "Dobar dan", sk: "Dobrý deň" },
+  "Good evening": { rs: "Dobro veče", sk: "Dobrý večer" },
+  "Here's what's happening with your team, projects and finances.": { rs: "Evo šta se dešava sa vašim timom, projektima i finansijama.", sk: "Pozrite, čo sa deje s vaším tímom, projektmi a financiami." },
+  "Last Month": { rs: "Prošli mesec", sk: "Minulý mesiac" },
+  "This Quarter": { rs: "Ovaj kvartal", sk: "Tento štvrťrok" },
+  "This Year": { rs: "Ova godina", sk: "Tento rok" },
+  "Payroll Cost": { rs: "Trošak rada", sk: "Mzdové náklady" },
+  "Gross Profit": { rs: "Bruto zarada", sk: "Hrubý zisk" },
+  "Revenue, Costs & Profit": { rs: "Prihod, troškovi i zarada", sk: "Tržby, náklady a zisk" },
+  "Cumulative amounts of approved timesheets, by day": { rs: "Kumulativni iznosi odobrenih satnica, po danima", sk: "Kumulatívne sumy schválených výkazov po dňoch" },
+  "No approved hours in this period": { rs: "Nema odobrenih sati u ovom periodu", sk: "V tomto období nie sú schválené hodiny" },
+  "Profitability Overview": { rs: "Pregled profitabilnosti", sk: "Prehľad ziskovosti" },
+  "At a Glance": { rs: "Ukratko", sk: "Na prvý pohľad" },
+  "Active Projects": { rs: "Aktivni projekti", sk: "Aktívne projekty" },
+  "Active Clients": { rs: "Aktivni klijenti", sk: "Aktívni klienti" },
+  "All clients": { rs: "Svi klijenti", sk: "Všetci klienti" },
+  "Overdue": { rs: "Kasni", sk: "Po termíne" },
+  "Pending Timesheets": { rs: "Satnice na čekanju", sk: "Čakajúce výkazy" },
+  "Upcoming Payroll": { rs: "Sledeći obračun", sk: "Nasledujúca výplata" },
+  "Top Profitable Projects": { rs: "Najprofitabilniji projekti", sk: "Najziskovejšie projekty" },
+  "View All": { rs: "Prikaži sve", sk: "Zobraziť všetko" },
+  "Billed Hours": { rs: "Fakturisani sati", sk: "Fakturované hodiny" },
+  "documents expire within 30 days or have expired": { rs: "dokumenata ističe u narednih 30 dana ili je isteklo", sk: "dokumentov vyprší do 30 dní alebo už vypršalo" },
+  "expired": { rs: "isteklo", sk: "vypršalo" },
+
+  // ── Tema i zaglavlje (Teamora) ───────────────────────────
+  "Search employees, projects, clients...": { rs: "Pretraži zaposlene, projekte, klijente...", sk: "Hľadať zamestnancov, projekty, klientov..." },
+  "No results": { rs: "Nema rezultata", sk: "Žiadne výsledky" },
+  "Open menu": { rs: "Otvori meni", sk: "Otvoriť ponuku" },
+  "Close menu": { rs: "Zatvori meni", sk: "Zavrieť ponuku" },
+  "Account menu": { rs: "Meni naloga", sk: "Ponuka účtu" },
+  "Unread notifications": { rs: "Nepročitana obaveštenja", sk: "Neprečítané upozornenia" },
+  // ── Adrese firme i projekta, radnici u satnici, negativna marža (zahtevi 12, 15, 16/17, spec §5) ──
+  "Tax ID": { rs: "Poreski broj (Tax ID)", sk: "DIČ (Tax ID)" },
+  "Tax ID can have at most 30 characters.": { rs: "Tax ID može imati najviše 30 znakova.", sk: "DIČ môže mať najviac 30 znakov." },
+  "ZIP (Postal code)": { rs: "Poštanski broj", sk: "PSČ" },
+  "ZIP": { rs: "Poštanski broj", sk: "PSČ" },
+  "ZIP can have at most 12 characters.": { rs: "Poštanski broj može imati najviše 12 znakova.", sk: "PSČ môže mať najviac 12 znakov." },
+  "Street and number": { rs: "Ulica i broj", sk: "Ulica a číslo" },
+  "e.g. 2040": { rs: "npr. 2040", sk: "napr. 2040" },
+  "No active employees on this project. Add them in the project's \"Employees on the project\" card.": { rs: "Na ovom projektu nema aktivnih radnika. Dodajte ih na kartici „Radnici na projektu“ u projektu.", sk: "Na tomto projekte nie sú aktívni zamestnanci. Pridajte ich na karte „Zamestnanci na projekte“ v projekte." },
+  "Negative labour margin: B2C rate is higher than B2B": { rs: "Negativna marža rada: B2C tarifa je veća od B2B", sk: "Záporná marža práce: sadzba B2C je vyššia ako B2B" },
   // ── Login ───────────────────────────────────────────────
   "Sign in": { rs: "Prijava" },
-  "Worker management": { rs: "Upravljanje radnicima" },
+  "Worker management": { rs: "Upravljanje radnicima", sk: "Správa pracovníkov" },
   "Password": { rs: "Lozinka" },
   "Wrong email or password": { rs: "Pogrešan email ili lozinka" },
   "Accounts are created by the administrator.": { rs: "Naloge otvara administrator." },
+  // ── Vendor ID i CSV uvoz dobavljača ──────────────────────
+  "Assigned automatically": { rs: "Dodeljuje se automatski", sk: "Priradí sa automaticky" },
+  "Import CSV": { rs: "Uvezi CSV", sk: "Importovať CSV" },
+  "Import vendors from CSV": { rs: "Uvoz dobavljača iz CSV-a", sk: "Import dodávateľov z CSV" },
+  "Vendor ID is assigned automatically; a Vendor ID column in the file is ignored.": { rs: "Šifra dobavljača (Vendor ID) se dodeljuje automatski; kolona Vendor ID iz fajla se ignoriše.", sk: "Vendor ID sa priraďuje automaticky; stĺpec Vendor ID zo súboru sa ignoruje." },
+  "Download the template and fill it in": { rs: "Preuzmite šablon i popunite ga", sk: "Stiahnite si šablónu a vyplňte ju" },
+  "Columns": { rs: "Kolone", sk: "Stĺpce" },
+  "Fields marked * are required.": { rs: "Polja označena sa * su obavezna.", sk: "Polia označené * sú povinné." },
+  "Download template": { rs: "Preuzmi šablon", sk: "Stiahnuť šablónu" },
+  "Upload the CSV file": { rs: "Otpremite CSV fajl", sk: "Nahrajte súbor CSV" },
+  "Separator , or ; — columns are matched automatically by their English or Serbian names.": { rs: "Separator , ili ; — kolone se automatski prepoznaju po engleskim ili srpskim nazivima.", sk: "Oddeľovač , alebo ; — stĺpce sa rozpoznajú automaticky podľa anglických alebo srbských názvov." },
+  "Choose CSV file": { rs: "Izaberi CSV fajl", sk: "Vybrať súbor CSV" },
+  "Preview": { rs: "Pregled", sk: "Náhľad" },
+  "Will be imported": { rs: "Biće uvezeno", sk: "Bude importované" },
+  "Skipped (duplicate)": { rs: "Preskočeno (duplikat)", sk: "Preskočené (duplikát)" },
+  "Skipped": { rs: "Preskočeno", sk: "Preskočené" },
+  "Error": { rs: "Greška", sk: "Chyba" },
+  "Imported": { rs: "Uvezeno", sk: "Importované" },
+  "Failed": { rs: "Neuspelo", sk: "Zlyhalo" },
+  "Ignored column": { rs: "Ignorisana kolona", sk: "Ignorovaný stĺpec" },
+  "Unrecognized columns (not imported)": { rs: "Neprepoznate kolone (ne uvoze se)", sk: "Nerozpoznané stĺpce (neimportujú sa)" },
+  "Row": { rs: "Red", sk: "Riadok" },
+  "Result": { rs: "Rezultat", sk: "Výsledok" },
+  "Vendor Name": { rs: "Naziv dobavljača", sk: "Názov dodávateľa" },
+  "Import": { rs: "Uvezi", sk: "Importovať" },
+  "Import another file": { rs: "Uvezi drugi fajl", sk: "Importovať ďalší súbor" },
+  "Done": { rs: "Gotovo", sk: "Hotovo" },
+  "Download error report": { rs: "Preuzmi izveštaj o greškama", sk: "Stiahnuť správu o chybách" },
+  "Vendors imported": { rs: "Dobavljači uvezeni", sk: "Dodávatelia importovaní" },
+  "Unknown error": { rs: "Nepoznata greška", sk: "Neznáma chyba" },
+  "The file is too large (max 2 MB).": { rs: "Fajl je prevelik (najviše 2 MB).", sk: "Súbor je príliš veľký (max. 2 MB)." },
+  "The file has no data rows.": { rs: "Fajl nema nijedan red sa podacima.", sk: "Súbor neobsahuje žiadne dátové riadky." },
+  "Too many rows (max 1000 per import).": { rs: "Previše redova (najviše 1000 po uvozu).", sk: "Príliš veľa riadkov (max. 1000 na import)." },
+  "Column \"Vendor Name\" was not found. Download the template and use its column names.": { rs: "Kolona „Vendor Name“ nije pronađena. Preuzmite šablon i koristite njegove nazive kolona.", sk: "Stĺpec „Vendor Name“ sa nenašiel. Stiahnite si šablónu a použite jej názvy stĺpcov." },
+  "The file could not be read.": { rs: "Fajl nije moguće pročitati.", sk: "Súbor sa nepodarilo prečítať." },
+  "Vendor name is required": { rs: "Naziv dobavljača je obavezan", sk: "Názov dodávateľa je povinný" },
+  "Invalid email address": { rs: "Neispravna email adresa", sk: "Neplatná e-mailová adresa" },
+  "Currency must be EUR, RSD, GBP or USD": { rs: "Valuta mora biti EUR, RSD, GBP ili USD", sk: "Mena musí byť EUR, RSD, GBP alebo USD" },
+  "Settlement cycle must be weekly, biweekly or monthly": { rs: "Ciklus obračuna mora biti nedeljno, dvonedeljno ili mesečno", sk: "Cyklus vyúčtovania musí byť týždenný, dvojtýždenný alebo mesačný" },
+  "Status must be active or inactive": { rs: "Status mora biti aktivan ili neaktivan", sk: "Stav musí byť aktívny alebo neaktívny" },
+  "Duplicate in file: same vendor name": { rs: "Duplikat u fajlu: isti naziv dobavljača", sk: "Duplikát v súbore: rovnaký názov dodávateľa" },
+  "Duplicate in file: same Registration No.": { rs: "Duplikat u fajlu: isti matični broj", sk: "Duplikát v súbore: rovnaké registračné číslo" },
+  "Duplicate in file: same Tax No.": { rs: "Duplikat u fajlu: isti poreski broj", sk: "Duplikát v súbore: rovnaké daňové číslo" },
+  "Already exists: same vendor name": { rs: "Već postoji: isti naziv dobavljača", sk: "Už existuje: rovnaký názov dodávateľa" },
+  "Already exists: same Registration No.": { rs: "Već postoji: isti matični broj", sk: "Už existuje: rovnaké registračné číslo" },
+  "Already exists: same Tax No.": { rs: "Već postoji: isti poreski broj", sk: "Už existuje: rovnaké daňové číslo" },
+  // ── Zaposleni: forma bez tarifa iz profila + CSV uvoz (zahtevi 3 i 13) ──
+  "ID Documents": { rs: "Lični dokumenti", sk: "Doklady totožnosti" },
+  "Legacy profile rate set": { rs: "U profilu postoji stara tarifa", sk: "V profile je nastavená stará sadzba" },
+  "rates are now managed per project": { rs: "tarife se sada vode po projektu", sk: "sadzby sa teraz spravujú pre každý projekt" },
+  "These values still apply in payroll calculation.": { rs: "Ove vrednosti se i dalje primenjuju u obračunu plata.", sk: "Tieto hodnoty sa stále uplatňujú pri výpočte miezd." },
+  "Import employees from CSV": { rs: "Uvoz zaposlenih iz CSV fajla", sk: "Import zamestnancov zo súboru CSV" },
+  "Template with example row": { rs: "Šablon sa primerom", sk: "Šablóna s ukážkovým riadkom" },
+  "Rows starting with # are ignored (the example row).": { rs: "Redovi koji počinju sa # se ne uvoze (red sa primerom).", sk: "Riadky začínajúce znakom # sa ignorujú (ukážkový riadok)." },
+  "Dates: dd.mm.yyyy or yyyy-mm-dd. Empty Employee ID gets the next EMP-number.": { rs: "Datumi: dd.mm.gggg ili gggg-mm-dd. Prazan ID radnika dobija sledeći EMP-broj.", sk: "Dátumy: dd.mm.rrrr alebo rrrr-mm-dd. Prázdne ID zamestnanca dostane ďalšie číslo EMP." },
+  "JMBG, ID documents and bank data can be imported only by an admin.": { rs: "JMBG, lične dokumente i bankovne podatke može da uveze samo admin.", sk: "JMBG, doklady totožnosti a bankové údaje môže importovať iba administrátor." },
+  "rows": { rs: "redova", sk: "riadkov" },
+  "Map file columns to employee fields": { rs: "Povežite kolone fajla sa poljima zaposlenog", sk: "Priraďte stĺpce súboru k poliam zamestnanca" },
+  "File column": { rs: "Kolona u fajlu", sk: "Stĺpec súboru" },
+  "Example value": { rs: "Primer vrednosti", sk: "Príklad hodnoty" },
+  "Employee field": { rs: "Polje zaposlenog", sk: "Pole zamestnanca" },
+  "empty": { rs: "prazno", sk: "prázdne" },
+  "Required fields are not mapped": { rs: "Obavezna polja nisu povezana", sk: "Povinné polia nie sú priradené" },
+  "Checking existing employees...": { rs: "Provera postojećih zaposlenih...", sk: "Kontrolujú sa existujúci zamestnanci..." },
+  "Skip duplicates (same email or JMBG in the file or already in Teamora)": { rs: "Preskoči duplikate (isti email ili JMBG u fajlu ili već u Teamori)", sk: "Preskočiť duplikáty (rovnaký e-mail alebo JMBG v súbore alebo už v Teamore)" },
+  "A duplicate Employee ID is always skipped — it must be unique.": { rs: "Duplikat ID-ja radnika se uvek preskače — mora biti jedinstven.", sk: "Duplicitné ID zamestnanca sa vždy preskočí — musí byť jedinečné." },
+  "Details": { rs: "Detalji", sk: "Podrobnosti" },
+  "Importing...": { rs: "Uvoz u toku...", sk: "Importuje sa..." },
+  "Errors": { rs: "Greške", sk: "Chyby" },
+  "Back": { rs: "Nazad", sk: "Späť" },
+  "Employees imported": { rs: "Uvezeno zaposlenih", sk: "Importovaní zamestnanci" },
+  "Admin only — value ignored": { rs: "Samo admin — vrednost nije uvezena", sk: "Iba administrátor — hodnota sa ignoruje" },
+  "Invalid date (use dd.mm.yyyy or yyyy-mm-dd)": { rs: "Neispravan datum (koristite dd.mm.gggg ili gggg-mm-dd)", sk: "Neplatný dátum (použite dd.mm.rrrr alebo rrrr-mm-dd)" },
+  "Unknown value": { rs: "Nepoznata vrednost", sk: "Neznáma hodnota" },
+  "Required field is empty": { rs: "Obavezno polje je prazno", sk: "Povinné pole je prázdne" },
+  "Department not found in Settings → Departments": { rs: "Odeljenje ne postoji u Podešavanja → Odeljenja", sk: "Oddelenie sa nenašlo v Nastavenia → Oddelenia" },
+  "Position not found in this department": { rs: "Pozicija ne postoji u ovom odeljenju", sk: "Pozícia v tomto oddelení neexistuje" },
+  "Position requires a department": { rs: "Za poziciju je potrebno odeljenje", sk: "Pozícia vyžaduje oddelenie" },
+  "End date is before start date": { rs: "Datum završetka je pre datuma početka", sk: "Dátum ukončenia je pred dátumom začiatku" },
+  "Duplicate": { rs: "Duplikat", sk: "Duplikát" },
+  "row": { rs: "red", sk: "riadok" },
+  "existing employee": { rs: "postojeći radnik", sk: "existujúci zamestnanec" },
+  "Ready": { rs: "Spremno", sk: "Pripravené" },
+  "Emergency Contact Name": { rs: "Ime kontakta za hitne slučajeve", sk: "Meno núdzového kontaktu" },
+  "Emergency Contact Relationship": { rs: "Srodstvo kontakta za hitne slučajeve", sk: "Vzťah núdzového kontaktu" },
+  "Emergency Contact Phone": { rs: "Telefon kontakta za hitne slučajeve", sk: "Telefón núdzového kontaktu" },
   };
 
+/** Pick the text for a language: rs -> `rs`, sk -> `sk` (or the Slovak dictionary entry for `en`), else English. */
+export function pick(lang, en, rs, sk) {
+  if (lang === "rs") return rs ?? en;
+  if (lang === "sk") return sk ?? SK[en] ?? en;
+  return en;
+}
+
 /**
- * Hook that returns a translation function.
- * t("Hello") → "Zdravo" (when lang="rs"), "Hello" (when lang="en")
+ * Hook for inline texts: L("English", "Srpski", "Slovenčina").
+ * Without the third argument Slovak is looked up in translations.sk.js by the English text, then falls back to English.
  */
 export function useL() {
   const { lang } = useLang();
-  return (en, rs) => (lang === "rs" ? rs : en);
+  return (en, rs, sk) => pick(lang, en, rs, sk);
 }
 
 export function useT() {
   const { lang } = useLang();
   return (key) => {
     if (!key) return key;
-    if (lang === "en") return TRANSLATIONS[key]?.en || key;
-    return TRANSLATIONS[key]?.[lang] || key;
+    const entry = TRANSLATIONS[key];
+    if (lang === "en") return entry?.en || key;
+    if (lang === "sk") return entry?.sk || SK[key] || entry?.en || key;
+    return entry?.[lang] || key;
   };
 }

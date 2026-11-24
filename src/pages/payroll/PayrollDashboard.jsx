@@ -56,7 +56,7 @@ export default function PayrollDashboard() {
 
   const { data: employees = [] } = useQuery({
     queryKey: ["employees"],
-    queryFn: () => base44.entities.Employee.list("-created_date", 200),
+    queryFn: () => base44.entities.Employee.list("-created_date"),
   });
 
   // Zbirovi samo iz odobrenih satnica, u centima (src/lib/payroll/reports.js).
@@ -79,7 +79,7 @@ export default function PayrollDashboard() {
 
   // Radnik po employee_id, klijent po project_id → projects.client_id; ime je samo za prikaz (trenutni red po ID-u),
   // pa preimenovanje klijenta ne menja nijednu brojku. Bez klijenta / ručno uneto je posebna grupa, ne spaja se po imenu.
-  const unassignedClientLabel = lang === "rs" ? "Bez klijenta / ručno uneto" : "No client / entered manually";
+  const unassignedClientLabel = lang === "rs" ? "Bez klijenta / ručno uneto" : lang === "sk" ? "Bez klienta / zadané ručne" : "No client / entered manually";
   const topWorkers = totalsByWorker(approved)
     .sort((a, b) => b.profit - a.profit)
     .slice(0, 5);
@@ -219,7 +219,7 @@ export default function PayrollDashboard() {
               <div key={ts.id} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-muted/50 transition-colors">
                 <div>
                   <p className="text-sm font-medium">{ts.employee_name}</p>
-                  <p className="text-xs text-muted-foreground">{ts.week_start && `${lang === "rs" ? "nedelja od" : "week of"} ${formatDate(parseISO(ts.week_start), "dd.MM.yyyy", lang)}`} · {Number(ts.total_hours ?? 0).toFixed(1)}h</p>
+                  <p className="text-xs text-muted-foreground">{ts.week_start && `${lang === "rs" ? "nedelja od" : lang === "sk" ? "týždeň od" : "week of"} ${formatDate(parseISO(ts.week_start), "dd.MM.yyyy", lang)}`} · {Number(ts.total_hours ?? 0).toFixed(1)}h</p>
                 </div>
                 <StatusBadge status={ts.approval_status} />
               </div>

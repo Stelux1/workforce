@@ -6,6 +6,7 @@ import { currentLang } from "@/api/errors";
 const TEXT = {
   en: { title: "This page hit an error", body: "Your data is safe. Reload the page or open another one from the menu.", reload: "Reload page" },
   rs: { title: "Na ovoj stranici je došlo do greške", body: "Podaci nisu izgubljeni. Učitajte stranicu ponovo ili izaberite drugu iz menija.", reload: "Učitaj ponovo" },
+  sk: { title: "Na tejto stránke sa vyskytla chyba", body: "Vaše údaje sú v bezpečí. Načítajte stránku znova alebo otvorte inú z ponuky.", reload: "Načítať znova" },
 };
 
 export default class ErrorBoundary extends Component {

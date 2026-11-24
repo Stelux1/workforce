@@ -55,6 +55,28 @@ const LABELS = {
     close: "Zatvori",
     download: "Preuzmi PDF",
   },
+  sk: {
+    title: "TÝŽDENNÝ DOCHÁDZKOVÝ HÁROK",
+    employeeName: "Meno zamestnanca",
+    designation: "Pozícia",
+    reference: "Referenčné ID",
+    year: "Rok",
+    week: "Týždeň",
+    no: "Č.",
+    location: "Miesto",
+    projectNo: "Č. projektu",
+    days: ["Pondelok", "Utorok", "Streda", "Štvrtok", "Piatok", "Sobota", "Nedeľa"],
+    daysShort: ["Po", "Ut", "St", "Št", "Pi", "So", "Ne"],
+    dailyTotal: "Hodiny spolu / deň",
+    totalHours: "Odpracované hodiny spolu",
+    overtime: "Hodiny nadčasu",
+    employee: "Zamestnanec",
+    contractor: "Dodávateľ",
+    client: "Klient",
+    signatureDate: "Podpis / dátum",
+    close: "Zavrieť",
+    download: "Stiahnuť PDF",
+  },
 };
 
 const numRows = 6;
@@ -83,7 +105,7 @@ export default function TimesheetPreviewModal({ ts, employees, weekDate: pageWee
 
   const handleDownload = async () => {
     await exportTimesheetPDF([ts], employees, weekDate, `Timesheet_${ref}.pdf`, lang, projects);
-    toast.success(lang === "rs" ? "PDF preuzet" : "PDF downloaded");
+    toast.success(lang === "rs" ? "PDF preuzet" : lang === "sk" ? "PDF bolo stiahnuté" : "PDF downloaded");
   };
 
   const tdStyle = { border: `1px solid ${B}`, padding: "4px 6px" };

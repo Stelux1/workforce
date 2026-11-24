@@ -14,12 +14,12 @@ export const WEEKDAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 
 export const WEEKDAY_LABELS = {
   en: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
-  rs: ["Pon", "Uto", "Sre", "Čet", "Pet", "Sub", "Ned"],
+  rs: ["Pon", "Uto", "Sre", "Čet", "Pet", "Sub", "Ned"], sk: ["Po", "Ut", "St", "Št", "Pi", "So", "Ne"],
 };
 
 export const MONTH_LABELS = {
   en: ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"],
-  rs: ["Januar", "Februar", "Mart", "April", "Maj", "Jun", "Jul", "Avgust", "Septembar", "Oktobar", "Novembar", "Decembar"],
+  rs: ["Januar", "Februar", "Mart", "April", "Maj", "Jun", "Jul", "Avgust", "Septembar", "Oktobar", "Novembar", "Decembar"], sk: ["Január", "Február", "Marec", "Apríl", "Máj", "Jún", "Júl", "August", "September", "Október", "November", "December"],
 };
 
 export const dateKey = (d) => format(d, "yyyy-MM-dd");

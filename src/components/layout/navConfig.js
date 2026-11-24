@@ -1,9 +1,10 @@
 // Jedan spisak stavki menija za bočni (desktop) i mobilni meni, da se ne razilaze (QA 14.11.2026).
 import {
-  LayoutDashboard, Users, FileText, Calendar, CheckSquare, Bell, BarChart3, DollarSign, ClipboardList,
-  Building2, Building, Mail, Settings2, FolderKanban, Receipt, PieChart, Table2, Truck, Coins, Clock, CalendarDays, Percent,
-  UserCog,
+  LayoutGrid, Users, User, FileText, Calendar, SquareCheck, Bell, ChartNoAxesColumn, ClipboardList,
+  Building2, Building, Mail, Settings, Folder, FolderKanban, Receipt, Table2, Handshake, Clock, CalendarDays, Percent,
+  UserCog, SlidersHorizontal, Gauge, Briefcase, Languages,
 } from "lucide-react";
+import { CalendarDollar, CoinStack } from "./NavIcons";
 
 export const NAV_LABELS = {
   en: {
@@ -16,7 +17,7 @@ export const NAV_LABELS = {
     "Timesheet Dashboard": "Timesheet Overview",
     "Monthly Payroll": "Monthly Payroll", "Clients": "Clients", "Payroll Reports": "Payroll Reports",
     "Email Notifications": "Email Notifications", "Departments & Positions": "Departments & Positions",
-    "Cost Categories": "Cost Categories", "Coefficients & Holidays": "Coefficients & Holidays", "Company Details": "Company Details", "Users": "Users", "Vendors": "Vendors", "Rates & Assignments": "Rates & Assignments",
+    "Cost Categories": "Cost Categories", "Coefficients & Holidays": "Coefficients & Holidays", "Company Details": "Company Details", "Users": "Users", "Language & Currency": "Language & Currency", "Vendors": "Vendors", "Rates & Assignments": "Rates & Assignments",
     "Logout": "Logout", "Collapse": "Collapse",
     "section_employees": "Staff Management", "section_projects": "Projects", "section_payroll": "Payroll", "section_settings": "Settings",
   },
@@ -30,57 +31,72 @@ export const NAV_LABELS = {
     "Timesheet Dashboard": "Pregled radnih sati",
     "Monthly Payroll": "Mesečni obračun", "Clients": "Klijenti", "Payroll Reports": "Finansijski izveštaji",
     "Email Notifications": "Email poruke", "Departments & Positions": "Odeljenja",
-    "Cost Categories": "Kategorije troškova", "Coefficients & Holidays": "Koeficijenti i praznici", "Company Details": "Podaci firme", "Users": "Korisnici", "Vendors": "Dobavljači", "Rates & Assignments": "Tarife i dodele",
+    "Cost Categories": "Kategorije troškova", "Coefficients & Holidays": "Koeficijenti i praznici", "Company Details": "Podaci firme", "Users": "Korisnici", "Language & Currency": "Jezik i valuta", "Vendors": "Dobavljači", "Rates & Assignments": "Tarife i dodele",
     "Logout": "Odjava", "Collapse": "Skupi",
     "section_employees": "Kadrovi", "section_projects": "Projekti", "section_payroll": "Obračun i finansije", "section_settings": "Podešavanja",
   },
+  sk: {
+    "Dashboard": "Domov",
+    "Employees": "Zamestnanci", "Documents": "Dokumenty", "Attendance": "Dochádzka",
+    "Schedule": "Rozvrh", "Tasks": "Úlohy", "Leave Requests": "Žiadosti o voľno",
+    "Notifications": "Upozornenia", "Reports": "Prehľady",
+    "Projects": "Prehľad projektov", "Project Costs": "Náklady projektov",
+    "Payroll Dashboard": "Mzdový prehľad", "Timesheets": "Pracovné výkazy",
+    "Timesheet Dashboard": "Prehľad výkazov",
+    "Monthly Payroll": "Mesačné zúčtovanie miezd", "Clients": "Klienti", "Payroll Reports": "Finančné prehľady",
+    "Email Notifications": "E-mailové upozornenia", "Departments & Positions": "Oddelenia",
+    "Cost Categories": "Kategórie nákladov", "Coefficients & Holidays": "Koeficienty a sviatky", "Company Details": "Údaje o firme", "Users": "Používatelia", "Language & Currency": "Jazyk a mena", "Vendors": "Dodávatelia", "Rates & Assignments": "Sadzby a pridelenia",
+    "Logout": "Odhlásiť sa", "Collapse": "Zbaliť",
+    "section_employees": "Správa personálu", "section_projects": "Projekty", "section_payroll": "Mzdy a financie", "section_settings": "Nastavenia",
+  },
 };
 
-export const DASHBOARD_ITEM = { label: "Dashboard", icon: LayoutDashboard, path: "/" };
+export const DASHBOARD_ITEM = { label: "Dashboard", icon: LayoutGrid, path: "/" };
 
 export const NAV_SECTIONS = [
   {
     key: "section_employees", icon: Users, defaultOpen: true,
     items: [
-      { label: "Employees", icon: Users, path: "/employees" },
-      { label: "Vendors", icon: Truck, path: "/vendors" },
+      { label: "Employees", icon: User, path: "/employees" },
+      { label: "Vendors", icon: Handshake, path: "/vendors" },
       { label: "Documents", icon: FileText, path: "/documents" },
       { label: "Attendance", icon: Clock, path: "/attendance" },
       { label: "Schedule", icon: CalendarDays, path: "/schedule" },
-      { label: "Tasks", icon: CheckSquare, path: "/tasks" },
+      { label: "Tasks", icon: SquareCheck, path: "/tasks" },
       { label: "Leave Requests", icon: Calendar, path: "/leave-requests" },
       { label: "Notifications", icon: Bell, path: "/notifications" },
-      { label: "Reports", icon: BarChart3, path: "/reports" },
+      { label: "Reports", icon: ChartNoAxesColumn, path: "/reports" },
     ],
   },
   {
-    key: "section_projects", icon: FolderKanban, defaultOpen: true,
+    key: "section_projects", icon: Folder, defaultOpen: true,
     items: [
       { label: "Projects", icon: FolderKanban, path: "/projects" },
-      { label: "Project Costs", icon: Receipt, path: "/project-costs" },
-      { label: "Rates & Assignments", icon: Coins, path: "/rates" },
+      { label: "Project Costs", icon: CoinStack, path: "/project-costs" },
+      { label: "Rates & Assignments", icon: SlidersHorizontal, path: "/rates" },
     ],
   },
   {
-    key: "section_payroll", icon: DollarSign, defaultOpen: false,
+    key: "section_payroll", icon: CoinStack, defaultOpen: true,
     items: [
-      { label: "Payroll Dashboard", icon: DollarSign, path: "/payroll" },
+      { label: "Payroll Dashboard", icon: Gauge, path: "/payroll" },
       { label: "Timesheets", icon: ClipboardList, path: "/timesheets" },
       { label: "Timesheet Dashboard", icon: Table2, path: "/timesheet-dashboard" },
-      { label: "Monthly Payroll", icon: PieChart, path: "/payroll/monthly" },
+      { label: "Monthly Payroll", icon: CalendarDollar, path: "/payroll/monthly" },
       { label: "Clients", icon: Building2, path: "/clients" },
-      { label: "Payroll Reports", icon: BarChart3, path: "/payroll/reports" },
+      { label: "Payroll Reports", icon: ChartNoAxesColumn, path: "/payroll/reports" },
     ],
   },
   {
-    key: "section_settings", icon: Settings2, defaultOpen: false,
+    key: "section_settings", icon: Settings, defaultOpen: false,
     items: [
       { label: "Email Notifications", icon: Mail, path: "/email-notifications" },
-      { label: "Departments & Positions", icon: Settings2, path: "/settings/departments" },
+      { label: "Departments & Positions", icon: Briefcase, path: "/settings/departments" },
       { label: "Cost Categories", icon: Receipt, path: "/settings/cost-categories" },
       { label: "Coefficients & Holidays", icon: Percent, path: "/settings/coefficients" },
       { label: "Company Details", icon: Building, path: "/settings/company" },
       { label: "Users", icon: UserCog, path: "/settings/users" },
+      { label: "Language & Currency", icon: Languages, path: "/settings/general" },
     ],
   },
 ];

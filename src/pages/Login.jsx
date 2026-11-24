@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Users, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import AuthLayout from "@/components/AuthLayout";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,7 +26,6 @@ export default function Login() {
 
   return (
     <AuthLayout
-      icon={Users}
       title={T("Sign in")}
       subtitle={T("Worker management")}
       footer={T("Accounts are created by the administrator.")}

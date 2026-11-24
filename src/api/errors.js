@@ -4,146 +4,146 @@
 const M = {
   permission: {
     en: "You don't have permission to make this change.",
-    rs: "Nemate pravo na ovu izmenu.",
+    rs: "Nemate pravo na ovu izmenu.", sk: "Nemáte oprávnenie vykonať túto zmenu.",
   },
   noRows: {
     en: "The change was not saved: the record doesn't exist or you don't have permission to change it.",
-    rs: "Izmena nije sačuvana: zapis ne postoji ili nemate pravo da ga menjate.",
+    rs: "Izmena nije sačuvana: zapis ne postoji ili nemate pravo da ga menjate.", sk: "Zmena nebola uložená: záznam neexistuje alebo nemáte oprávnenie ho meniť.",
   },
-  duplicate: { en: "Such a record already exists.", rs: "Takav zapis već postoji." },
+  duplicate: { en: "Such a record already exists.", rs: "Takav zapis već postoji.", sk: "Takýto záznam už existuje." },
   duplicateHoliday: {
     en: "A holiday for this date already exists.",
-    rs: "Praznik za ovaj datum već postoji.",
+    rs: "Praznik za ovaj datum već postoji.", sk: "Sviatok pre tento dátum už existuje.",
   },
   duplicateEmployeeId: {
     en: "This employee ID is already taken. Enter a different one.",
-    rs: "Ova šifra radnika već postoji. Upišite drugu šifru.",
+    rs: "Ova šifra radnika već postoji. Upišite drugu šifru.", sk: "Toto ID zamestnanca je už obsadené. Zadajte iné.",
   },
   duplicateTimesheet: {
     en: "A timesheet for this employee, project and week already exists.",
-    rs: "Za ovog radnika, projekat i nedelju satnica već postoji.",
+    rs: "Za ovog radnika, projekat i nedelju satnica već postoji.", sk: "Pracovný výkaz pre tohto zamestnanca, projekt a týždeň už existuje.",
   },
   duplicatePayrollMonth: {
     en: "A payroll for this month already exists.",
-    rs: "Za ovaj mesec obračun već postoji.",
+    rs: "Za ovaj mesec obračun već postoji.", sk: "Zúčtovanie pre tento mesiac už existuje.",
   },
   dates: {
     en: "The end date can't be before the start date.",
-    rs: "Datum završetka ne može biti pre datuma početka.",
+    rs: "Datum završetka ne može biti pre datuma početka.", sk: "Dátum ukončenia nemôže byť pred dátumom začiatku.",
   },
-  emptyName: { en: "The name can't be empty.", rs: "Naziv ne sme biti prazan." },
-  emptyFirstName: { en: "First name can't be empty.", rs: "Ime ne sme biti prazno." },
-  emptyLastName: { en: "Last name can't be empty.", rs: "Prezime ne sme biti prazno." },
+  emptyName: { en: "The name can't be empty.", rs: "Naziv ne sme biti prazan.", sk: "Názov nemôže byť prázdny." },
+  emptyFirstName: { en: "First name can't be empty.", rs: "Ime ne sme biti prazno.", sk: "Meno nemôže byť prázdne." },
+  emptyLastName: { en: "Last name can't be empty.", rs: "Prezime ne sme biti prazno.", sk: "Priezvisko nemôže byť prázdne." },
   dayHours: {
     en: "Hours per day must be between 0 and 24.",
-    rs: "Sati po danu moraju biti između 0 i 24.",
+    rs: "Sati po danu moraju biti između 0 i 24.", sk: "Hodiny za deň musia byť medzi 0 a 24.",
   },
-  weekStart: { en: "The week must start on a Monday.", rs: "Nedelja mora da počne ponedeljkom." },
+  weekStart: { en: "The week must start on a Monday.", rs: "Nedelja mora da počne ponedeljkom.", sk: "Týždeň musí začínať v pondelok." },
   jmbg: {
     en: "The JMBG is not valid (13 digits with a correct check digit).",
-    rs: "JMBG nije ispravan (13 cifara i ispravna kontrolna cifra).",
+    rs: "JMBG nije ispravan (13 cifara i ispravna kontrolna cifra).", sk: "JMBG nie je platné (13 číslic so správnou kontrolnou číslicou).",
   },
   vendorRequired: {
     en: "A subcontractor engagement needs a vendor, and a direct employment must not have one.",
-    rs: "Angažman preko podizvođača mora imati dobavljača, a direktno zaposlenje ne sme.",
+    rs: "Angažman preko podizvođača mora imati dobavljača, a direktno zaposlenje ne sme.", sk: "Pracovný vzťah subdodávateľa vyžaduje dodávateľa a priame zamestnanie ho mať nesmie.",
   },
-  negative: { en: "The amount can't be negative.", rs: "Iznos ne može biti negativan." },
+  negative: { en: "The amount can't be negative.", rs: "Iznos ne može biti negativan.", sk: "Suma nemôže byť záporná." },
   workFraction: {
     en: "The working-time share must be greater than 0 and at most 1.",
-    rs: "Udeo radnog vremena mora biti veći od 0 i najviše 1.",
+    rs: "Udeo radnog vremena mora biti veći od 0 i najviše 1.", sk: "Podiel pracovného času musí byť väčší ako 0 a najviac 1.",
   },
-  coefficient: { en: "The coefficient must be greater than 0.", rs: "Koeficijent mora biti veći od 0." },
-  notAllowedValue: { en: "The selected value is not allowed.", rs: "Izabrana vrednost nije dozvoljena." },
+  coefficient: { en: "The coefficient must be greater than 0.", rs: "Koeficijent mora biti veći od 0.", sk: "Koeficient musí byť väčší ako 0." },
+  notAllowedValue: { en: "The selected value is not allowed.", rs: "Izabrana vrednost nije dozvoljena.", sk: "Vybraná hodnota nie je povolená." },
   overlap: {
     en: "This engagement overlaps an existing engagement of the same employee.",
-    rs: "Ovaj angažman se preklapa sa postojećim angažmanom istog radnika.",
+    rs: "Ovaj angažman se preklapa sa postojećim angažmanom istog radnika.", sk: "Tento pracovný vzťah sa prekrýva s existujúcim pracovným vzťahom toho istého zamestnanca.",
   },
   inUse: {
     en: "This can't be deleted because other records use it.",
-    rs: "Ne može da se obriše jer ga koriste drugi podaci.",
+    rs: "Ne može da se obriše jer ga koriste drugi podaci.", sk: "Nemožno odstrániť, pretože to používajú iné záznamy.",
   },
   // Brisanje koje sprečava konkretna veza — kaže šta tačno smeta (QA 14.11.2026).
   inUseProjectTimesheets: {
     en: "The project has timesheets, so it can't be deleted. Set the project to Completed instead.",
-    rs: "Projekat ima satnice, pa ne može da se obriše. Umesto toga postavite status Završen.",
+    rs: "Projekat ima satnice, pa ne može da se obriše. Umesto toga postavite status Završen.", sk: "Projekt má pracovné výkazy, preto ho nemožno odstrániť. Nastavte projekt radšej ako Dokončený.",
   },
   inUseProjectCosts: {
     en: "The project has project costs. Delete the costs first.",
-    rs: "Projekat ima troškove. Prvo obrišite troškove projekta.",
+    rs: "Projekat ima troškove. Prvo obrišite troškove projekta.", sk: "Projekt má náklady projektu. Najprv odstráňte náklady.",
   },
   inUseEmployeeTimesheets: {
     en: "The employee has timesheets, so they can't be deleted. Set the status to Terminated instead.",
-    rs: "Radnik ima satnice, pa ne može da se obriše. Umesto toga postavite status Otpušten.",
+    rs: "Radnik ima satnice, pa ne može da se obriše. Umesto toga postavite status Otpušten.", sk: "Zamestnanec má pracovné výkazy, preto ho nemožno odstrániť. Nastavte radšej stav Ukončený.",
   },
   inUseEmployeePayroll: {
     en: "The employee has payroll records, so they can't be deleted. Set the status to Terminated instead.",
-    rs: "Radnik ima obračune, pa ne može da se obriše. Umesto toga postavite status Otpušten.",
+    rs: "Radnik ima obračune, pa ne može da se obriše. Umesto toga postavite status Otpušten.", sk: "Zamestnanec má mzdové záznamy, preto ho nemožno odstrániť. Nastavte radšej stav Ukončený.",
   },
   inUseEmployeeAssignments: {
     en: "The employee has project assignments (Rates & Assignments). Remove them first.",
-    rs: "Radnik ima dodele na projektima (Tarife i dodele). Prvo ih uklonite.",
+    rs: "Radnik ima dodele na projektima (Tarife i dodele). Prvo ih uklonite.", sk: "Zamestnanec má pridelenia na projekty (Sadzby a pridelenia). Najprv ich odstráňte.",
   },
   // Tarife se ne brišu kaskadno (migracija 20261114240000): prvo se brišu tarife u Tarife i dodele (samo admin).
   inUseAssignmentRates: {
     en: "The assignment has rates (Rates & Assignments), so it can't be deleted. Delete those rates first.",
-    rs: "Dodela ima tarife (Tarife i dodele), pa ne može da se obriše. Prvo obrišite te tarife.",
+    rs: "Dodela ima tarife (Tarife i dodele), pa ne može da se obriše. Prvo obrišite te tarife.", sk: "Pridelenie má sadzby (Sadzby a pridelenia), preto ho nemožno odstrániť. Najprv odstráňte tieto sadzby.",
   },
   inUseProjectRates: {
     en: "The project has rates (Rates & Assignments), so it can't be deleted. An admin has to delete those rates first.",
-    rs: "Projekat ima tarife (Tarife i dodele), pa ne može da se obriše. Admin prvo briše te tarife.",
+    rs: "Projekat ima tarife (Tarife i dodele), pa ne može da se obriše. Admin prvo briše te tarife.", sk: "Projekt má sadzby (Sadzby a pridelenia), preto ho nemožno odstrániť. Tieto sadzby musí najprv odstrániť administrátor.",
   },
   inUseClientProjects: {
     en: "The client has projects, so it can't be deleted.",
-    rs: "Klijent ima projekte, pa ne može da se obriše.",
+    rs: "Klijent ima projekte, pa ne može da se obriše.", sk: "Klient má projekty, preto ho nemožno odstrániť.",
   },
   inUseVendorEngagements: {
     en: "The vendor has engagements, so it can't be deleted. Set it to Inactive instead.",
-    rs: "Dobavljač ima angažmane, pa ne može da se obriše. Umesto toga postavite status Neaktivan.",
+    rs: "Dobavljač ima angažmane, pa ne može da se obriše. Umesto toga postavite status Neaktivan.", sk: "Dodávateľ má pracovné vzťahy, preto ho nemožno odstrániť. Nastavte ho radšej ako Neaktívny.",
   },
   duplicateProject: {
     en: "A project with this name already exists for this client.",
-    rs: "Projekat sa ovim nazivom već postoji kod ovog klijenta.",
+    rs: "Projekat sa ovim nazivom već postoji kod ovog klijenta.", sk: "Projekt s týmto názvom už pre tohto klienta existuje.",
   },
   fileContent: {
     en: "The file content doesn't match its type (only real PDF and image files are allowed).",
-    rs: "Sadržaj fajla ne odgovara tipu (dozvoljeni su samo pravi PDF i slike).",
+    rs: "Sadržaj fajla ne odgovara tipu (dozvoljeni su samo pravi PDF i slike).", sk: "Obsah súboru nezodpovedá jeho typu (povolené sú iba skutočné súbory PDF a obrázky).",
   },
-  photoTooBig: { en: "The photo is too large (max 5 MB).", rs: "Fotografija je prevelika (najviše 5 MB)." },
+  photoTooBig: { en: "The photo is too large (max 5 MB).", rs: "Fotografija je prevelika (najviše 5 MB).", sk: "Fotografia je príliš veľká (max. 5 MB)." },
   missingLink: {
     en: "The linked record (e.g. employee or project) doesn't exist.",
-    rs: "Povezani zapis (npr. radnik ili projekat) ne postoji.",
+    rs: "Povezani zapis (npr. radnik ili projekat) ne postoji.", sk: "Prepojený záznam (napr. zamestnanec alebo projekt) neexistuje.",
   },
-  required: { en: "A required field is empty", rs: "Obavezno polje nije popunjeno" },
+  required: { en: "A required field is empty", rs: "Obavezno polje nije popunjeno", sk: "Povinné pole je prázdne" },
   badValue: {
     en: "A field has an invalid value (e.g. text where a number is expected).",
-    rs: "Neko polje ima neispravnu vrednost (npr. tekst umesto broja).",
+    rs: "Neko polje ima neispravnu vrednost (npr. tekst umesto broja).", sk: "Pole má neplatnú hodnotu (napr. text tam, kde sa očakáva číslo).",
   },
-  badDate: { en: "Invalid date.", rs: "Neispravan datum." },
-  tooBig: { en: "The number is too large.", rs: "Broj je prevelik." },
+  badDate: { en: "Invalid date.", rs: "Neispravan datum.", sk: "Neplatný dátum." },
+  tooBig: { en: "The number is too large.", rs: "Broj je prevelik.", sk: "Číslo je príliš veľké." },
   session: {
     en: "Your session has expired. Please sign in again.",
-    rs: "Prijava je istekla. Prijavite se ponovo.",
+    rs: "Prijava je istekla. Prijavite se ponovo.", sk: "Vaša relácia vypršala. Prihláste sa znova.",
   },
   network: {
     en: "No connection to the server. Check the internet connection or whether the database is running.",
-    rs: "Nema veze sa serverom. Proverite internet ili da li baza radi.",
+    rs: "Nema veze sa serverom. Proverite internet ili da li baza radi.", sk: "Bez spojenia so serverom. Skontrolujte internetové pripojenie alebo či beží databáza.",
   },
-  fileTooBig: { en: "The file is too large (max 20 MB).", rs: "Fajl je prevelik (najviše 20 MB)." },
+  fileTooBig: { en: "The file is too large (max 20 MB).", rs: "Fajl je prevelik (najviše 20 MB).", sk: "Súbor je príliš veľký (max. 20 MB)." },
   fileType: {
     en: "This file type is not allowed (PDF and images only).",
-    rs: "Ovaj tip fajla nije dozvoljen (samo PDF i slike).",
+    rs: "Ovaj tip fajla nije dozvoljen (samo PDF i slike).", sk: "Tento typ súboru nie je povolený (iba PDF a obrázky).",
   },
-  notFound: { en: "Record not found.", rs: "Zapis nije pronađen." },
-  noFile: { en: "No file selected.", rs: "Nije izabran fajl." },
+  notFound: { en: "Record not found.", rs: "Zapis nije pronađen.", sk: "Záznam sa nenašiel." },
+  noFile: { en: "No file selected.", rs: "Nije izabran fajl.", sk: "Nie je vybraný žiadny súbor." },
   emailNotConfigured: {
     en: "Sending emails is not set up yet (no email service).",
-    rs: "Slanje mejlova još nije podešeno (nema mejl servisa).",
+    rs: "Slanje mejlova još nije podešeno (nema mejl servisa).", sk: "Odosielanie e-mailov zatiaľ nie je nastavené (chýba e-mailová služba).",
   },
   privateSkipped: {
     en: "Saved, but bank details, salary and rates were NOT saved — only an admin can change them.",
-    rs: "Sačuvano, ali bankovni podaci, plata i tarife NISU sačuvani — to može da menja samo admin.",
+    rs: "Sačuvano, ali bankovni podaci, plata i tarife NISU sačuvani — to može da menja samo admin.", sk: "Uložené, ale bankové údaje, mzda a sadzby NEBOLI uložené — môže ich meniť iba administrátor.",
   },
-  unknown: { en: "Something went wrong while saving.", rs: "Došlo je do greške pri radu sa bazom." },
+  unknown: { en: "Something went wrong while saving.", rs: "Došlo je do greške pri radu sa bazom.", sk: "Pri ukladaní sa niečo pokazilo." },
 };
 
 const FIELD_NAMES = {
@@ -155,11 +155,19 @@ const FIELD_NAMES = {
     type: "vrsta", shift_start: "početak smene", shift_end: "kraj smene",
   },
   en: {},
+  sk: {
+    first_name: "meno", last_name: "priezvisko", name: "názov", title: "názov", employee_id: "zamestnanec",
+    project_id: "projekt", week_start: "týždeň", start_date: "začiatok", end_date: "koniec",
+    amount: "suma", category: "kategória", date: "dátum", leave_type: "druh voľna",
+    effective_from: "platí od", engagement_type: "typ pracovného vzťahu", subject: "predmet", body: "text",
+    type: "typ", shift_start: "začiatok zmeny", shift_end: "koniec zmeny",
+  },
 };
 
 export function currentLang() {
   try {
-    return (globalThis.localStorage?.getItem("app_lang") || "en").toLowerCase() === "rs" ? "rs" : "en";
+    const l = (globalThis.localStorage?.getItem("app_lang") || "en").toLowerCase();
+    return l === "rs" || l === "sk" ? l : "en";
   } catch {
     return "en";
   }
@@ -273,7 +281,7 @@ const DB_MESSAGES_EN = [
     "Only an admin can change or delete the assignments of an employee whose rate on this project was set by an admin."],
 ];
 function dbMessage(raw, lang) {
-  if (lang !== "en") return raw;
+  if (lang === "rs") return raw; // poruke iz baze su na srpskom; slovački prikaz koristi engleski prevod
   for (const [re, en] of DB_MESSAGES_EN) if (re.test(raw)) return raw.replace(re, en);
   return raw;
 }

@@ -39,7 +39,7 @@ export default function LeaveRequests() {
 
   const { data: employees = [] } = useQuery({
     queryKey: ["employees"],
-    queryFn: () => base44.entities.Employee.list("-created_date", 200),
+    queryFn: () => base44.entities.Employee.list("-created_date"),
   });
 
   const createMutation = useMutation({
@@ -108,7 +108,7 @@ export default function LeaveRequests() {
                 <div>
                   <p className="font-medium text-sm">{req.employee_name}</p>
                   <p className="text-xs text-muted-foreground capitalize">
-                    {leaveTypeLabel(req.leave_type)} · {req.start_date && formatDate(parseISO(req.start_date), lang === "rs" ? "d. MMM" : "MMM d", lang)} – {req.end_date && formatDate(parseISO(req.end_date), lang === "rs" ? "d. MMM yyyy." : "MMM d, yyyy", lang)}
+                    {leaveTypeLabel(req.leave_type)} · {req.start_date && formatDate(parseISO(req.start_date), lang === "rs" ? "d. MMM" : lang === "sk" ? "d. MMM" : "MMM d", lang)} – {req.end_date && formatDate(parseISO(req.end_date), lang === "rs" ? "d. MMM yyyy." : lang === "sk" ? "d. MMM yyyy" : "MMM d, yyyy", lang)}
                   </p>
                   {req.reason && <p className="text-xs text-muted-foreground mt-1">{req.reason}</p>}
                 </div>

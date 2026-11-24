@@ -532,6 +532,7 @@ describe("vrste sati (hours.js)", () => {
       prekovremeni: 2,
       vikend: 8,
       praznik: 0,
+      praznik_vikend: 0,
     });
   });
 
@@ -541,12 +542,20 @@ describe("vrste sati (hours.js)", () => {
       prekovremeni: 2,
       vikend: 8,
       praznik: 0,
+      praznik_vikend: 0,
     });
   });
 
-  it("praznik u subotu je praznik, ne vikend", () => {
+  it("praznik u subotu je posebna vrsta „praznik vikendom\" (jedna konačna vrsta, ne i praznik i vikend)", () => {
     const r = classifyWeek({ weekStart: MON, dayHours: week(0, 8, { sun_hours: 4 }), holidays: ["2026-11-14"], dailyThreshold: 8 });
-    expect(r).toEqual({ redovni: 0, prekovremeni: 0, vikend: 4, praznik: 8 });
+    expect(r).toEqual({ redovni: 0, prekovremeni: 0, vikend: 4, praznik: 0, praznik_vikend: 8 });
+  });
+
+  it("staro pravilo (snimci odobreni pre 24.11.2026): praznik u subotu je praznik", () => {
+    const r = classifyWeek({
+      weekStart: MON, dayHours: week(0, 8, { sun_hours: 4 }), holidays: ["2026-11-14"], dailyThreshold: 8, holidayWeekend: false,
+    });
+    expect(r).toEqual({ redovni: 0, prekovremeni: 0, vikend: 4, praznik: 8, praznik_vikend: 0 });
   });
 
   it("praznik radnim danom: ceo dan je praznik, bez podele na prekovremeno", () => {
@@ -556,7 +565,7 @@ describe("vrste sati (hours.js)", () => {
       holidays: [{ date: "2026-11-11", name: "Dan primirja" }],
       dailyThreshold: 8,
     });
-    expect(r).toEqual({ redovni: 8, prekovremeni: 1, vikend: 0, praznik: 11 });
+    expect(r).toEqual({ redovni: 8, prekovremeni: 1, vikend: 0, praznik: 11, praznik_vikend: 0 });
   });
 
   it("odbija nedelju koja ne počinje ponedeljkom i neispravne sate", () => {
@@ -668,6 +677,77 @@ describe("vrste sati (hours.js)", () => {
     );
   });
 
+  // Spec §5: dan koji je i praznik i vikend dobija VEĆI koeficijent, posebno za radnika i za klijenta — bez sabiranja
+  // i bez dvostrukog množenja. Isti primeri su u supabase/tests/14_praznik_vikendom.test.sql.
+  describe("praznik vikendom: veći od koeficijenata praznika i vikenda", () => {
+    const coefs = (holiday, weekend) => [
+      { code: "redovni", worker_coef: 1, client_coef: 1 },
+      { code: "vikend", worker_coef: weekend[0], client_coef: weekend[1] },
+      { code: "praznik", worker_coef: holiday[0], client_coef: holiday[1] },
+    ];
+    const amounts = (types, employeePrivate) =>
+      timesheetAmountsByType({ hoursByType: { praznik_vikend: 8 }, workerRate: 10, clientRate: 20, hourTypes: types, employeePrivate });
+
+    it("praznik 150%, vikend 200% → 2,0 za obe strane (vikend)", () => {
+      const r = amounts(coefs([1.5, 1.5], [2, 2]));
+      expect(r.lines).toHaveLength(1);
+      expect(r.lines[0]).toMatchObject({
+        code: "praznik_vikend", hours: 8, worker_coef: 2, worker_from: "vikend", client_coef: 2, client_from: "vikend",
+        worker_cost: 160, client_revenue: 320,
+      });
+    });
+
+    it("praznik 200%, vikend 150% → 2,0 za obe strane (praznik), ne 3,0 ni 1,5 × 2,0", () => {
+      const r = amounts(coefs([2, 2], [1.5, 1.5]));
+      expect(r.lines[0]).toMatchObject({ worker_coef: 2, worker_from: "praznik", client_coef: 2, client_from: "praznik" });
+      expect(r.worker_cost).toBe(160); // 8 × 10 × 2 — ne 8 × 10 × 3 (zbir) ni 8 × 10 × 3 (proizvod)
+      expect(r.client_revenue).toBe(320);
+    });
+
+    it("strane se biraju posebno: radniku veći praznik, klijentu veći vikend", () => {
+      const r = amounts(coefs([2.1, 1.8], [1.3, 2.4]));
+      expect(r.lines[0]).toMatchObject({ worker_coef: 2.1, worker_from: "praznik", client_coef: 2.4, client_from: "vikend" });
+      expect(r.worker_cost).toBe(168); // 8 × 10 × 2,1
+      expect(r.client_revenue).toBe(384); // 8 × 20 × 2,4
+    });
+
+    it("jednaki koeficijenti → praznik", () => {
+      const r = amounts(coefs([1.5, 1.5], [1.5, 1.5]));
+      expect(r.lines[0]).toMatchObject({ worker_from: "praznik", client_from: "praznik", worker_cost: 120 });
+    });
+
+    it("posebna satnica iz profila se poredi sa tarifom × koeficijentom druge vrste", () => {
+      // vikend: posebna satnica 25 €/h > praznik 10 × 2 = 20 → 8 × 25 = 200
+      const a = amounts(coefs([2, 2], [1.5, 1.5]), { weekend_rate: 25 });
+      expect(a.lines[0]).toMatchObject({ worker_source: "special", worker_rate: 25, worker_coef: null, worker_from: "vikend", worker_cost: 200 });
+      // vikend: posebna satnica 18 €/h < praznik 10 × 2 = 20 → 8 × 10 × 2 = 160
+      const b = amounts(coefs([2, 2], [1.5, 1.5]), { weekend_rate: 18 });
+      expect(b.lines[0]).toMatchObject({ worker_source: "coef", worker_rate: 10, worker_coef: 2, worker_from: "praznik", worker_cost: 160 });
+    });
+
+    it("prazan koeficijent praznika ili vikenda blokira, i kad je drugi upisan (nema tihog izbora)", () => {
+      let err;
+      try {
+        amounts(coefs([2, null], [1.5, 1.5]));
+      } catch (e) {
+        err = e;
+      }
+      expect(err).toBeInstanceOf(MissingCoefficientError);
+      expect(err.coefficients).toEqual([{ code: "praznik", side: "client" }]);
+    });
+
+    it("cela nedelja: praznik u subotu ide u „praznik vikendom\", nedelja ostaje vikend", () => {
+      const hoursByType = classifyWeek({ weekStart: MON, dayHours: week(8, 8, { sun_hours: 4 }), holidays: ["2026-11-14"] });
+      const r = timesheetAmountsByType({ hoursByType, workerRate: 10, clientRate: 20, hourTypes: TYPES });
+      // TYPES: vikend 1,3 / 1,4; praznik 2,1 / 2 → praznik vikendom = 2,1 / 2
+      expect(r.lines.map((l) => [l.code, l.hours, l.worker_cost, l.client_revenue])).toEqual([
+        ["redovni", 8, 80, 160],
+        ["vikend", 4, 52, 112],
+        ["praznik_vikend", 8, 168, 320],
+      ]);
+    });
+  });
+
   it("zaokružuje po vrsti na cent (pola od nule), pa sabira", () => {
     // redovni: 7,5 × 19,99 = 149,925 → 149,93; prekovremeni: 0,25 × 19,99 × 1,26 = 6,29685 → 6,30
     const r = timesheetAmountsByType({
@@ -713,14 +793,14 @@ describe("red satnice (timesheetRow.js)", () => {
   });
 
   it("vrste sati: pon 10h + sub 8h = 8 + 2 prekovremeno + 8 vikend; neispravan unos → null (prikaz ne puca)", () => {
-    expect(hoursByTypeOf(row(), { holidays: [], dailyThreshold: 8 })).toEqual({ redovni: 8, prekovremeni: 2, vikend: 8, praznik: 0 });
+    expect(hoursByTypeOf(row(), { holidays: [], dailyThreshold: 8 })).toEqual({ redovni: 8, prekovremeni: 2, vikend: 8, praznik: 0, praznik_vikend: 0 });
     expect(hoursByTypeOf(row({ mon_hours: 25 }), {})).toBeNull();
   });
 
   it("prekovremeno za prikaz: hours_by_type iz baze, odobren stari red zadržava broj, nacrt — pregled po danu (ne preko 40h)", () => {
     const rules = { holidays: [], dailyThreshold: 8 };
     // stari red po pravilu „preko 40h" (overtime_hours 4) koji je baza već preračunala
-    expect(overtimeHours({ ...row(), hours_by_type: { redovni: 8, prekovremeni: 2, vikend: 8, praznik: 0 }, overtime_hours: 4 }, rules)).toBe(2);
+    expect(overtimeHours({ ...row(), hours_by_type: { redovni: 8, prekovremeni: 2, vikend: 8, praznik: 0, praznik_vikend: 0 }, overtime_hours: 4 }, rules)).toBe(2);
     expect(overtimeHours({ ...row({ sat_hours: 0 }), approval_status: "approved", hours_by_type: null, overtime_hours: 4 }, rules)).toBe(4);
     const week44 = row({ mon_hours: 8.8, tue_hours: 8.8, wed_hours: 8.8, thu_hours: 8.8, fri_hours: 8.8, sat_hours: 0 });
     expect(overtimeHours({ ...week44, approval_status: "draft", hours_by_type: null }, rules)).toBe(4);
@@ -748,7 +828,7 @@ describe("red satnice (timesheetRow.js)", () => {
   it("odobravanje: tarife iz jedinstvenog izbora (snimak i izvor tarife upisuje baza), iznos kao baza (256,80 / 448)", () => {
     const r = approvalPayload(ulaz());
     expect(r.data).toEqual({ approval_status: "approved", b2c_rate: 12, b2b_rate: 20 });
-    expect(r.hoursByType).toEqual({ redovni: 8, prekovremeni: 2, vikend: 8, praznik: 0 });
+    expect(r.hoursByType).toEqual({ redovni: 8, prekovremeni: 2, vikend: 8, praznik: 0, praznik_vikend: 0 });
     expect([r.amounts.worker_cost, r.amounts.client_revenue, r.amounts.profit]).toEqual([256.8, 448, 191.2]);
   });
 
@@ -801,13 +881,15 @@ const KOEF = [
   { code: "vikend", worker_coef: 1.3, client_coef: 1.4 },
   { code: "praznik", worker_coef: 2, client_coef: 2.2 },
 ];
-function odobrena({ id, employee_id = "E1", project_id = "PA", week_start, days: pocetak, b2c = 12, b2b = 20, threshold = 8, holidays = [], employeePrivate }) {
+// staroPravilo: snimak odobren pre 24.11.2026, kad je praznik vikendom bio „praznik" (D10 — mora ostati isti).
+function odobrena({ id, employee_id = "E1", project_id = "PA", week_start, days: pocetak, b2c = 12, b2b = 20, threshold = 8, holidays = [], employeePrivate, staroPravilo = false }) {
   const days = Array.from({ length: 7 }, (_, i) => pocetak[i] ?? 0); // pon–ned, dani koji nisu navedeni = 0
   const row = {
     id, employee_id, project_id, week_start, approval_status: "approved", b2c_rate: b2c, b2b_rate: b2b,
     ...Object.fromEntries(DAY_FIELDS.map((f, i) => [f, days[i] ?? 0])),
   };
-  const hbt = classifyWeek({ weekStart: week_start, dayHours: days, holidays, dailyThreshold: threshold });
+  const hbt = classifyWeek({ weekStart: week_start, dayHours: days, holidays, dailyThreshold: threshold, holidayWeekend: !staroPravilo });
+  if (staroPravilo) delete hbt.praznik_vikend; // stari hours_by_type nije imao tu vrstu
   const a = timesheetAmountsByType({ hoursByType: hbt, workerRate: b2c, clientRate: b2b, hourTypes: KOEF, employeePrivate });
   row.hours_by_type = hbt;
   row.worker_cost = a.worker_cost;
@@ -894,6 +976,38 @@ describe("mesečni obračun: deljenje nedelje po danu (payrollMonth.js)", () => 
     expect(mesec({ timesheets: [r] }).payslips[0].basis_amount).toBe(126);
   });
 
+  it("praznik vikendom: veći koeficijent iz snimka; nedelja preko granice meseca deli i tu vrstu po danu", () => {
+    // 2026-04-04 je subota i praznik u snimku. KOEF: praznik 2 / 2,2 > vikend 1,3 / 1,4 → 8 × 12 × 2 = 192.
+    const r = odobrena({ id: "T6", week_start: "2026-03-30", days: [8, 0, 0, 0, 0, 8, 0], holidays: ["2026-04-04"] });
+    expect(r.hours_by_type).toMatchObject({ redovni: 8, vikend: 0, praznik: 0, praznik_vikend: 8 });
+    expect(r.worker_cost).toBe(96 + 192);
+    expect(poVrsti(timesheetMonthLines(r, MART).lines)).toEqual({ redovni: 8 });
+    const april = timesheetMonthLines(r, "2026-04-01").lines;
+    expect(april.map((l) => [l.hourType, l.hours, l.workerRate, l.workerCoef, l.clientRate, l.clientCoef])).toEqual([
+      ["praznik_vikend", 8, 12, 2, 20, 2.2],
+    ]);
+    const a = mesec({ month: "2026-04-01", timesheets: [r] }).payslips[0];
+    expect(a.hours_by_type).toEqual({ praznik_vikend: 8 });
+    expect([a.basis_amount, a.projects[0].revenue]).toEqual([192, 352]);
+  });
+
+  it("praznik vikendom: posebna satnica vikenda iz snimka je veća od tarife × koef. praznika", () => {
+    // vikend 30 €/h > praznik 12 × 2 = 24 €/h → 8 × 30 = 240; klijent i dalje veći koeficijent (praznik 2,2)
+    const r = odobrena({ id: "T7", week_start: "2026-03-02", days: [0, 0, 0, 0, 0, 8, 0], holidays: ["2026-03-07"], employeePrivate: { weekend_rate: 30 } });
+    const [l] = timesheetMonthLines(r, MART).lines;
+    expect([l.hourType, l.workerRate, l.workerCoef, l.clientCoef]).toEqual(["praznik_vikend", 30, 1, 2.2]);
+    expect(mesec({ timesheets: [r] }).payslips[0].basis_amount).toBe(240);
+  });
+
+  it("D10: snimak odobren po starom pravilu (praznik vikendom = praznik) ostaje isti, bez greške „snimak ne odgovara\"", () => {
+    const r = odobrena({ id: "T8", week_start: "2026-03-02", days: [0, 0, 0, 0, 0, 8, 0], holidays: ["2026-03-07"], staroPravilo: true });
+    expect(r.rate_snapshot.lines.map((l) => l.code)).toEqual(["praznik"]);
+    const m = timesheetMonthLines(r, MART);
+    expect(m.problems).toEqual([]);
+    expect(poVrsti(m.lines)).toEqual({ praznik: 8 });
+    expect(mesec({ timesheets: [r] }).payslips[0].basis_amount).toBe(r.worker_cost); // 8 × 12 × 2 = 192, kao pri odobravanju
+  });
+
   it("samo odobrene satnice ulaze u obračun", () => {
     const ok = odobrena({ id: "T5", week_start: "2026-03-02", days: [8] });
     const rows = ["draft", "submitted", "rejected"].map((s, i) => ({ ...odobrena({ id: `N${i}`, project_id: `P${i}`, week_start: "2026-03-02", days: [8] }), approval_status: s }));
@@ -913,6 +1027,18 @@ describe("mesečni obračun: neto, bruto, porez, doprinosi, bruto 2", () => {
       .toEqual([192, 279.1, 0, 61.28, 22.54, 3.28, 43.77, 22.54, 345.41, 192]);
     expect(s.warnings).toEqual([PAYSLIP_WARNINGS.BELOW_MIN_BASE]);
     expect(s.engagement_type).toBe("direct_employee");
+  });
+
+  // ── Forma/CSV uvoz bez Rate Basis i Work Fraction (Teamora, zahtev 3) ──
+  it("radnik bez rate_basis/work_fraction u profilu (npr. uvezen kao operater) = neto i ceo udeo", () => {
+    const ts = [odobrena({ id: "T1", week_start: "2026-03-02", days: [8, 8] })];
+    const bez = { id: "E1", first_name: "QA", last_name: "Bez profila" }; // nema employee_private reda
+    const nule = { id: "E1", first_name: "QA", last_name: "Null profil", rate_basis: null, work_fraction: null };
+    const ref = mesec({ timesheets: ts }).payslips[0];
+    for (const emp of [bez, nule]) {
+      const s = mesec({ timesheets: ts, employees: [emp] }).payslips[0];
+      expect([s.rate_basis, s.work_fraction, s.neto, s.bruto, s.total_cost]).toEqual(["neto", 1, ref.neto, ref.bruto, ref.total_cost]);
+    }
   });
 
   it("zaposleni sa bruto satnicom i pola radnog vremena: bruto = zarada, osnovice srazmerno", () => {
@@ -1272,5 +1398,96 @@ describe("troškovi projekta u EUR (isti primer kao pgTAP 06)", () => {
       { amount: 11720, currency: "RSD", eur_rsd_rate: 117.2, eur_amount: 100 },
     ]);
     expect(projectMargin({ revenue: 1000, laborCost: 450.5, otherCosts: s.total }).remaining).toBe(149.5);
+  });
+});
+
+import {
+  amountsByDay, changePct, cumulativeSeries, dashboardPeriod, filterTimesheets, overduePayrollMonths, periodKpis, topLists, upcomingPayrollDate,
+} from "./dashboard.js";
+
+describe("kontrolna tabla", () => {
+  const ts = (over) => ({
+    approval_status: "approved", week_start: "2026-11-02", mon_hours: 8, tue_hours: 8, wed_hours: 0, thu_hours: 0,
+    fri_hours: 0, sat_hours: 0, sun_hours: 0, total_hours: 16, client_revenue: 400, worker_cost: 240, profit: 160, ...over,
+  });
+
+  it("periodi i prethodni period", () => {
+    expect(dashboardPeriod("month", "2026-11-24")).toEqual({ from: "2026-11-01", to: "2026-11-30", prevFrom: "2026-10-01", prevTo: "2026-10-31" });
+    expect(dashboardPeriod("last_month", "2026-01-15")).toEqual({ from: "2025-12-01", to: "2025-12-31", prevFrom: "2025-11-01", prevTo: "2025-11-30" });
+    expect(dashboardPeriod("quarter", "2026-11-24")).toEqual({ from: "2026-10-01", to: "2026-12-31", prevFrom: "2026-07-01", prevTo: "2026-09-30" });
+    expect(dashboardPeriod("year", "2026-11-24")).toEqual({ from: "2026-01-01", to: "2026-12-31", prevFrom: "2025-01-01", prevTo: "2025-12-31" });
+  });
+
+  it("iznosi nedelje idu po danima srazmerno satima i zbir je tačan", () => {
+    const byDay = amountsByDay([ts()], "2026-11-01", "2026-11-30");
+    expect(byDay.get("2026-11-02")).toEqual({ revenue: 200, cost: 120, hours: 8 });
+    expect(byDay.get("2026-11-03")).toEqual({ revenue: 200, cost: 120, hours: 8 });
+    expect(byDay.size).toBe(2);
+    expect(periodKpis(byDay)).toEqual({ revenue: 400, cost: 240, profit: 160, marginPct: 40, hours: 16 });
+  });
+
+  it("nedelja preko granice perioda ulazi samo danima u periodu; neodobrene se ne računaju", () => {
+    const row = ts({ week_start: "2026-10-26", mon_hours: 8, tue_hours: 0, wed_hours: 0, thu_hours: 0, fri_hours: 8, sat_hours: 0, sun_hours: 0, total_hours: 16 });
+    const byDay = amountsByDay([row, ts({ approval_status: "submitted" })], "2026-11-01", "2026-11-30");
+    expect(byDay.size).toBe(0);
+    const edge = amountsByDay([ts({ week_start: "2026-10-26", thu_hours: 0, fri_hours: 0, mon_hours: 0, tue_hours: 0, sun_hours: 8, total_hours: 8, client_revenue: 100, worker_cost: 60 })], "2026-11-01", "2026-11-30");
+    expect(periodKpis(edge)).toMatchObject({ revenue: 100, cost: 60, profit: 40 });
+  });
+
+  it("bez podataka su sve nule, marža je null, promena bez osnovice je null", () => {
+    expect(periodKpis(new Map())).toEqual({ revenue: 0, cost: 0, profit: 0, marginPct: null, hours: 0 });
+    expect(changePct(10, 0)).toBeNull();
+    expect(changePct(112.4, 100)).toBe(12.4);
+    expect(changePct(50, 100)).toBe(-50);
+  });
+
+  it("kumulativni niz po danima", () => {
+    const s = cumulativeSeries(amountsByDay([ts()], "2026-11-01", "2026-11-04"), "2026-11-01", "2026-11-04");
+    expect(s.map((r) => r.revenue)).toEqual([0, 200, 400, 400]);
+    expect(s[3]).toMatchObject({ cost: 240, profit: 160 });
+  });
+
+  it("top liste po zaradi, klijent preko projekta", () => {
+    const rows = [
+      ts({ project_id: "p1", employee_id: "e1" }),
+      ts({ project_id: "p2", employee_id: "e1", client_revenue: 1000, worker_cost: 500, total_hours: 20 }),
+      ts({ project_id: "p3", employee_id: "e2", client_revenue: 100, worker_cost: 90, total_hours: 4 }),
+      ts({ project_id: null, employee_id: "e3" }),
+    ];
+    const projects = [{ id: "p1", client_id: "c1" }, { id: "p2", client_id: "c1" }, { id: "p3", client_id: "c2" }];
+    const top = topLists(rows, projects, 2);
+    expect(top.projects.map((r) => r.id)).toEqual(["p2", "p1"]);
+    expect(top.projects[0]).toMatchObject({ revenue: 1000, profit: 500, marginPct: 50 });
+    expect(top.clients.map((r) => r.id)).toEqual(["c1", "c2"]);
+    expect(top.clients[0]).toMatchObject({ revenue: 1400, profit: 660 });
+    expect(top.workers[0]).toMatchObject({ id: "e1", hours: 36, profit: 660 });
+  });
+
+  it("sledeći rok isplate je kraj tekućeg meseca, nikad datum iz prošlosti", () => {
+    const runs = [{ status: "approved", month: "2026-10-01" }, { status: "approved", month: "2026-03-01" }];
+    expect(upcomingPayrollDate(runs, "2026-11-24")).toBe("2026-11-30");
+    expect(upcomingPayrollDate([], "2026-11-24")).toBe("2026-11-30");
+    expect(upcomingPayrollDate(runs, "2026-11-30")).toBe("2026-11-30");
+  });
+
+  it("zakasnele isplate: odobren a neisplaćen obračun iz prošlih meseci, najstariji prvi", () => {
+    const runs = [
+      { status: "approved", month: "2026-10-01" },
+      { status: "approved", month: "2026-03-01" },
+      { status: "approved", month: "2026-11-01" },
+      { status: "paid", month: "2026-02-01" },
+    ];
+    expect(overduePayrollMonths(runs, "2026-11-24")).toEqual(["2026-03-01", "2026-10-01"]);
+    expect(overduePayrollMonths([], "2026-11-24")).toEqual([]);
+  });
+
+  it("filter po projektu i klijentu", () => {
+    const projects = [{ id: "p1", client_id: "c1" }, { id: "p2", client_id: "c1" }, { id: "p3", client_id: "c2" }];
+    const rows = [{ project_id: "p1" }, { project_id: "p2" }, { project_id: "p3" }, { project_id: null }];
+    expect(filterTimesheets(rows, projects, {})).toHaveLength(4);
+    expect(filterTimesheets(rows, projects, { projectId: "all", clientId: "all" })).toHaveLength(4);
+    expect(filterTimesheets(rows, projects, { clientId: "c1" }).map((r) => r.project_id)).toEqual(["p1", "p2"]);
+    expect(filterTimesheets(rows, projects, { projectId: "p3" })).toHaveLength(1);
+    expect(filterTimesheets(rows, projects, { projectId: "p1", clientId: "c2" })).toHaveLength(0);
   });
 });

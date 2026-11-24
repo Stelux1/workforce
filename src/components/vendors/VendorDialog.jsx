@@ -5,6 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { CURRENCIES } from "@/lib/rateEngine";
+import { useT } from "@/lib/translations";
 
 const LABELS = {
   en: {
@@ -23,10 +24,19 @@ const LABELS = {
     status: "Status", notes: "Napomene", active: "Aktivan", inactive: "Neaktivan", save: "Sačuvaj", cancel: "Otkaži",
     weekly: "Nedeljno", biweekly: "Dvonedeljno", monthly: "Mesečno",
   },
+  sk: {
+    add: "Pridať dodávateľa", edit: "Upraviť dodávateľa", name: "Názov dodávateľa", legal: "Obchodné meno", vendorId: "ID dodávateľa",
+    reg: "IČO", tax: "Daňové číslo", vat: "IČ DPH", country: "Krajina", city: "Mesto",
+    postal: "PSČ", address: "Adresa", contact: "Kontaktná osoba", email: "E-mail", phone: "Telefón",
+    currency: "Predvolená mena", terms: "Platobné podmienky", cycle: "Cyklus vyúčtovania", contract: "Č. zmluvy",
+    status: "Stav", notes: "Poznámky", active: "Aktívny", inactive: "Neaktívny", save: "Uložiť", cancel: "Zrušiť",
+    weekly: "Týždenne", biweekly: "Dvojtýždenne", monthly: "Mesačne",
+  },
 };
 
 export default function VendorDialog({ open, onOpenChange, form, setForm, onSave, saving, lang }) {
   const L = LABELS[lang] || LABELS.en;
+  const T = useT();
   const set = (key, value) => setForm((p) => ({ ...p, [key]: value }));
 
   return (
@@ -44,7 +54,12 @@ export default function VendorDialog({ open, onOpenChange, form, setForm, onSave
           </div>
           <div className="space-y-2">
             <Label>{L.vendorId}</Label>
-            <Input placeholder="VEN-001" value={form.vendor_id || ""} onChange={(e) => set("vendor_id", e.target.value)} />
+            <Input
+              readOnly
+              disabled
+              className="bg-muted text-muted-foreground"
+              value={form.id ? form.vendor_id || "" : T("Assigned automatically")}
+            />
           </div>
           <div className="space-y-2">
             <Label>{L.reg}</Label>

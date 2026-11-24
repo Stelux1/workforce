@@ -9,7 +9,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import PageHeader from "@/components/shared/PageHeader";
 import StatusBadge from "@/components/shared/StatusBadge";
 import { parseISO } from "date-fns";
-import { useT } from "@/lib/translations";
+import { useT, pick } from "@/lib/translations";
 import { useLang } from "@/lib/LanguageContext";
 import { formatDate } from "@/lib/dateFormat";
 import { TrendingUp, TrendingDown, DollarSign, Receipt, BarChart2, Clock, CalendarDays } from "lucide-react";
@@ -29,7 +29,7 @@ const hrs = (n) => `${Number(n || 0).toFixed(1)}h`;
 function MonthlyPayrollTab({ projects }) {
   const t = useT();
   const { lang } = useLang();
-  const rs = (en, sr) => (lang === "rs" ? sr : en);
+  const rs = (en, sr, sk) => pick(lang, en, sr, sk);
   const monthLabel = (month) => formatDate(parseISO(month), "LLLL yyyy", lang).replace(/^./, (c) => c.toUpperCase());
   const projectName = new Map((projects || []).map((p) => [p.id, p.name]));
 
@@ -81,9 +81,9 @@ function MonthlyPayrollTab({ projects }) {
   if (runRows.length === 0) {
     return (
       <Card className="p-8 text-center">
-        <p className="text-sm text-muted-foreground">{rs("No monthly payroll yet.", "Još nema mesečnog obračuna.")}</p>
+        <p className="text-sm text-muted-foreground">{rs("No monthly payroll yet.", "Još nema mesečnog obračuna.", "Zatiaľ nie je žiadne mesačné zúčtovanie.")}</p>
         <p className="text-xs text-muted-foreground mt-1">
-          {rs("Payroll is made on the Monthly Payroll page.", "Obračun se pravi na stranici Mesečni obračun.")}{" "}
+          {rs("Payroll is made on the Monthly Payroll page.", "Obračun se pravi na stranici Mesečni obračun.", "Zúčtovanie sa robí na stránke Mesačné zúčtovanie miezd.")}{" "}
           <Link to="/payroll/monthly" className="text-primary hover:underline">{t("Monthly Payroll")}</Link>
         </p>
       </Card>
@@ -97,11 +97,11 @@ function MonthlyPayrollTab({ projects }) {
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <CalendarDays className="w-4 h-4 text-primary" />
-            {rs("Payroll by month", "Obračuni po mesecima")}
+            {rs("Payroll by month", "Obračuni po mesecima", "Zúčtovania podľa mesiacov")}
           </CardTitle>
           <p className="text-xs text-muted-foreground">
             {rs("Saved monthly payroll (payslips) — the same numbers as on the Monthly Payroll page. Only approved and paid payrolls are final; a draft is shown marked “draft” and is not included in the total.",
-              "Sačuvan mesečni obračun (platni listići) — iste brojke kao na stranici Mesečni obračun. Konačni su samo odobreni i isplaćeni obračuni; nacrt je prikazan sa oznakom „nacrt“ i ne ulazi u zbir.")}
+              "Sačuvan mesečni obračun (platni listići) — iste brojke kao na stranici Mesečni obračun. Konačni su samo odobreni i isplaćeni obračuni; nacrt je prikazan sa oznakom „nacrt“ i ne ulazi u zbir.", "Uložené mesačné zúčtovanie (výplatné pásky) — rovnaké čísla ako na stránke Mesačné zúčtovanie miezd. Konečné sú iba schválené a vyplatené zúčtovania; koncept je označený „koncept“ a nezapočítava sa do súčtu.")}
           </p>
         </CardHeader>
         <CardContent className="p-0">
@@ -109,7 +109,7 @@ function MonthlyPayrollTab({ projects }) {
             <table className="w-full text-sm" data-testid="payroll-runs-table">
               <thead className="bg-muted/50">
                 <tr className="text-xs text-muted-foreground">
-                  <th className="text-left py-3 px-4">{rs("Month", "Mesec")}</th>
+                  <th className="text-left py-3 px-4">{rs("Month", "Mesec", "Mesiac")}</th>
                   <th className="text-left py-3 px-4">{t("Status")}</th>
                   <th className="text-right py-3 px-4">{t("Payslips")}</th>
                   <th className="text-right py-3 px-4">{t("Hours")}</th>
@@ -127,7 +127,7 @@ function MonthlyPayrollTab({ projects }) {
                       className={`cursor-pointer transition-colors ${selected ? "bg-primary/5" : "hover:bg-muted/30"} ${r.draft ? "text-muted-foreground" : ""}`}>
                       <td className="py-3 px-4 font-medium">
                         {monthLabel(r.month)}
-                        {r.draft && <span className="ml-2 text-xs font-normal italic text-amber-700">{rs("draft — not final", "nacrt — nije konačno")}</span>}
+                        {r.draft && <span className="ml-2 text-xs font-normal italic text-amber-700">{rs("draft — not final", "nacrt — nije konačno", "koncept — nie je konečné")}</span>}
                       </td>
                       <td className="py-3 px-4"><StatusBadge status={r.status} /></td>
                       <td className="py-3 px-4 text-right">{r.workers}</td>
@@ -143,7 +143,7 @@ function MonthlyPayrollTab({ projects }) {
               <tfoot>
                 <tr className="border-t font-semibold">
                   <td className="py-3 px-4" colSpan={2}>
-                    {rs(`Total — approved and paid (months: ${finalTotals.months})`, `Ukupno — odobreni i isplaćeni (meseci: ${finalTotals.months})`)}
+                    {rs(`Total — approved and paid (months: ${finalTotals.months})`, `Ukupno — odobreni i isplaćeni (meseci: ${finalTotals.months})`, `Spolu — schválené a vyplatené (mesiacov: ${finalTotals.months})`)}
                   </td>
                   <td className="py-3 px-4 text-right">{finalTotals.workers}</td>
                   <td className="py-3 px-4 text-right">{hrs(finalTotals.totals.hours)}</td>
@@ -164,26 +164,26 @@ function MonthlyPayrollTab({ projects }) {
           <CardHeader className="pb-3">
             <div className="flex flex-wrap items-center gap-3">
               <Select value={report.runId} onValueChange={setSelectedRunId}>
-                <SelectTrigger className="w-56" aria-label={rs("Month", "Mesec")}>
+                <SelectTrigger className="w-56" aria-label={rs("Month", "Mesec", "Mesiac")}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   {runRows.map((r) => (
                     <SelectItem key={r.runId} value={r.runId}>
-                      {monthLabel(r.month)}{r.draft ? ` · ${rs("draft", "nacrt")}` : ""}
+                      {monthLabel(r.month)}{r.draft ? ` · ${rs("draft", "nacrt", "koncept")}` : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
               <StatusBadge status={report.status} />
               <Link to={`/payroll/monthly?month=${report.month.slice(0, 7)}`} className="text-xs text-primary hover:underline ml-auto">
-                {rs("Open in Monthly Payroll", "Otvori u Mesečnom obračunu")}
+                {rs("Open in Monthly Payroll", "Otvori u Mesečnom obračunu", "Otvoriť v mesačnom zúčtovaní")}
               </Link>
             </div>
             {report.draft && (
               <p className="text-xs text-amber-700">
                 {rs("Draft — not final: the numbers can change until the payroll is approved.",
-                  "Nacrt — nije konačno: brojke mogu da se promene dok se obračun ne odobri.")}
+                  "Nacrt — nije konačno: brojke mogu da se promene dok se obračun ne odobri.", "Koncept — nie je konečné: čísla sa môžu zmeniť, kým sa zúčtovanie neschváli.")}
               </p>
             )}
           </CardHeader>
@@ -305,9 +305,9 @@ function MonthlyPayrollTab({ projects }) {
                   <p className={`text-xs mt-3 ${report.allocationOk ? "text-muted-foreground" : "text-red-600 font-medium"}`}>
                     {report.allocationOk
                       ? rs(`Sum of cost per project ${eur(report.totals.allocated)} = sum of gross 2 ${eur(report.totals.totalCost)}. Project costs (materials etc.) are not included.`,
-                        `Zbir troška po projektima ${eur(report.totals.allocated)} = zbir bruto 2 ${eur(report.totals.totalCost)}. Ostali troškovi projekta (materijal i sl.) nisu uključeni.`)
+                        `Zbir troška po projektima ${eur(report.totals.allocated)} = zbir bruto 2 ${eur(report.totals.totalCost)}. Ostali troškovi projekta (materijal i sl.) nisu uključeni.`, `Súčet nákladov podľa projektov ${eur(report.totals.allocated)} = súčet hrubej 2 ${eur(report.totals.totalCost)}. Náklady projektov (materiál a pod.) nie sú zahrnuté.`)
                       : rs(`Sum of cost per project ${eur(report.totals.allocated)} ≠ sum of gross 2 ${eur(report.totals.totalCost)}`,
-                        `Zbir troška po projektima ${eur(report.totals.allocated)} ≠ zbir bruto 2 ${eur(report.totals.totalCost)}`)}
+                        `Zbir troška po projektima ${eur(report.totals.allocated)} ≠ zbir bruto 2 ${eur(report.totals.totalCost)}`, `Súčet nákladov podľa projektov ${eur(report.totals.allocated)} ≠ súčet hrubej 2 ${eur(report.totals.totalCost)}`)}
                   </p>
                 </div>
               </>
@@ -322,7 +322,7 @@ function MonthlyPayrollTab({ projects }) {
 export default function PayrollReports() {
   const t = useT();
   const { lang } = useLang();
-  const rs = (en, sr) => lang === "rs" ? sr : en;
+  const rs = (en, sr, sk) => pick(lang, en, sr, sk);
 
   const [selectedProject, setSelectedProject] = useState("all");
 
@@ -358,12 +358,12 @@ export default function PayrollReports() {
   // Zbirovi idu kroz src/lib/payroll/reports.js: radnik po employee_id, projekat po project_id, klijent po
   // project_id → projects.client_id. Ime je samo za prikaz (trenutni red po ID-u), pa preimenovanje klijenta
   // ne menja nijednu brojku. Satnice bez ID-a su posebna grupa („bez projekta / ručno uneto"), ne spajaju se po imenu.
-  const unassignedProjectLabel = rs("No project / entered manually", "Bez projekta / ručno uneto");
-  const unassignedClientLabel = rs("No client / entered manually", "Bez klijenta / ručno uneto");
+  const unassignedProjectLabel = rs("No project / entered manually", "Bez projekta / ručno uneto", "Bez projektu / zadané ručne");
+  const unassignedClientLabel = rs("No client / entered manually", "Bez klijenta / ručno uneto", "Bez klienta / zadané ručne");
   // Kartice po satnicama nisu plata (D20): trošak je iznos sati iz odobrenih satnica, bez poreza i doprinosa.
   const timesheetCostNote = rs(
     "From approved timesheets: hours × worker rate, without tax and contributions — not the salary. Net, gross and gross 2 are on the Monthly Payroll tab.",
-    "Iz odobrenih satnica: sati × satnica radnika, bez poreza i doprinosa — nije plata. Neto, bruto i bruto 2 su na kartici Mesečni obračun."
+    "Iz odobrenih satnica: sati × satnica radnika, bez poreza i doprinosa — nije plata. Neto, bruto i bruto 2 su na kartici Mesečni obračun.", "Zo schválených výkazov: hodiny × sadzba zamestnanca, bez dane a odvodov — nie je to mzda. Čistá, hrubá a hrubá 2 sú na karte Mesačné zúčtovanie miezd."
   );
 
   // „Satnica" je prosek (trošak / sati), ne tarifa prvog reda.
@@ -408,7 +408,7 @@ export default function PayrollReports() {
   // Po kategoriji: EUR (sa preračunatim RSD) i RSD bez kursa, isti zbir kao gore (projectCostTotals).
   const costsByCategory = {};
   filteredCosts.forEach((c) => {
-    const key = c.category || rs("Uncategorized", "Nekategorisano");
+    const key = c.category || rs("Uncategorized", "Nekategorisano", "Bez kategórie");
     (costsByCategory[key] ||= []).push(c);
   });
   for (const [key, list] of Object.entries(costsByCategory)) categoryTotals[key] = projectCostTotals(list);
@@ -421,7 +421,7 @@ export default function PayrollReports() {
 
   const getCategoryLabel = (key) => {
     const found = costCategories.find((c) => c.name.toLowerCase() === key?.toLowerCase());
-    if (found) return lang === "rs" ? (found.translation || found.name) : found.name;
+    if (found) return found.name;
     return key;
   };
 
@@ -431,9 +431,9 @@ export default function PayrollReports() {
 
       <Tabs defaultValue="projects">
         <TabsList className="h-auto flex-wrap justify-start">
-          <TabsTrigger value="projects">{rs("Project Reports", "Izveštaji projekata")}</TabsTrigger>
+          <TabsTrigger value="projects">{rs("Project Reports", "Izveštaji projekata", "Prehľady projektov")}</TabsTrigger>
           {/* Satnice, ne plata: trošak = sati × satnica radnika, bez poreza i doprinosa. Plate su na kartici „Mesečni obračun". */}
-          <TabsTrigger value="workers">{rs("Worker cost (timesheets)", "Trošak radnika (satnice)")}</TabsTrigger>
+          <TabsTrigger value="workers">{rs("Worker cost (timesheets)", "Trošak radnika (satnice)", "Náklady na zamestnanca (hárky)")}</TabsTrigger>
           <TabsTrigger value="clients">{t("Client Billing")}</TabsTrigger>
           <TabsTrigger value="profit">{t("Profit Report")}</TabsTrigger>
           <TabsTrigger value="monthly">{t("Monthly Payroll")}</TabsTrigger>
@@ -448,7 +448,7 @@ export default function PayrollReports() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">{rs("All projects", "Svi projekti")}</SelectItem>
+                <SelectItem value="all">{rs("All projects", "Svi projekti", "Všetky projekty")}</SelectItem>
                 {projects.map((p) => (
                   <SelectItem key={p.id} value={p.id}>
                     {p.project_number ? `[${p.project_number}] ${p.name}` : p.name}
@@ -464,7 +464,7 @@ export default function PayrollReports() {
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
                   <BarChart2 className="w-4 h-4 text-primary" />
-                  {rs("All projects overview", "Pregled svih projekata")}
+                  {rs("All projects overview", "Pregled svih projekata", "Prehľad všetkých projektov")}
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-0">
@@ -472,13 +472,13 @@ export default function PayrollReports() {
                   <table className="w-full text-sm">
                     <thead className="bg-muted/50">
                       <tr className="text-xs text-muted-foreground">
-                        <th className="text-left py-3 px-4">{rs("Project", "Projekat")}</th>
-                        <th className="text-right py-3 px-4">{rs("Hours", "Sati")}</th>
-                        <th className="text-right py-3 px-4">{rs("Revenue (B2B)", "Prihod (B2B)")}</th>
-                        <th className="text-right py-3 px-4">{rs("Worker cost", "Troš. radnika")}</th>
-                        <th className="text-right py-3 px-4">{rs("Project costs", "Proj. troškovi")}</th>
-                        <th className="text-right py-3 px-4">{rs("Remaining", "Ostaje nama")}</th>
-                        <th className="text-right py-3 px-4">{rs("Margin", "Marža")}</th>
+                        <th className="text-left py-3 px-4">{rs("Project", "Projekat", "Projekt")}</th>
+                        <th className="text-right py-3 px-4">{rs("Hours", "Sati", "Hodiny")}</th>
+                        <th className="text-right py-3 px-4">{rs("Revenue (B2B)", "Prihod (B2B)", "Tržby (B2B)")}</th>
+                        <th className="text-right py-3 px-4">{rs("Worker cost", "Troš. radnika", "Náklady na zamestnanca")}</th>
+                        <th className="text-right py-3 px-4">{rs("Project costs", "Proj. troškovi", "Náklady projektu")}</th>
+                        <th className="text-right py-3 px-4">{rs("Remaining", "Ostaje nama", "Zostáva nám")}</th>
+                        <th className="text-right py-3 px-4">{rs("Margin", "Marža", "Rozpätie")}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y">
@@ -503,7 +503,7 @@ export default function PayrollReports() {
                         </tr>
                       ))}
                       {projectRows.length === 0 && (
-                        <tr><td colSpan={7} className="text-center py-8 text-muted-foreground">{rs("No data", "Nema podataka")}</td></tr>
+                        <tr><td colSpan={7} className="text-center py-8 text-muted-foreground">{rs("No data", "Nema podataka", "Žiadne údaje")}</td></tr>
                       )}
                     </tbody>
                   </table>
@@ -521,7 +521,7 @@ export default function PayrollReports() {
                       <TrendingUp className="w-4 h-4 text-green-600" />
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground mb-0.5">{rs("Revenue (B2B)", "Prihod (B2B)")}</p>
+                      <p className="text-xs text-muted-foreground mb-0.5">{rs("Revenue (B2B)", "Prihod (B2B)", "Tržby (B2B)")}</p>
                       <p className="text-lg font-bold text-green-600">{projRevenue.toFixed(2)} €</p>
                     </div>
                   </div>
@@ -532,7 +532,7 @@ export default function PayrollReports() {
                       <TrendingDown className="w-4 h-4 text-orange-600" />
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground mb-0.5">{rs("Worker costs", "Troškovi radnika")}</p>
+                      <p className="text-xs text-muted-foreground mb-0.5">{rs("Worker costs", "Troškovi radnika", "Náklady na zamestnancov")}</p>
                       <p className="text-lg font-bold text-orange-600">{projWorkerCost.toFixed(2)} €</p>
                     </div>
                   </div>
@@ -543,9 +543,9 @@ export default function PayrollReports() {
                       <Receipt className="w-4 h-4 text-red-600" />
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground mb-0.5">{rs("Project costs", "Projektni troškovi")}</p>
+                      <p className="text-xs text-muted-foreground mb-0.5">{rs("Project costs", "Projektni troškovi", "Náklady projektu")}</p>
                       {costsEUR > 0 && <p className="text-base font-bold text-red-600">{costsEUR.toFixed(2)} €</p>}
-                      {costsRSD > 0 && <p className="text-xs text-amber-600">{costsRSD.toFixed(2)} RSD {rs("without exchange rate (not included)", "bez kursa (nije uračunato)")}</p>}
+                      {costsRSD > 0 && <p className="text-xs text-amber-600">{costsRSD.toFixed(2)} RSD {rs("without exchange rate (not included)", "bez kursa (nije uračunato)", "bez kurzu (nezapočítané)")}</p>}
                       {costsEUR === 0 && costsRSD === 0 && <p className="text-base font-bold text-muted-foreground">—</p>}
                     </div>
                   </div>
@@ -556,7 +556,7 @@ export default function PayrollReports() {
                       <DollarSign className={`w-4 h-4 ${grossProfit >= 0 ? "text-green-600" : "text-red-600"}`} />
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground mb-0.5">{rs("Remaining", "Ostaje nama")}</p>
+                      <p className="text-xs text-muted-foreground mb-0.5">{rs("Remaining", "Ostaje nama", "Zostáva nám")}</p>
                       <p className={`text-lg font-bold ${grossProfit >= 0 ? "text-green-600" : "text-red-600"}`}>{grossProfit.toFixed(2)} €</p>
                       {projRevenue > 0 && <p className="text-xs text-muted-foreground">{projMargin}%</p>}
                     </div>
@@ -569,22 +569,22 @@ export default function PayrollReports() {
                 <Card className="p-4">
                   <div className="flex items-center gap-2 mb-3">
                     <Clock className="w-4 h-4 text-primary" />
-                    <h3 className="font-semibold text-sm">{rs("Hours summary", "Pregled sati")}</h3>
+                    <h3 className="font-semibold text-sm">{rs("Hours summary", "Pregled sati", "Prehľad hodín")}</h3>
                   </div>
                   <div className="grid grid-cols-3 gap-4 text-center">
                     <div>
                       <p className="text-2xl font-bold text-primary">{projHours.toFixed(1)}</p>
-                      <p className="text-xs text-muted-foreground">{rs("Total hours", "Ukupno sati")}</p>
+                      <p className="text-xs text-muted-foreground">{rs("Total hours", "Ukupno sati", "Hodiny spolu")}</p>
                     </div>
                     <div>
                       <p className="text-2xl font-bold">{projApproved.length}</p>
-                      <p className="text-xs text-muted-foreground">{rs("Entries", "Unosa")}</p>
+                      <p className="text-xs text-muted-foreground">{rs("Entries", "Unosa", "Záznamov")}</p>
                     </div>
                     <div>
                       <p className="text-2xl font-bold">
                         {projHours > 0 ? (projRevenue / projHours).toFixed(2) : "—"}
                       </p>
-                      <p className="text-xs text-muted-foreground">{rs("Avg €/h (B2B)", "Prosek €/h (B2B)")}</p>
+                      <p className="text-xs text-muted-foreground">{rs("Avg €/h (B2B)", "Prosek €/h (B2B)", "Priemer €/h (B2B)")}</p>
                     </div>
                   </div>
                 </Card>
@@ -595,7 +595,7 @@ export default function PayrollReports() {
                 <Card className="p-4">
                   <div className="flex items-center gap-2 mb-3">
                     <Receipt className="w-4 h-4 text-primary" />
-                    <h3 className="font-semibold text-sm">{rs("Costs by category", "Troškovi po kategoriji")}</h3>
+                    <h3 className="font-semibold text-sm">{rs("Costs by category", "Troškovi po kategoriji", "Náklady podľa kategórií")}</h3>
                   </div>
                   <div className="space-y-2">
                     {Object.entries(categoryTotals).map(([cat, vals]) => (
@@ -604,7 +604,7 @@ export default function PayrollReports() {
                         <div className="text-right">
                           {vals.eur > 0 && <span className="text-sm font-semibold text-primary">{vals.eur.toFixed(2)} €</span>}
                           {vals.eur > 0 && vals.rsd > 0 && <span className="text-sm text-muted-foreground mx-1">·</span>}
-                          {vals.rsd > 0 && <span className="text-sm font-semibold text-amber-600">{vals.rsd.toFixed(2)} RSD {rs("without rate", "bez kursa")}</span>}
+                          {vals.rsd > 0 && <span className="text-sm font-semibold text-amber-600">{vals.rsd.toFixed(2)} RSD {rs("without rate", "bez kursa", "bez kurzu")}</span>}
                         </div>
                       </div>
                     ))}
@@ -614,7 +614,7 @@ export default function PayrollReports() {
 
               {projRevenue === 0 && filteredCosts.length === 0 && (
                 <Card className="p-8 text-center">
-                  <p className="text-muted-foreground text-sm">{rs("No financial data for this project.", "Nema finansijskih podataka za ovaj projekat.")}</p>
+                  <p className="text-muted-foreground text-sm">{rs("No financial data for this project.", "Nema finansijskih podataka za ovaj projekat.", "Pre tento projekt nie sú finančné údaje.")}</p>
                 </Card>
               )}
             </>
@@ -648,7 +648,7 @@ export default function PayrollReports() {
                   <YAxis tick={{ fontSize: 11 }} />
                   <Tooltip formatter={(v) => `€${v}`} />
                   <Bar dataKey="cost" name="Worker Cost" fill="hsl(0,72%,51%)" radius={[3, 3, 0, 0]} />
-                  <Bar dataKey="revenue" name="Client Revenue" fill="hsl(38,32%,55%)" radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="revenue" name="Client Revenue" fill="hsl(var(--primary))" radius={[3, 3, 0, 0]} />
                   <Bar dataKey="profit" name="Profit" fill="hsl(142,72%,40%)" radius={[3, 3, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
@@ -662,8 +662,8 @@ export default function PayrollReports() {
                     <tr className="text-xs text-muted-foreground">
                       <th className="text-left py-3 px-4">{t("Employee")}</th>
                       <th className="text-right py-3 px-4">{t("Hours")}</th>
-                      <th className="text-right py-3 px-4">{rs("Avg. hourly rate", "Prosečna satnica")}</th>
-                      <th className="text-right py-3 px-4">{rs("Cost by timesheets", "Trošak po satnicama")}</th>
+                      <th className="text-right py-3 px-4">{rs("Avg. hourly rate", "Prosečna satnica", "Priemerná hodinová sadzba")}</th>
+                      <th className="text-right py-3 px-4">{rs("Cost by timesheets", "Trošak po satnicama", "Náklady podľa výkazov")}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
@@ -693,7 +693,7 @@ export default function PayrollReports() {
                     <tr className="text-xs text-muted-foreground">
                       <th className="text-left py-3 px-4">{t("Client")}</th>
                       <th className="text-right py-3 px-4">{t("Billable Hours")}</th>
-                      <th className="text-right py-3 px-4">{rs("Avg. B2B rate", "Prosečna B2B satnica")}</th>
+                      <th className="text-right py-3 px-4">{rs("Avg. B2B rate", "Prosečna B2B satnica", "Priemerná sadzba B2B")}</th>
                       <th className="text-right py-3 px-4">{t("Invoice Total")}</th>
                     </tr>
                   </thead>

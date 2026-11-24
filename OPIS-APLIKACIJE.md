@@ -335,7 +335,7 @@ Naziv ekrana je dat kao „EN / RS" iz menija. Uz svaki ekran piše ko ga vidi.
   Na početku je izabrano poslednje 4 nedelje sa podacima.
 - **Prikaz:** kolone po danima ili po nedeljama. Grupe po dobavljaču sa međuzbirom, pa ukupan zbir. Sortiranje: ime, šifra, ukupno sati.
 - **Kartice:** ukupno sati, broj radnika, broj dobavljača, prosek po radniku.
-- **Izvoz:** Excel i PDF (naslov „WorkforceHub — Timesheet Report").
+- **Izvoz:** Excel i PDF (naslov „Teamora — Timesheet Report").
 - Broje se **sve** satnice, i neodobrene.
 - Ako se kod proizvoljnog perioda obriše datum, stranica verovatno pada (`TimesheetDashboard.jsx:104, 133`).
 
