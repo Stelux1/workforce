@@ -10,7 +10,7 @@ const LABELS = {
     payee: "Payee", payee_type: "Payee type", period_start: "Period from", period_end: "Period to", workers: "Workers", hours: "Hours",
     calculated: "Calculated", adjustments: "Adjustments", total: "Total payable", paid: "Paid", remaining: "Remaining",
     currency: "Currency", due_date: "Due date", status: "Status", overdue: "Overdue", payments: "Payments",
-    employee: "Worker", vendor: "Vendor", yes: "Yes", no: "No", title: "Payables", generated: "Generated", filters: "Filters", sum: "Total",
+    employee: "Worker", vendor: "Vendor", yes: "Yes", no: "No", title: "Payables & Payments", generated: "Generated", filters: "Filters", sum: "Total",
     st: { draft: "Draft", unpaid: "Unpaid", partially_paid: "Partially paid", paid: "Paid", cancelled: "Cancelled" },
   },
   rs: {

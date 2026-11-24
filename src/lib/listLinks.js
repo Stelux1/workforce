@@ -7,11 +7,14 @@
 //   status     status stavke na toj listi (npr. satnica: approved|submitted; dodela: active|upcoming|ending_soon|completed;
 //              odsustvo: pending; radnik: active; obaveza: unpaid|partially_paid|overdue; potraživanje: outstanding|overdue)
 //   pstatus    status PROJEKTA (active|paused|completed) — Status filter sa Dashboarda; lista ga primenjuje preko projekta stavke
-//   view       dodatna oznaka liste (npr. "unbilled" na Billing Overview)
+//   view       dodatna oznaka liste (npr. "unbilled" na Billing Overview; Workforce: available|shortages)
+//   date       YYYY-MM-DD  jedan dan (Workforce „available": slobodni radnici tog dana)
+//   role       ključ Job Role (`project_roles.title_key`, mala slova) — Workforce i Project Assignments
+//   shift      id smene (Workforce „available")
 //
 // Parametar koji nije postavljen se izostavlja; nepoznati parametri se ignorišu.
 
-export const LIST_PARAMS = Object.freeze(["from", "to", "project", "client", "status", "pstatus", "view"]);
+export const LIST_PARAMS = Object.freeze(["from", "to", "project", "client", "status", "pstatus", "view", "date", "role", "shift"]);
 
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
 const ID = /^[\w-]{1,64}$/;
@@ -25,6 +28,10 @@ const clean = {
   status: (v) => (WORD.test(v) ? v : ""),
   pstatus: (v) => (WORD.test(v) ? v : ""),
   view: (v) => (WORD.test(v) ? v : ""),
+  date: (v) => (ISO.test(v) ? v : ""),
+  // title_key je slobodan tekst (npr. „zavarivač"): bez kontrolnih znakova i < >, najviše 80 znakova.
+  role: (v) => { const t = v.trim(); return t.length <= 80 && ![...t].some((c) => c < " " || c === "<" || c === ">") ? t : ""; },
+  shift: (v) => (ID.test(v) ? v : ""),
 };
 
 /** Adresa liste sa parametrima; prazne vrednosti i "all" se izostavljaju. */
@@ -49,4 +56,16 @@ export function readListParams(source) {
   for (const key of LIST_PARAMS) out[key] = clean[key](String(get(key)));
   out.active = LIST_PARAMS.some((k) => out[k] !== "");
   return out;
+}
+
+/**
+ * Project Assignments u režimu „Active" (spec §4.1: Active = Active + Ending Soon). Bez `status` i bez perioda stranica
+ * sama otvara taj režim; `status=active` bi suzio listu na strogo Active i ispustio angažmane koji ističu.
+ */
+export function activeAssignmentsUrl(params = {}) {
+  const rest = { ...params };
+  delete rest.status;
+  delete rest.from;
+  delete rest.to;
+  return listUrl("/assignments", rest);
 }

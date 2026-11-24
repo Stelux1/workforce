@@ -5,14 +5,17 @@ import { useQuery } from "@tanstack/react-query";
 import { Sparkles } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useL } from "@/lib/translations";
-import { qualifiedEmployeeIds } from "@/lib/workforceUi";
+import { qualifiedEmployeeIds, workforceRankInput } from "@/lib/workforceUi";
+import { useAuth } from "@/lib/AuthContext";
+import { isoDate } from "@/lib/onboarding";
 import { rankCandidates } from "@/lib/replacements";
 import { CategoryChip, MissingDocs, makeLookups, reasonTone, useReasonText } from "@/components/leave/common";
 import { ErrorNote } from "./common";
 
-export default function ReplacementSuggestions({ need, role, data }) {
+export default function ReplacementSuggestions({ need, role, data, excludeEmployeeIds = [] }) {
   const L = useL();
-  const hasRanker = true;
+  const { can } = useAuth();
+  const canViewB2C = Boolean(can?.("rates.view_b2c"));
   const lookups = useMemo(() => makeLookups(data), [data]);
   const reasonText = useReasonText(lookups);
 
@@ -23,47 +26,43 @@ export default function ReplacementSuggestions({ need, role, data }) {
 
   const docsQ = useQuery({
     queryKey: ["workforce", "replacement-docs", need.projectId, need.projectRoleId, candidateIds],
-    enabled: hasRanker && candidateIds.length > 0,
+    enabled: candidateIds.length > 0,
     queryFn: async () => {
-      const [documents, requiredDocuments] = await Promise.all([
+      const [documents, requiredDocuments, documentTypes] = await Promise.all([
         base44.entities.Document.filter({ employee_id: candidateIds }),
         base44.entities.RequiredDocument.filter({ project_id: need.projectId }),
+        base44.entities.DocumentType.list("sort"),
       ]);
-      return { documents, requiredDocuments };
+      return { documents, requiredDocuments, documentTypes };
     },
+  });
+  // Procenjeni B2C trošak kandidata (§14.2, poslednji kriterijum) samo uz rates.view_b2c.
+  const ratesQ = useQuery({
+    queryKey: ["workforce", "replacement-rates-b2c"],
+    enabled: canViewB2C && candidateIds.length > 0,
+    queryFn: () => base44.entities.Rate.filter({ kind: "cost", status: "active" }),
   });
 
   const ranked = useMemo(() => {
-    if (!hasRanker || !docsQ.data) return null;
+    if (!docsQ.data || (canViewB2C && ratesQ.isLoading)) return null;
     try {
-      const ids = new Set(candidateIds);
       return {
-        rows: rankCandidates({
-          need,
-          employees: data.employees.filter((e) => ids.has(e.id)),
-          assignments: data.assignments,
-          schedules: data.schedules,
-          leaves: data.leaves,
-          shifts: data.shifts,
-          documents: docsQ.data.documents,
-          requiredDocuments: docsQ.data.requiredDocuments,
-          projects: data.projects,
-          projectRoles: data.roles,
-          requirements: data.requirements,
-        }),
+        rows: rankCandidates(workforceRankInput({
+          need, data, candidateIds, ...docsQ.data, rates: ratesQ.data || null, canViewB2C, today: isoDate(), excludeEmployeeIds,
+        })),
       };
     } catch (error) {
       return { error };
     }
-  }, [docsQ.data, need, candidateIds, data]);
+  }, [docsQ.data, ratesQ.data, ratesQ.isLoading, canViewB2C, need, candidateIds, data, excludeEmployeeIds]);
 
   return (
     <section className="space-y-2" data-testid="replacement-suggestions">
       <h4 className="flex items-center gap-1.5 text-sm font-semibold"><Sparkles className="h-4 w-4 text-primary" />{L("Replacement suggestions", "Predlozi zamena", "Návrhy zástupov")}</h4>
       {candidateIds.length === 0 ? (
         <p className="text-sm text-muted-foreground">{L("No qualified workers found for this Job Role.", "Nema kvalifikovanih radnika za ovaj Job Role.", "Pre túto Job Role sa nenašli kvalifikovaní pracovníci.")}</p>
-      ) : docsQ.error ? (
-        <ErrorNote error={docsQ.error} onRetry={() => docsQ.refetch()} />
+      ) : docsQ.error || ratesQ.error ? (
+        <ErrorNote error={docsQ.error || ratesQ.error} onRetry={() => { docsQ.refetch(); if (canViewB2C) ratesQ.refetch(); }} />
       ) : ranked?.error ? (
         <ErrorNote error={ranked.error} />
       ) : !ranked ? (

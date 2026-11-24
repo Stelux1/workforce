@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Clock, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { base44 } from "@/api/base44Client";
+import { useStaffDirectory } from "@/hooks/useStaffDirectory";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,6 +29,7 @@ const timeText = (t) => (t ? String(t).slice(0, 5) : "");
 
 export default function TimesheetDetailsDialog({ ts, open, onClose, lang, L, perms, assignment }) {
   const queryClient = useQueryClient();
+  const staff = useStaffDirectory({ enabled: open });
   const [form, setForm] = useState({});
   const [reason, setReason] = useState("");
   const id = ts?.id;
@@ -104,10 +106,13 @@ export default function TimesheetDetailsDialog({ ts, open, onClose, lang, L, per
   const canAdd = editable && draft.work_date && !formError && !addEntry.isPending;
   const submitEntry = () => addEntry.mutate({ ...draft, hours: draftHours });
 
+  // §6/§7: ko je evidentirao, poslao, odobrio ili odbio (ime iz staff_directory(); bez imena ostaje samo datum).
+  const by = (id) => (staff.name(id) ? ` · ${staff.name(id)}` : "");
   const statusLine = [
-    ts.submitted_at && L(`Submitted ${formatIsoDate(ts.submitted_at, lang)}`, `Poslato ${formatIsoDate(ts.submitted_at, lang)}`, `Odoslané ${formatIsoDate(ts.submitted_at, lang)}`),
-    ts.approved_date && L(`Approved ${formatIsoDate(ts.approved_date, lang)}`, `Odobreno ${formatIsoDate(ts.approved_date, lang)}`, `Schválené ${formatIsoDate(ts.approved_date, lang)}`),
-    ts.approval_status === "rejected" && ts.rejected_at && L(`Rejected ${formatIsoDate(ts.rejected_at, lang)}`, `Odbijeno ${formatIsoDate(ts.rejected_at, lang)}`, `Zamietnuté ${formatIsoDate(ts.rejected_at, lang)}`),
+    staff.name(ts.created_by) && L(`Entered by ${staff.name(ts.created_by)}`, `Evidentirao ${staff.name(ts.created_by)}`, `Zaevidoval ${staff.name(ts.created_by)}`),
+    ts.submitted_at && L(`Submitted ${formatIsoDate(ts.submitted_at, lang)}`, `Poslato ${formatIsoDate(ts.submitted_at, lang)}`, `Odoslané ${formatIsoDate(ts.submitted_at, lang)}`) + by(ts.submitted_by),
+    ts.approved_date && L(`Approved ${formatIsoDate(ts.approved_date, lang)}`, `Odobreno ${formatIsoDate(ts.approved_date, lang)}`, `Schválené ${formatIsoDate(ts.approved_date, lang)}`) + by(ts.approved_by),
+    ts.approval_status === "rejected" && ts.rejected_at && L(`Rejected ${formatIsoDate(ts.rejected_at, lang)}`, `Odbijeno ${formatIsoDate(ts.rejected_at, lang)}`, `Zamietnuté ${formatIsoDate(ts.rejected_at, lang)}`) + by(ts.rejected_by),
   ].filter(Boolean);
 
   return (
@@ -208,6 +213,7 @@ export default function TimesheetDetailsDialog({ ts, open, onClose, lang, L, per
                       {e.start_time ? `${timeText(e.start_time)}–${timeText(e.end_time)}` : L("hours only", "samo sati", "iba hodiny")}
                       {e.break_minutes > 0 && <span className="text-muted-foreground"> · {L("break", "pauza", "prestávka")} {e.break_minutes} min</span>}
                       {e.notes && <span className="text-muted-foreground"> · {e.notes}</span>}
+                      {staff.name(e.created_by) && <span className="text-muted-foreground"> · {staff.name(e.created_by)}</span>}
                     </span>
                     <Badge variant="outline">{Number(e.hours)} h</Badge>
                     {e.counts === false && <Badge variant="outline">{L("not counted (rejected)", "ne računa se (odbijeno)", "nepočíta sa (zamietnuté)")}</Badge>}

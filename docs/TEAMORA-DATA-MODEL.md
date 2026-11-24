@@ -39,6 +39,7 @@ Oznake: `PK` primarni ključ, `FK→x (r|c|n)` strani ključ sa `on delete restr
 - `src/lib/assignments.js` (W2-K)
 - `src/lib/replacements.js` (W2-L)
 - `src/lib/notifications.js` (W2-H)
+- `src/lib/listLinks.js`, `src/lib/billingOverview.js`, `src/lib/staffDirectory.js` (W2-I, W2-F, integracija)
 
 **Migracije (redosled primene = redosled imena):**
 
@@ -59,6 +60,11 @@ Oznake: `PK` primarni ključ, `FK→x (r|c|n)` strani ključ sa `on delete restr
 | `20261125130000_dashboard.sql` | W2-I (samo ako zatreba) | 2 |
 | `20261125140000_assignments_a2.sql` | W2-K (samo ako zatreba) | 2 |
 | `20261125150000_workforce_ui.sql` | W2-G (samo ako zatreba) | 2 |
+| `20261125160000_imenik_osoblja.sql` | integracija | 2 |
+| `20261125160100_manjak_svi_projekti.sql` | integracija | 2 |
+| `20261125160200_izmena_angazmana_atomarno.sql` | integracija | 2 |
+| `20261125160300_naziv_project_assignments.sql` | integracija | 2 |
+| `20261125160400_obavestenja_osvezavanje.sql` | integracija | 2 |
 | `20261125200000_zavrsni_qa.sql` | W3 | 3 |
 
 **pgTAP fajlovi:**
@@ -77,6 +83,10 @@ Oznake: `PK` primarni ključ, `FK→x (r|c|n)` strani ključ sa `on delete restr
 | `29_billing.test.sql` | W2-F |
 | `30_odsustva_zamene.test.sql` | W2-L |
 | `31_obavestenja.test.sql` | W2-H |
+| `32_imenik_osoblja.test.sql` | integracija |
+| `33_manjak_svi_projekti.test.sql` | integracija |
+| `34_izmena_angazmana_atomarno.test.sql` | integracija |
+| `35_obavestenja_osvezavanje.test.sql` | integracija |
 
 Svaki test slučaj nosi `-- Txx` gde pokriva spec test.
 
@@ -430,10 +440,14 @@ Pravilo (međusobno isključivo, §4.4, `today` u vremenskoj zoni projekta):
 project_role_id uuid FK→project_roles r null
 superseded_by uuid FK→rates n null          -- red koji ga je zamenio („promena od datuma")
 change_reason text
-rate_key text generated always as (
-  scope || '|' || kind || '|' || coalesce(assignment_id::text,'') || '|' || coalesce(project_id::text,'')
-  || '|' || coalesce(project_role_id::text,'') || '|' || public.rate_trim(position)
-  || '|' || coalesce(employee_id::text,'')) stored
+rate_key text generated always as (case          -- „isto mesto u izboru tarife" (isporučeno u 03)
+  when scope = 'assignment' then 'assignment|' || kind || '|' || coalesce(assignment_id::text,'')
+  when scope = 'employee'   then 'employee|'   || kind || '|' || coalesce(employee_id::text,'')
+  when project_role_id is not null then 'role|' || kind || '|' || coalesce(project_id::text,'') || '|'
+       || project_role_id::text || '|' || coalesce(employee_id::text,'')
+  else 'project|' || kind || '|' || coalesce(project_id::text,'') || '|' || public.rate_trim(position)
+       || '|' || coalesce(employee_id::text,'') end) stored
+  -- snimak naziva pozicije na tarifi angažmana NE ulazi u ključ (dve tarife iste dodele se ne smeju preklopiti)
 constraint rates_no_overlap exclude using gist (rate_key with =,
   daterange(effective_from, effective_to, '[]') with &&) where (status = 'active')
 ```
@@ -692,7 +706,7 @@ payable_lines(
   kind text not null check in ('labor','adjustment'),
   employee_id uuid FK→employees r, project_id uuid FK→projects r, assignment_id uuid FK→project_assignments r,
   hours numeric(10,2), amount numeric(12,2) not null, currency text not null,
-  reason text, check (kind <> 'adjustment' or length(btrim(reason)) >= 5),
+  reason text, check (kind <> 'adjustment' or length(btrim(coalesce(reason, ''))) >= 5),
   created_date, created_by)
 
 payments(
@@ -701,7 +715,8 @@ payments(
   currency text not null, reference text, description text,
   recorded_by uuid not null default auth.uid(), recorded_at timestamptz not null default now(),
   voided_at timestamptz, voided_by uuid, void_reason text,
-  check (voided_at is null or length(btrim(void_reason)) >= 5))
+  check (voided_at is null or length(btrim(coalesce(void_reason, ''))) >= 5))
+-- coalesce je obavezan: bez njega je length(btrim(null)) = null, pa bi CHECK propustio prazan razlog (W2-E).
 ```
 
 **`guard_payment`:**
@@ -889,8 +904,10 @@ schedules: + project_id uuid FK→projects n, + assignment_id uuid FK→project_
 
 **`decide_leave_request(p_id uuid, p_decision text /*'approved'|'rejected'*/, p_reason text)`:**
 - Traži `leave.approve`.
-- Računa `workforce_coverage(start, end, null, p_id)` za projekte gde radnik ima dodele. Ako je neki `deficit > 0` i odluka je `approved`, traži `leave.approve_shortage` i razlog od najmanje 5 znakova (T24).
-- Upisuje `shortage_snapshot = [{project_id, project_role_id, shift_id, date, required, available, deficit}]`, `shortage_override`, `decided_*` i audit `action='status'` sa razlogom.
+- Manjak računa `leave_shortage(p_id)`: za SVE projekte na kojima radnik ima ne-otkazanu dodelu u periodu (i one koje pozivalac ne vidi, §14.1 — migracija `20261125160100`), preko interne `workforce_coverage_all` (bez `can_see_project`; `workforce_coverage` je omot sa filterom pristupa). Poziva ga samo `leave.approve`.
+- **Pravilo snimka manjka:** red ulazi u manjak kad u simulaciji (ovaj zahtev kao odobren) ima više odsutnih nego bez nje (`absent > absent_before`, tj. radnik je tu planiran) i `deficit > 0`. Postojeći manjak koji ovo odsustvo ne pogoršava ne ulazi. Isto pravilo: `leaveShortage()` u JS-u.
+- Ako je snimak neprazan i odluka je `approved`, traži `leave.approve_shortage` i razlog od najmanje 5 znakova (T24).
+- Upisuje `shortage_snapshot = [{project_id, project_role_id, shift_id, date, required, planned, absent, available, deficit, deficit_before, project_name, role_title, shift_name}]` (samo brojevi i nazivi; bez tarifa i ličnih podataka), `shortage_override`, `decided_*` i audit `action='status'` sa razlogom. Snimak se posle odluke ne preračunava.
 - Nikad ne odbija automatski zbog manjka (§14.1).
 
 **`assign_replacement(p_leave uuid, p_employee uuid, p_project uuid, p_role uuid, p_shift uuid, p_from date, p_to date, p_source_assignment uuid default null, p_ack_source_shortage boolean default false) returns uuid`:**
@@ -921,7 +938,7 @@ notification_reads(notification_id uuid FK c, user_id uuid FK→profiles c, read
   PK(notification_id, user_id))
 ```
 
-**`refresh_notifications() returns int`** (`security definer`, staff, idempotentno, `on conflict (event_key) do nothing`; uslov koji više ne važi dobija `resolved_at`):
+**`refresh_notifications() returns int`** (`security definer`, staff, idempotentno, `on conflict (event_key) do nothing`, pa osvežavanje poruke/payload-a/ozbiljnosti postojećeg događaja kad se brojevi promene — 160400; uslov koji više ne važi dobija `resolved_at`):
 
 | Događaj | event_key | audience_permission |
 |---|---|---|
@@ -1284,3 +1301,23 @@ Izvoz CSV/Excel/PDF (T26): funkcije izvoza primaju `perms` i izbacuju kolone za 
 
 ### `src/lib/workforce.js` (T-G)
 `coverage({requirements,assignments,schedules,leaves,shifts,from,to,simulateLeaveId,projectId})` → `[{projectId,projectRoleId,shiftId,date,required,planned,absent,available,deficit,surplus,coveringEmployeeIds,missing}]`; `shortageProjects(rows)`; `workerIsFree({...})`; `availableWorkers({date,shiftId,roleKey,...})` → `[{employeeId,standby}]`; `ganttCell({...})` → `assigned|available|standby|leave|sick_leave|other_absence|replacement`; `GANTT_STATUSES`, `eachDay`, `shiftInterval`, `absenceKind`. SQL: `workforce_coverage`, `worker_is_free`, `set_workforce_requirement`. Napomena: `guard_schedule_overlap` odbija preklop i za `standby` — zamena mora prvo da postavi standby red na `released`.
+
+### `src/lib/assignments.js` (W2-K)
+Prikazni status i lista Project Assignments: `ASSIGNMENT_STATUSES`, `ACTIVE_MODE_STATUSES` (režim „Active" = `active` + `ending_soon`, §4.1), `ENDING_SOON_DAYS=30`, `assignmentStatus(a, today)` (isto kao SQL `assignment_display_status`), `todayInZone(tz)`, `addDays`, `rateReferenceDate`, `decorateAssignments(list, ctx)`, `filterAssignments(rows, {search, projectId, clientId, projectStatus, roleKey, status, from, to, mode:'active'|'all', expiring})`, `SORT_KEYS`/`sortAssignments`, `overlaps`, `expiresThisMonth`, `assignmentKpis(rows, {today, period})`, `statusBreakdown`, `percentages`, `byProject`, `endingSoon`, `workersByProject`, `EXPORT_COLUMNS`/`exportRows(list, perms)` (tarife samo uz pravo). RPC-ovi A2 iz §2.4; izmena dodele sa tarifom ide JEDNIM pozivom `update_assignment_with_rates(p_id, p jsonb, p_rates jsonb [{kind,amount,currency}], p_rate_from date, p_reason)` (migracija `20261125160200`, transakcija; interno `update_assignment` + `change_rate`/`set_rate`).
+
+### `src/lib/replacements.js` (W2-L)
+`normalizeCoverageRow` (RPC/snimak/JS → jedan oblik; nosi i `projectName`/`roleTitle`/`shiftName` iz `leave_shortage`), `leaveShortage(base, simulated)` (pravilo snimka iz §2.12), `snapshotRows(snapshot)`, `shortageTotals`, `replacementNeeds(rows)`, `simulateReplacement`, `replacementImpact` (T23), `roleKeyOf`, `locationMatch`, `rankCandidates({need, employees, assignments, schedules, leaves, shifts, documents, requiredDocuments, documentTypes, projects, projectRoles, rates, requirements, canViewB2C, today, excludeEmployeeIds})` — bez `projectRoles` svi su `not_eligible`; Workforce Planning gradi ulaz preko `workforceRankInput` (`src/lib/workforceUi.js`), Leave Requests preko `useReplacementData`. `suggestedRange`, `CANDIDATE_CATEGORIES`, `SIMULATED_ASSIGNMENT_ID`.
+
+### `src/lib/listLinks.js` (W2-I)
+Ugovor URL parametara „kartica → filtrirana lista": `LIST_PARAMS = from, to, project, client, status, pstatus, view, date, role, shift`; `listUrl(path, params)` (prazno i `all` se izostavljaju), `readListParams(source)` (neispravno → `""`, `active`), `activeAssignmentsUrl(params)` (Project Assignments u režimu Active — bez `status`, §4.1). `/workforce` čita `view=available|shortages`, `date`, `role` (title_key), `shift`, `from`/`to`, `project`, `client`, `pstatus` (`workforceStartState`, `roleIdsForKey` u `workforceUi.js`).
+
+### `src/lib/notifications.js` (W2-H)
+`NOTIFICATION_TYPES`, `TYPE_META`, `TYPE_ORDER`, `SEVERITY`/`SEVERITY_ORDER`/`SEVERITY_LABELS`, `typeLabel`, `severityLabel`, `formatAmount`, `notificationText(n, lang)`, `notificationLink(n)` (preko `listUrl`), `isResolved`, `isRead(n, readIds)`, `unreadCount`, `sortNotifications`, `filterNotifications(list, {status, read, type, severity}, readIds)`, `countByType`, `actionCenterItems(list, readIds, limit)`. SQL: `refresh_notifications()`, `notify_replacement_candidates(p_leave, p_candidates)`.
+
+### `src/lib/billingOverview.js` (W2-F)
+`isPreparation`, `nextBillingStatus`, `canReturnToPreparation`, `hasExternalInvoice`, `summaryRowsFromLines`, `summaryRowsFromDb`, `rowsTotals`, `breakdownRows(rows, dim)`, `summaryCalculation(summary, {laborLines, dbLines})`, `summaryBalance(summary, clientPayments, calc, today)`, `linkedCosts`, `billableCostCandidates(costs, {links, projects, clientId, projectId, from, to})`, `costTotals`, `overviewByProject(laborLines, summaries)`, `findOverlap(draft, summaries)`, `billingExportData(...)`. Status menja samo `set_billing_status` (§2.9).
+
+### Integracija (migracije `2026112516xxxx`)
+- `staff_directory()` (160000): `id, full_name, role` za prikaz „ko je odobrio/evidentirao/odlučio" (§6, §7, §9, §14); samo aktivno osoblje, ništa anon-u; JS `src/lib/staffDirectory.js` + `src/hooks/useStaffDirectory.js`.
+- `workforce_coverage_all` + `leave_shortage` preko svih projekata (160100), `update_assignment_with_rates` (160200), naziv ekrana u poruci `timesheet_rate_problem` (160300), `refresh_notifications` osvežava poruku/payload/ozbiljnost postojećeg događaja kad se brojevi promene, pročitanost ostaje (160400).
+

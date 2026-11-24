@@ -1,4 +1,6 @@
 // Poruke o greškama: tehničke greške baze postaju razumljive, a naše srpske poruke iz baze prolaze nepromenjene.
+import { readdirSync, readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { dataError, describeError, plainError } from "./errors";
 
@@ -126,11 +128,11 @@ describe("poruke posle QA 14.11.2026", () => {
       .toBe("No valid rate for the client for the week of 07.03.2033 — the timesheet can't be approved.");
     const rsd = {
       code: "23514",
-      message: "Važeća tarifa radnika (izvor: tarifa radnika) je 1500,00 RSD po satu — odobravanje prima samo EUR po satu; ispravite tu tarifu u Tarife i dodele",
+      message: "Važeća tarifa radnika (izvor: tarifa radnika) je 1500,00 RSD po satu — odobravanje prima samo EUR po satu; ispravite tu tarifu u Angažmani na projektima",
     };
     expect(rs(rsd).text).toBe(rsd.message);
     expect(describeError(rsd, "en").text).toBe(
-      "The current worker rate (source: employee rate) is 1500.00 RSD per hour — approval accepts only EUR per hour; fix that rate in Rates & Assignments."
+      "The current worker rate (source: employee rate) is 1500.00 RSD per hour — approval accepts only EUR per hour; fix that rate in Project Assignments."
     );
   });
 });
@@ -194,9 +196,9 @@ describe("tarife samo admin (migracija 20261114240000)", () => {
   it("brisanje dodele ili projekta koji imaju tarife (on delete restrict) kaže šta smeta", () => {
     const fk = (table, c) => ({ code: "23503", message: `update or delete on table "${table}" violates foreign key constraint "${c}" on table "rates"` });
     expect(rs(fk("project_assignments", "rates_assignment_id_fkey")).key).toBe("inUseAssignmentRates");
-    expect(rs(fk("project_assignments", "rates_assignment_id_fkey")).text).toBe("Dodela ima tarife (Tarife i dodele), pa ne može da se obriše. Prvo obrišite te tarife.");
+    expect(rs(fk("project_assignments", "rates_assignment_id_fkey")).text).toBe("Dodela ima tarife (Angažmani na projektima), pa ne može da se obriše. Prvo obrišite te tarife.");
     expect(rs(fk("projects", "rates_project_id_fkey")).key).toBe("inUseProjectRates");
-    expect(describeError(fk("projects", "rates_project_id_fkey"), "en").text).toBe("The project has rates (Rates & Assignments), so it can't be deleted. An admin has to delete those rates first.");
+    expect(describeError(fk("projects", "rates_project_id_fkey"), "en").text).toBe("The project has rates (Project Assignments), so it can't be deleted. An admin has to delete those rates first.");
   });
 });
 
@@ -212,5 +214,58 @@ describe("prava (T-B, 42501 po pravu)", () => {
     expect(describeError({ code: "42501", message: "Ulogu admin i nalog admina menja samo admin" }, "en").text)
       .toBe("Only an admin can give or remove the admin role or change an admin's account.");
     expect(describeError({ code: "42501", message: "Audit log se ne menja i ne briše" }, "rs").text).toBe("Audit log se ne menja i ne briše");
+  });
+});
+
+describe("prevod poruka iz migracija 20261125* (EN)", () => {
+  const dir = fileURLToPath(new URL("../../supabase/migrations/", import.meta.url));
+  const messages = [];
+  for (const f of readdirSync(dir).filter((n) => n.startsWith("20261125")).sort()) {
+    const sql = readFileSync(`${dir}${f}`, "utf8");
+    // Običan literal i literal unutar dinamičkog SQL-a (udvojeni apostrofi).
+    for (const m of sql.matchAll(/raise exception\s+(?:'((?:[^']|'')*)'(?!')|''([^']*)'')/gi)) {
+      const text = (m[1] ?? m[2]).replace(/''/g, "'").replace(/%/g, "X1");
+      if (text.trim()) messages.push({ f, text });
+    }
+  }
+
+  // Interne provere (migracija ih diže samo pri izvršavanju, korisnik ih ne vidi).
+  const INTERNAL = /proveriti ručno/;
+  // „Nemate pravo „kod"" nosi errcode 42501 i prevodi se preko PERMISSION_RE.
+  const PERMISSION = /^Nemate pravo [„"][A-Za-z0-9_.]+["“"]$/;
+
+  it("nalazi poruke u migracijama", () => {
+    expect(messages.length).toBeGreaterThan(100);
+  });
+
+  it("svaka korisnička poruka ima engleski prevod", () => {
+    const untranslated = messages
+      .filter(({ text }) => !INTERNAL.test(text) && !PERMISSION.test(text))
+      .filter(({ text }) => describeError({ code: "23514", message: text }, "en").text === text)
+      .map(({ f, text }) => `${f}: ${text}`);
+    expect(untranslated).toEqual([]);
+  });
+
+  it("poruke sa kodom prava idu preko naziva prava", () => {
+    const perms = messages.filter(({ text }) => PERMISSION.test(text));
+    expect(perms.length).toBeGreaterThan(0);
+    for (const { text } of perms.filter((p) => !p.text.includes("X1"))) { // „%" je parametar funkcije, ne konkretan kod
+      expect(describeError({ code: "42501", message: text }, "en").key).toBe("missingPermission");
+    }
+  });
+
+  it("primeri: obračun klijenta, obaveze, odsustva/zamene", () => {
+    expect(describeError({ code: "23514", message: "Obračun van pripreme se ne briše" }, "en").text)
+      .toBe("A billing summary that is out of preparation can't be deleted.");
+    expect(describeError({ code: "23514", message: "Trošak nije označen kao naplativ (Billable to Client)" }, "en").text)
+      .toBe("The cost is not marked as Billable to Client.");
+    expect(describeError({ code: "23514", message: "Uplata prelazi iznos eksternog računa (preostalo 120.00 EUR). Korekcija = storno uplate uz razlog" }, "en").text)
+      .toBe("The payment exceeds the external invoice amount (remaining: 120.00 EUR). To correct, void a payment with a reason.");
+    expect(describeError({ code: "23514", message: "Dnevni zbir sati za 03.11.2026 bi bio 11 h (najviše 10 h u danu); ostali projekti tog dana: Alfa" }, "en").text)
+      .toBe("The daily total for 03.11.2026 would be 11 h (maximum 10 h per day); other projects that day: Alfa.");
+    expect(describeError({ code: "23514", message: "Radnik već ima dodelu na ovom projektu (Zavarivač, 01.11.2026 – 05.11.2026) — zamena na drugoj ulozi ili delu perioda nije moguća" }, "en").text)
+      .toBe("The employee already has an assignment on this project (Zavarivač, 01.11.2026 – 05.11.2026) — a replacement in another role or for part of the period isn't possible.");
+    expect(describeError({ code: "23514", message: "Premeštaj pravi manjak na izvornom projektu: nedostaje još 2 (radnik × smena) — potvrdite transfer" }, "en").text)
+      .toBe("The transfer creates a shortage on the source project: 2 more worker-shift(s) missing — confirm the transfer.");
   });
 });

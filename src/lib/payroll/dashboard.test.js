@@ -10,7 +10,7 @@ import {
   workforceOverview, workforceShortages,
 } from "./dashboard.js";
 import { changePct } from "./dashboard.js";
-import { listUrl, readListParams } from "../listLinks.js";
+import { activeAssignmentsUrl, listUrl, readListParams } from "../listLinks.js";
 
 const PROJECTS = [
   { id: "P1", name: "Alfa", client_id: "C1", status: "active" },
@@ -203,5 +203,17 @@ describe("URL parametri filtrirane liste (ugovor sa ciljnim stranicama)", () => 
   it("neispravne vrednosti se odbacuju", () => {
     expect(readListParams(new URLSearchParams("from=nije&project=a b&status=Approved;x"))).toMatchObject({ from: "", project: "", status: "", active: false });
     expect(listUrl("/x")).toBe("/x");
+  });
+});
+
+describe("Dashboard → Project Assignments Active (§4.1)", () => {
+  it("link ne nosi status=active (Active = Active + Ending Soon), filteri projekta ostaju", () => {
+    expect(activeAssignmentsUrl({ status: "active", project: "p1", client: "", pstatus: "active" })).toBe("/assignments?project=p1&pstatus=active");
+    expect(activeAssignmentsUrl({})).toBe("/assignments");
+  });
+  it("novi parametri Workforce linka se čitaju istom funkcijom", () => {
+    const p = readListParams(new URLSearchParams("view=available&date=2033-03-12&role=zavarivač&shift=sh-1"));
+    expect(p).toMatchObject({ view: "available", date: "2033-03-12", role: "zavarivač", shift: "sh-1", active: true });
+    expect(readListParams(new URLSearchParams("role=<script>&date=12.03.")).role).toBe("");
   });
 });

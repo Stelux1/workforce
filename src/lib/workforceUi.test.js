@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { buildGantt, coverageDetail, coverageTotals, dayBars, moveAnchor, qualifiedEmployeeIds, requirementRows, viewRange } from "./workforceUi";
+import { buildGantt, coverageDetail, coverageTotals, dayBars, moveAnchor, qualifiedEmployeeIds, requirementRows, viewRange, workforceRankInput, workforceStartState, roleIdsForKey } from "./workforceUi";
+import { rankCandidates } from "./replacements";
 import { coverage } from "./workforce";
 
 const P = "p1";
@@ -117,5 +118,61 @@ describe("T05 — detalj pokrivenosti: slobodni radnici", () => {
     const roles = [...projectRoles, { id: "r2", project_id: "p2", title_key: "welder", department_position: null }, { id: "r3", project_id: "p2", title_key: "fitter" }];
     const a = [...assignments, { id: "x", employee_id: "e9", project_role_id: "r2", status: "active" }, { id: "y", employee_id: "e8", project_role_id: "r3", status: "active" }];
     expect(qualifiedEmployeeIds({ role: roles[0], assignments: a, projectRoles: roles }).sort()).toEqual(["e1", "e2", "e3", "e9"]);
+  });
+});
+
+describe("workforceRankInput → rankCandidates (Workforce Planning predlozi zamena, §14.2)", () => {
+  // e1 i e2 rade jutarnju smenu na P/R; e3 radi popodne. Potreba: jutarnja smena 2033-03-10 (e1 odsutan).
+  const need = { projectId: P, projectRoleId: R, roleKey: "welder", shiftId: MORNING, from: "2033-03-10", to: "2033-03-10" };
+  const leaves = [{ id: "l1", employee_id: "e1", leave_type: "vacation", start_date: "2033-03-10", end_date: "2033-03-10", status: "approved" }];
+  const data = { projects, roles: projectRoles, shifts, employees, assignments, requirements: [], schedules: [], leaves };
+
+  it("T22: kvalifikovan radnik iz druge smene nije not_eligible (uloga se prepoznaje preko projectRoles)", () => {
+    const rows = rankCandidates(workforceRankInput({ need, data, excludeEmployeeIds: ["e1"] }));
+    const e3 = rows.find((c) => c.employeeId === "e3");
+    expect(e3.roleMatch).toBe("exact");
+    expect(e3.category).not.toBe("not_eligible");
+    expect(rows.some((c) => c.employeeId === "e1")).toBe(false);
+  });
+
+  it("bez Job Roles (stari poziv) svi su not_eligible — zato helper uvek prosleđuje data.roles", () => {
+    const input = workforceRankInput({ need, data });
+    expect(input.projectRoles).toBe(projectRoles);
+    const broken = rankCandidates({ ...input, projectRoles: [] });
+    expect(broken.every((c) => c.category === "not_eligible")).toBe(true);
+  });
+
+  it("tarife ulaze u rangiranje samo uz rates.view_b2c", () => {
+    const rates = [{ id: "rc", scope: "project", kind: "cost", project_id: P, project_role_id: R, amount: 14, currency: "EUR", unit: "hourly", effective_from: "2033-01-01", status: "active" }];
+    expect(workforceRankInput({ need, data, rates, canViewB2C: false }).rates).toBeNull();
+    const rows = rankCandidates(workforceRankInput({ need, data, rates, canViewB2C: true, excludeEmployeeIds: ["e1"] }));
+    expect(rows.find((c) => c.employeeId === "e3").b2c).toMatchObject({ rate: 14, currency: "EUR" });
+  });
+
+  it("candidateIds sužava listu radnika, today podrazumevano = prvi dan potrebe", () => {
+    const input = workforceRankInput({ need, data, candidateIds: ["e3"] });
+    expect(input.employees.map((e) => e.id)).toEqual(["e3"]);
+    expect(input.today).toBe("2033-03-10");
+  });
+});
+
+describe("workforceStartState / roleIdsForKey (linkovi na /workforce)", () => {
+  const today = "2033-03-10";
+  it("view=available otvara dan iz date (Quick Insights Available workers)", () => {
+    expect(workforceStartState({ view: "available", date: "2033-03-12", today })).toEqual({ view: "day", anchor: "2033-03-12", tab: "gantt", coverageFilter: "all", availableDate: "2033-03-12" });
+    expect(workforceStartState({ view: "available", today }).anchor).toBe(today);
+  });
+  it("view=shortages otvara Coverage samo sa manjkom, prikaz po opsegu", () => {
+    expect(workforceStartState({ view: "shortages", from: "2033-03-10", to: "2033-03-24", today })).toMatchObject({ view: "month", anchor: "2033-03-10", tab: "coverage", coverageFilter: "deficit" });
+    expect(workforceStartState({ view: "shortages", from: "2033-03-10", to: "2033-03-16", today })).toMatchObject({ view: "week", tab: "coverage" });
+  });
+  it("samo from/to: jedan dan → dan, bez parametara → nedelja danas", () => {
+    expect(workforceStartState({ from: "2033-03-11", to: "2033-03-11", today })).toMatchObject({ view: "day", anchor: "2033-03-11", tab: "gantt" });
+    expect(workforceStartState({ today })).toMatchObject({ view: "week", anchor: today });
+  });
+  it("roleIdsForKey: ključ uloge → id-jevi uloga svih projekata; prazno → bez filtera", () => {
+    const roles = [{ id: "r1", title_key: "welder" }, { id: "r2", title: "Welder" }, { id: "r3", title_key: "crane" }];
+    expect([...roleIdsForKey(roles, "welder")]).toEqual(["r1", "r2"]);
+    expect(roleIdsForKey(roles, "")).toBeNull();
   });
 });

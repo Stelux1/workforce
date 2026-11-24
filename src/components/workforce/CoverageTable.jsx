@@ -11,10 +11,10 @@ import { shiftTitle } from "./common";
 
 const MAX_ROWS = 400;
 
-export default function CoverageTable({ data, projectId, onSelect }) {
+export default function CoverageTable({ data, projectId, onSelect, initialFilter = "all" }) {
   const L = useL();
   const { lang } = useLang();
-  const [filter, setFilter] = useState("all");
+  const [filter, setFilter] = useState(initialFilter);
   const projectName = (id) => data.projects.find((p) => p.id === id)?.name || "—";
   const roleTitle = (id) => data.roles.find((r) => r.id === id)?.title || "—";
   const shiftOf = (id) => data.shifts.find((s) => s.id === id);

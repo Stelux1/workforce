@@ -18,6 +18,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import PageHeader from "@/components/shared/PageHeader";
+import { pageTitle } from "@/lib/pageTitles";
+import { laborProblemText } from "@/lib/payroll/payableProblems";
 import { ExportMenu } from "@/components/projects/costsShared";
 import PayableDetail from "@/components/payroll/PayableDetail";
 import { usePayablesLabels } from "@/components/payroll/payablesLabels";
@@ -123,7 +125,6 @@ export default function Payables() {
   const { data: employees = [] } = useQuery({ queryKey: ["employees"], queryFn: () => base44.entities.Employee.list("last_name"), enabled: canView });
   const { data: vendors = [] } = useQuery({ queryKey: ["vendors"], queryFn: () => base44.entities.Vendor.list("name"), enabled: canView });
   const { data: projects = [] } = useQuery({ queryKey: ["projects"], queryFn: () => base44.entities.Project.list("name"), enabled: canView });
-  const { data: users = [] } = useQuery({ queryKey: ["profiles"], queryFn: () => base44.entities.Profile.list("created_date"), enabled: canView });
 
   const generate = useMutation({
     mutationFn: () => base44.rpc("generate_payables", { p_from: from, p_to: to }),
@@ -179,7 +180,7 @@ export default function Payables() {
     const cur = p.currency || "EUR";
     if (p.code === "labor_problem") {
       const worker = personName(employees.find((e) => e.id === p.employee_id));
-      return T.pr_labor_problem(p.payee_type === "vendor" ? `${who} (${worker})` : who, isoDate(p.week_start, lang), p.detail);
+      return T.pr_labor_problem(p.payee_type === "vendor" ? `${who} (${worker})` : who, isoDate(p.week_start, lang), laborProblemText(p.detail, lang));
     }
     if (p.code === "period_overlap") return T.pr_period_overlap(who, p.detail);
     if (p.code === "confirmed_changed") return T.pr_confirmed_changed(who, money(p.expected_amount, cur, lang), money(p.actual_amount, cur, lang));
@@ -216,7 +217,7 @@ export default function Payables() {
   if (!canView) {
     return (
       <div className="space-y-6">
-        <PageHeader title={T.title} subtitle={T.subtitle} />
+        <PageHeader title={pageTitle("Payables", lang)} subtitle={T.subtitle} />
         <Card className="p-10 text-center space-y-2">
           <Lock className="w-6 h-6 mx-auto text-muted-foreground" />
           <p className="font-medium">{T.noAccess}</p>
@@ -228,7 +229,7 @@ export default function Payables() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title={T.title} subtitle={T.subtitle}>
+      <PageHeader title={pageTitle("Payables", lang)} subtitle={T.subtitle}>
         <ExportMenu T={T} formats={["excel", "csv"]} onExport={doExport} disabled={!visible.length} busy={exporting} />
         {canManage && (
           <TooltipProvider>
@@ -423,7 +424,7 @@ export default function Payables() {
       )}
 
       <PayableDetail row={openRow} open={Boolean(openRow)} onOpenChange={(o) => !o && setOpenId(null)} T={T} lang={lang}
-        canManage={canManage} canRecord={canRecord} employees={employees} projects={projects} users={users} />
+        canManage={canManage} canRecord={canRecord} employees={employees} projects={projects} />
     </div>
   );
 }

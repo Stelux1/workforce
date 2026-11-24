@@ -16,12 +16,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { formatIsoDate, intlLocale } from "@/lib/dateFormat";
 import { useLang } from "@/lib/LanguageContext";
+import { pageTitle } from "@/lib/pageTitles";
 import { toast } from "sonner";
 import PageHeader from "@/components/shared/PageHeader";
 import StatusBadge from "@/components/shared/StatusBadge";
 import EmptyState from "@/components/shared/EmptyState";
 import { useL, useT } from "@/lib/translations";
 import { useAuth } from "@/lib/AuthContext";
+import { useStaffDirectory } from "@/hooks/useStaffDirectory";
 import { useMyPermissions } from "@/lib/documentCategories";
 import { isoDate } from "@/lib/onboarding";
 import { shortageTotals, snapshotRows } from "@/lib/replacements";
@@ -35,15 +37,20 @@ const LEAVE_TYPE_KEYS = {
   paternity: "Paternity", unpaid: "Unpaid", other: "Other",
 };
 
-function DecisionInfo({ req, lookups }) {
+function DecisionInfo({ req, lookups, staff }) {
   const L = useL();
   const { lang } = useLang();
   const [open, setOpen] = useState(false);
   const rows = snapshotRows(req.shortage_snapshot);
-  if (req.status === "pending") return null;
-  const who = req.reviewed_by || null;
+  const requester = staff?.name(req.requested_by || req.created_by);
+  if (req.status === "pending") {
+    return requester ? <p className="mt-2 text-xs text-muted-foreground">{L("Requested by", "Zahtev uneo", "Žiadosť zadal")}: {requester}</p> : null;
+  }
+  // §14: ko je odlučio — ime iz staff_directory(), inače snimak imena iz reviewed_by (puni ga baza).
+  const who = staff?.name(req.decided_by) || req.reviewed_by || null;
   return (
     <div className="mt-2 space-y-1 text-xs text-muted-foreground" data-testid="decision-info">
+      {requester && <p>{L("Requested by", "Zahtev uneo", "Žiadosť zadal")}: {requester}</p>}
       <p>
         {req.status === "approved" ? L("Approved", "Odobrio", "Schválil") : L("Rejected", "Odbio", "Zamietol")}
         {who ? `: ${who}` : ""}
@@ -77,6 +84,7 @@ export default function LeaveRequests() {
   const [replacing, setReplacing] = useState(null);
 
   const { can, loading: permsLoading } = useMyPermissions(useAuth());
+  const staff = useStaffDirectory();
   const canDecide = can("leave.approve");
   const canApproveShortage = can("leave.approve_shortage");
   const canAssign = can("workforce.manage");
@@ -139,7 +147,7 @@ export default function LeaveRequests() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={t("Leave Requests")}
+        title={pageTitle("Leave Requests", lang)}
         subtitle={t("Manage time-off requests")}
         actionLabel={t("New Request")}
         onAction={() => setDialogOpen(true)}
@@ -176,7 +184,7 @@ export default function LeaveRequests() {
                       {leaveTypeLabel(req.leave_type)} · {formatIsoDate(req.start_date, lang)} – {formatIsoDate(req.end_date, lang)}
                     </p>
                     {req.reason && <p className="text-xs text-muted-foreground mt-1">{req.reason}</p>}
-                    <DecisionInfo req={req} lookups={lookups} />
+                    <DecisionInfo req={req} lookups={lookups} staff={staff} />
                   </div>
                   <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                     <StatusBadge status={req.status} />

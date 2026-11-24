@@ -4,22 +4,26 @@ import WorkforcePlanner from "@/components/workforce/WorkforcePlanner";
 import { useSearchParams } from "react-router-dom";
 import { readListParams } from "@/lib/listLinks";
 import { useL } from "@/lib/translations";
+import { pageTitle } from "@/lib/pageTitles";
+import { useLang } from "@/lib/LanguageContext";
 
 export default function WorkforcePlanningPage() {
   const L = useL();
+  const { lang } = useLang();
   const [params] = useSearchParams();
   const q = readListParams(params);
   return (
     <div className="p-4 md:p-6 max-w-[1400px] mx-auto">
       <PageHeader
-        title={L("Workforce Planning", "Planiranje radne snage", "Plánovanie pracovnej sily")}
+        title={pageTitle("Workforce Planning", lang)}
         subtitle={L(
           "Who is needed, who covers each shift and where there is a shortage or surplus.",
           "Koliko radnika treba, ko pokriva koju smenu i gde ima manjka ili viška.",
           "Koľko pracovníkov treba, kto pokrýva ktorú zmenu a kde je nedostatok alebo prebytok."
         )}
       />
-      <WorkforcePlanner initialProject={q.project} initialFrom={q.from} initialTo={q.to} initialClient={q.client} initialPstatus={q.pstatus} />
+      <WorkforcePlanner initialProject={q.project} initialFrom={q.from} initialTo={q.to} initialClient={q.client} initialPstatus={q.pstatus}
+        initialView={q.view} initialDate={q.date} initialRole={q.role} initialShift={q.shift} />
     </div>
   );
 }

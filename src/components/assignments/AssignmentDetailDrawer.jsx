@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowRightLeft, CalendarX2, ExternalLink, History, Pencil } from "lucide-react";
 import { base44 } from "@/api/base44Client";
+import { useStaffDirectory } from "@/hooks/useStaffDirectory";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -57,6 +58,7 @@ export default function AssignmentDetailDrawer({ open, onOpenChange, assignment,
     enabled: open && Boolean(id) && seeRates,
   });
   const rateIds = useMemo(() => (ratesQ.data || []).map((r) => r.id), [ratesQ.data]);
+  const staff = useStaffDirectory();
   const historyQ = useQuery({
     queryKey: ["audit-log", "assignment", id, rateIds],
     queryFn: async () => {
@@ -204,7 +206,7 @@ export default function AssignmentDetailDrawer({ open, onOpenChange, assignment,
                       {fields.length > 0 && <span className="font-normal text-muted-foreground"> · {[...new Set(fields.map(fieldLabel))].join(", ")}</span>}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {when(h.occurred_at)}{h.actor_role ? ` · ${roleLabel(h.actor_role, lang)}` : ""}
+                      {when(h.occurred_at)}{staff.name(h.actor) ? ` · ${staff.name(h.actor)}` : ""}{h.actor_role ? ` · ${roleLabel(h.actor_role, lang)}` : ""}
                     </p>
                     {h.reason && <p className="mt-0.5 text-xs italic text-foreground/80">„{h.reason}"</p>}
                   </li>

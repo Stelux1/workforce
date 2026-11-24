@@ -20,6 +20,7 @@ import { useViewPreference } from "@/hooks/useViewPreference";
 import SortSelect from "@/components/shared/SortSelect";
 import { useT, pick } from "@/lib/translations";
 import { useLang } from "@/lib/LanguageContext";
+import { pageTitle } from "@/lib/pageTitles";
 import { useAuth } from "@/lib/AuthContext";
 import ConfirmDeleteDialog from "@/components/shared/ConfirmDeleteDialog";
 import BillingOverviewPanel from "@/components/billing/BillingOverviewPanel";
@@ -48,7 +49,7 @@ export default function Clients() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title={canBilling ? B.pageTitle : pick(lang, "Clients", "Klijenti", "Klienti")} subtitle={canBilling ? B.pageSubtitle : undefined} />
+      <PageHeader title={canBilling ? pageTitle("Clients", lang) : pick(lang, "Clients", "Klijenti", "Klienti")} subtitle={canBilling ? B.pageSubtitle : undefined} />
       {canBilling ? (
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList>

@@ -12,26 +12,28 @@ import { Link } from "react-router-dom";
 import { ChevronRight, FileSpreadsheet } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
 import { canAccessPath } from "@/lib/access";
+import { pageTitle } from "@/lib/pageTitles";
 
 // Centralni, kontrolisani izveštaji i izvoz (spec §1 Reports, §10). Svaka veza vodi na modul koji ima svoj izvoz
 // CSV/PDF; prikazuje se samo ono na šta korisnik ima pravo (iste provere kao meni, a baza ionako ne vraća podatke).
 const REPORT_LINKS = [
-  { path: "/payroll/reports", label: ["Financial Reports", "Finansijski izveštaji", "Finančné prehľady"],
+  { path: "/payroll/reports", nav: "Payroll Reports",
     hint: ["Profitability by currency, filters, PDF/CSV", "Profitabilnost po valuti, filteri, PDF/CSV", "Ziskovosť podľa meny, filtre, PDF/CSV"] },
-  { path: "/project-costs", label: ["Project Costs", "Troškovi projekata", "Náklady projektov"],
+  { path: "/project-costs", nav: "Project Costs",
     hint: ["All project costs, Excel/CSV/PDF", "Svi troškovi projekata, Excel/CSV/PDF", "Všetky náklady projektov, Excel/CSV/PDF"] },
-  { path: "/clients", label: ["Client Billing Overview", "Pregled obračuna klijentima", "Prehľad vyúčtovania klientom"],
+  { path: "/clients", nav: "Clients",
     hint: ["Internal billing, external invoices, client payments", "Interni obračun, eksterni računi, uplate klijenata", "Interné vyúčtovanie, externé faktúry, platby klientov"] },
-  { path: "/payroll/payables", label: ["Payables & Payments", "Obaveze i isplate", "Záväzky a výplaty"],
+  { path: "/payroll/payables", nav: "Payables",
     hint: ["Calculated, paid and remaining per payee", "Obračunato, isplaćeno i preostalo po primaocu", "Vypočítané, vyplatené a zostávajúce podľa príjemcu"] },
-  { path: "/timesheet-dashboard", label: ["Timesheet Dashboard", "Pregled satnica", "Prehľad výkazov"],
+  { path: "/timesheet-dashboard", nav: "Timesheet Dashboard",
     hint: ["Approved hours by worker and day, Excel/PDF", "Odobreni sati po radniku i danu, Excel/PDF", "Schválené hodiny podľa pracovníka a dňa, Excel/PDF"] },
-  { path: "/assignments", label: ["Project Assignments", "Angažovanja na projektima", "Priradenia k projektom"],
-    hint: ["Filtered assignments, CSV/XLSX/PDF", "Filtrirana angažovanja, CSV/XLSX/PDF", "Filtrované priradenia, CSV/XLSX/PDF"] },
+  { path: "/assignments", nav: "Project Assignments",
+    hint: ["Filtered assignments, CSV/XLSX/PDF", "Filtrirani angažmani, CSV/XLSX/PDF", "Filtrované pridelenia, CSV/XLSX/PDF"] },
 ];
 
 function ReportLinks() {
   const L = useL();
+  const { lang } = useLang();
   const { permissions } = useAuth();
   const links = REPORT_LINKS.filter((r) => canAccessPath(r.path, permissions));
   if (!links.length) return null;
@@ -42,7 +44,7 @@ function ReportLinks() {
         {links.map((r) => (
           <Link key={r.path} to={r.path} className="group flex items-center justify-between gap-3 rounded-lg border px-3 py-2.5 hover:bg-muted/50 transition-colors">
             <span>
-              <span className="block text-sm font-medium">{L(...r.label)}</span>
+              <span className="block text-sm font-medium">{r.nav ? pageTitle(r.nav, lang) : L(...r.label)}</span>
               <span className="block text-xs text-muted-foreground">{L(...r.hint)}</span>
             </span>
             <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary" />

@@ -2,7 +2,7 @@
 // Koristi se na stranici /workforce (svi projekti) i na kartici Workforce Plan projekta (`projectId` zaključan).
 // Prava: čitanje svi koji vide projekat (RLS); izmene samo `workforce.manage` (dugmad se sklanjaju, baza odbija).
 import { useMemo, useState } from "react";
-import { CalendarClock, ChevronLeft, ChevronRight, Clock, Plus, ShieldOff } from "lucide-react";
+import { CalendarClock, ChevronLeft, ChevronRight, Clock, Plus, ShieldOff, UserCheck, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -11,8 +11,9 @@ import EmptyState from "@/components/shared/EmptyState";
 import { useAuth } from "@/lib/AuthContext";
 import { useLang } from "@/lib/LanguageContext";
 import { useL } from "@/lib/translations";
-import { formatDate } from "@/lib/dateFormat";
-import { VIEWS, coverageTotals, moveAnchor, viewRange } from "@/lib/workforceUi";
+import { formatDate, formatIsoDate } from "@/lib/dateFormat";
+import { VIEWS, coverageTotals, employeeName, moveAnchor, roleIdsForKey, viewRange, workforceStartState } from "@/lib/workforceUi";
+import { availableWorkers } from "@/lib/workforce";
 import CoverageDetail from "./CoverageDetail";
 import CoverageTable from "./CoverageTable";
 import GanttView from "./GanttView";
@@ -41,15 +42,9 @@ function Kpi({ label, value, tone, testid }) {
   );
 }
 
-// Početni prikaz iz adrese (Dashboard linkovi, listLinks.js): from/to određuju prikaz (1 dan, do 7 dana, duže = mesec).
-function initialView(from, to) {
-  if (!from) return { view: "week", anchor: todayIso() };
-  if (!to || to <= from) return { view: from ? "week" : "week", anchor: from };
-  const days = Math.round((new Date(to) - new Date(from)) / 86400000) + 1;
-  return { view: days <= 7 ? "week" : "month", anchor: from };
-}
-
-export default function WorkforcePlanner({ projectId: lockedProject = null, initialProject = "", initialFrom = "", initialTo = "", initialClient = "", initialPstatus = "" }) {
+// Početno stanje iz adrese (listLinks.js): view=available|shortages, date, from/to, role, shift — vidi workforceStartState.
+export default function WorkforcePlanner({ projectId: lockedProject = null, initialProject = "", initialFrom = "", initialTo = "", initialClient = "", initialPstatus = "",
+  initialView = "", initialDate = "", initialRole = "", initialShift = "" }) {
   const L = useL();
   const { lang } = useLang();
   const { can } = useAuth();
@@ -57,10 +52,12 @@ export default function WorkforcePlanner({ projectId: lockedProject = null, init
 
   const [projectFilter, setProjectFilter] = useState(initialProject || ALL);
   const projectId = lockedProject || (projectFilter === ALL ? null : projectFilter);
-  const start = useMemo(() => initialView(initialFrom, initialTo), []); // eslint-disable-line react-hooks/exhaustive-deps
+  const start = useMemo(() => workforceStartState({ view: initialView, date: initialDate, from: initialFrom, to: initialTo, today: todayIso() }), []);
   const [view, setView] = useState(start.view);
   const [anchor, setAnchor] = useState(start.anchor);
-  const [tab, setTab] = useState("gantt");
+  const [tab, setTab] = useState(start.tab);
+  const [roleKey, setRoleKey] = useState(initialRole || "");
+  const [availableAsk, setAvailableAsk] = useState(start.availableDate ? { date: start.availableDate, shiftId: initialShift || null } : null);
   const [selection, setSelection] = useState(null);
   const [reqDialog, setReqDialog] = useState(null); // { requirement?, defaults? }
   const [shiftsOpen, setShiftsOpen] = useState(false);
@@ -68,12 +65,29 @@ export default function WorkforcePlanner({ projectId: lockedProject = null, init
   const { from, to } = useMemo(() => viewRange(view, anchor), [view, anchor]);
   const raw = useWorkforceData({ from, to, projectId });
   // Filteri iz adrese (client, pstatus): sužavaju projekte i njihovu pokrivenost.
+  // Filter Job Role iz adrese (role = title_key): sužava potrebe i pokrivenost na uloge tog naziva.
   const data = useMemo(() => {
-    if (!initialClient && !initialPstatus) return raw;
+    const roleIds = roleIdsForKey(raw.roles, roleKey);
+    if (!initialClient && !initialPstatus && !roleIds) return raw;
     const projects = raw.projects.filter((p) => (!initialClient || p.client_id === initialClient) && (!initialPstatus || p.status === initialPstatus));
     const ids = new Set(projects.map((p) => p.id));
-    return { ...raw, projects, coverageRows: raw.coverageRows.filter((r) => ids.has(r.projectId)), requirements: raw.requirements.filter((q) => ids.has(q.project_id)) };
-  }, [raw, initialClient, initialPstatus]);
+    const keep = (projectIdOf, roleIdOf) => (x) => ids.has(projectIdOf(x)) && (!roleIds || roleIds.has(roleIdOf(x)));
+    return {
+      ...raw, projects,
+      coverageRows: raw.coverageRows.filter(keep((r) => r.projectId, (r) => r.projectRoleId)),
+      requirements: raw.requirements.filter(keep((q) => q.project_id, (q) => q.project_role_id)),
+    };
+  }, [raw, initialClient, initialPstatus, roleKey]);
+  // „Available workers" (Project Assignments Quick Insights): isti izračun kao kartica — availableWorkers (workforce.js).
+  const available = useMemo(() => {
+    if (!availableAsk || raw.isLoading) return null;
+    return availableWorkers({
+      date: availableAsk.date, shiftId: availableAsk.shiftId, roleKey: roleKey || null,
+      employees: raw.employees.filter((e) => e.status === "active"), assignments: raw.assignments,
+      schedules: raw.schedules, leaves: raw.leaves, shifts: raw.shifts, projectRoles: raw.roles,
+    });
+  }, [availableAsk, raw, roleKey]);
+  const roleLabel = roleKey ? raw.roles.find((r) => String(r.title_key ?? r.title ?? "").trim().toLowerCase() === roleKey.toLowerCase())?.title || roleKey : "";
   const totals = useMemo(() => coverageTotals(data.coverageRows), [data.coverageRows]);
 
   const rangeLabel =
@@ -149,7 +163,7 @@ export default function WorkforcePlanner({ projectId: lockedProject = null, init
           <Button variant="outline" size="sm" onClick={() => setAnchor(todayIso())}>{L("Today", "Danas", "Dnes")}</Button>
           <Button variant="outline" size="icon" aria-label={L("Next", "Sledeći", "Nasledujúci")} onClick={() => setAnchor((a) => moveAnchor(view, a, 1))}><ChevronRight className="h-4 w-4" /></Button>
         </div>
-        <span className="text-sm font-medium capitalize" data-testid="range-label">{rangeLabel}</span>
+        <span className="text-sm font-medium" data-testid="range-label">{rangeLabel.charAt(0).toUpperCase() + rangeLabel.slice(1)}</span>
         <div className="ml-auto flex gap-2">
           <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setShiftsOpen(true)}><Clock className="h-4 w-4" />{L("Shifts", "Smene", "Zmeny")}</Button>
           {canManage && (
@@ -159,6 +173,47 @@ export default function WorkforcePlanner({ projectId: lockedProject = null, init
           )}
         </div>
       </div>
+
+      {roleKey && (
+        <div className="flex flex-wrap items-center gap-2 text-sm" data-testid="role-filter">
+          <span className="inline-flex items-center gap-1 rounded-full bg-accent px-2.5 py-0.5 text-accent-foreground">
+            {L("Job Role", "Job Role", "Pracovná rola")}: {roleLabel}
+            <button type="button" className="ml-0.5 rounded-full hover:text-foreground" aria-label={L("Clear Job Role filter", "Ukloni filter Job Role", "Zrušiť filter roly")} onClick={() => setRoleKey("")}>
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </span>
+        </div>
+      )}
+
+      {availableAsk && available && (
+        <section className="rounded-xl border bg-card p-4 shadow-card" data-testid="available-workers">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <h3 className="flex items-center gap-1.5 text-sm font-semibold">
+              <UserCheck className="h-4 w-4 text-success" />
+              {L("Available workers", "Slobodni radnici", "Voľní pracovníci")} · {formatIsoDate(availableAsk.date, lang)}
+              {availableAsk.shiftId && ` · ${raw.shifts.find((x) => x.id === availableAsk.shiftId)?.name || ""}`}
+              {roleLabel && ` · ${roleLabel}`}
+              <span className="ml-1 rounded-full bg-success-soft px-2 py-0.5 text-xs text-success tabular-nums">{available.length}</span>
+            </h3>
+            <Button variant="ghost" size="icon" className="h-7 w-7" aria-label={L("Close", "Zatvori", "Zavrieť")} onClick={() => setAvailableAsk(null)}><X className="h-4 w-4" /></Button>
+          </div>
+          {available.length === 0 ? (
+            <p className="mt-2 text-sm text-muted-foreground">{L("Nobody is free for this day and shift.", "Niko nije slobodan za ovaj dan i smenu.", "Na tento deň a zmenu nie je nikto voľný.")}</p>
+          ) : (
+            <ul className="mt-2 flex flex-wrap gap-1.5">
+              {available.slice(0, 60).map((w) => {
+                const e = raw.employees.find((x) => x.id === w.employeeId);
+                return (
+                  <li key={w.employeeId} className={`rounded-full px-2.5 py-0.5 text-xs ${w.standby ? "bg-warning-soft text-warning" : "bg-muted text-foreground"}`}>
+                    {employeeName(e)}{w.standby ? ` · ${L("standby", "pripravnost", "pohotovosť")}` : ""}
+                  </li>
+                );
+              })}
+              {available.length > 60 && <li className="px-2 py-0.5 text-xs text-muted-foreground">+{available.length - 60}</li>}
+            </ul>
+          )}
+        </section>
+      )}
 
       {!canManage && (
         <p className="text-xs text-muted-foreground" data-testid="view-only">{L("View only — your role cannot change the workforce plan.", "Samo pregled — vaša uloga ne može da menja plan radne snage.", "Len na zobrazenie — vaša rola nemôže meniť plán pracovnej sily.")}</p>
@@ -198,7 +253,7 @@ export default function WorkforcePlanner({ projectId: lockedProject = null, init
           />
         </TabsContent>
         <TabsContent value="coverage" className="mt-4">
-          <CoverageTable data={data} projectId={projectId} onSelect={setSelection} />
+          <CoverageTable data={data} projectId={projectId} onSelect={setSelection} initialFilter={start.coverageFilter} />
         </TabsContent>
       </Tabs>
 

@@ -3,7 +3,7 @@ import { useLang } from "@/lib/LanguageContext";
 
 const LABELS = {
   en: {
-    title: "Payables", subtitle: "Calculated obligations to workers and vendors, and the payments actually made",
+    title: "Payables & Payments", subtitle: "Calculated obligations to workers and vendors, and the payments actually made",
     period: "Period", from: "From", to: "To", prevMonth: "Previous month", nextMonth: "Next month", thisMonth: "This month",
     generate: "Generate payables", generating: "Generating…",
     generateHint: "Creates or refreshes DRAFT payables for this period from approved timesheets. Confirmed payables are never changed.",
@@ -24,7 +24,7 @@ const LABELS = {
     emptyFiltered: "No payables match the filters.", loadError: "Payables could not be loaded.", retry: "Try again",
     noAccess: "You don't have access to payables", noAccessHint: "Payables and payments are visible to Finance and administrators (payroll.view).",
     problemsTitle: "Needs attention", problemsHint: "These are not included or differ from approved timesheets.",
-    pr_labor_problem: (who, week, d) => `${who}: approved timesheet for the week of ${week} has a problem (${d}) — the payee is skipped until it is fixed`,
+    pr_labor_problem: (who, week, d) => `${who}: approved timesheet for the week of ${week} has a problem: ${d}. The payee is skipped until it is fixed`,
     pr_period_overlap: (who, d) => `${who}: a payable for an overlapping period (${d}) already exists — no new one was created`,
     pr_confirmed_changed: (who, exp, act) => `${who}: confirmed payable is ${act}, approved timesheets now give ${exp} — add an adjustment with a reason`,
     pr_draft_outdated: (who, exp, act) => `${who}: draft is ${act}, approved timesheets now give ${exp} — generate again`,
@@ -85,7 +85,7 @@ const LABELS = {
     emptyFiltered: "Nijedna obaveza ne odgovara filterima.", loadError: "Obaveze nisu učitane.", retry: "Pokušaj ponovo",
     noAccess: "Nemate pristup obavezama", noAccessHint: "Obaveze i isplate vide Finance i administratori (payroll.view).",
     problemsTitle: "Potrebna pažnja", problemsHint: "Ovo nije uključeno ili se razlikuje od odobrenih satnica.",
-    pr_labor_problem: (who, week, d) => `${who}: odobrena satnica za nedelju od ${week} ima problem (${d}) — primalac se preskače dok se ne reši`,
+    pr_labor_problem: (who, week, d) => `${who}: odobrena satnica za nedelju od ${week} ima problem: ${d}. Primalac se preskače dok se ne reši`,
     pr_period_overlap: (who, d) => `${who}: već postoji obaveza za preklopljen period (${d}) — nova nije napravljena`,
     pr_confirmed_changed: (who, exp, act) => `${who}: potvrđena obaveza je ${act}, odobrene satnice sada daju ${exp} — unesite korekciju sa razlogom`,
     pr_draft_outdated: (who, exp, act) => `${who}: nacrt je ${act}, odobrene satnice sada daju ${exp} — generišite ponovo`,
@@ -146,7 +146,7 @@ const LABELS = {
     emptyFiltered: "Filtrom nezodpovedá žiadny záväzok.", loadError: "Záväzky sa nepodarilo načítať.", retry: "Skúsiť znova",
     noAccess: "Nemáte prístup k záväzkom", noAccessHint: "Záväzky a výplaty vidia Finance a administrátori (payroll.view).",
     problemsTitle: "Vyžaduje pozornosť", problemsHint: "Toto nie je zahrnuté alebo sa líši od schválených výkazov.",
-    pr_labor_problem: (who, week, d) => `${who}: schválený výkaz za týždeň od ${week} má problém (${d}) — príjemca sa preskočí, kým sa to nevyrieši`,
+    pr_labor_problem: (who, week, d) => `${who}: schválený výkaz za týždeň od ${week} má problém: ${d}. Príjemca sa preskočí, kým sa to nevyrieši`,
     pr_period_overlap: (who, d) => `${who}: záväzok za prekrývajúce sa obdobie (${d}) už existuje — nový nebol vytvorený`,
     pr_confirmed_changed: (who, exp, act) => `${who}: potvrdený záväzok je ${act}, schválené výkazy teraz dávajú ${exp} — pridajte korekciu s dôvodom`,
     pr_draft_outdated: (who, exp, act) => `${who}: koncept je ${act}, schválené výkazy teraz dávajú ${exp} — vygenerujte znova`,

@@ -4,6 +4,8 @@ Stanje: 14.11.2026. Ovaj opis služi da drugi AI napiše plan i uputstvo za test
 
 > **Ažurirano 14.11.2026 (posle QA prolaza i popravki).** Ponašanje opisano ispod je delom zastarelo — tačno stanje i šta je popravljeno je u `QA-FINDINGS.md` (odeljak „Popravke i ponovno testiranje"). Najvažnije razlike: poruke o uspehu i greškama se prikazuju; greške baze su razumljive (i na EN); iznose satnice računa baza (D16); satnica bez tarife ostaje prazna i ne može da se odobri; izveštaji vezuju satnice po `project_id`/`client_id`; zaštita admin stranica ne zavisi od velikih slova; mobilni meni ima sve stavke; oba pada (masovna izmena radnika, prazan datum u Pregledu radnih sati) su popravljena; obrisani fajlovi se brišu iz Storage-a; spiskovi se čitaju bez granice od 500/1000 redova. U §9 su rešene stavke označene sa ✅.
 
+> **Korisnička uputstva** (Assignments, Timesheet Approval, Payables, Billing Overview, Onboarding ZIP, Odsustva i zamene, Dashboard): [docs/UPUTSTVA.md](docs/UPUTSTVA.md).
+
 ---
 
 ## 1. Šta je aplikacija

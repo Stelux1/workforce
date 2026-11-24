@@ -144,7 +144,7 @@ const dmy = (iso) => `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}`
 const CALC_TEXT = {
   rs: {
     no_project: () => "satnica nije vezana za projekat sa liste",
-    assignment_missing: () => "radnik nema dodelu na projektu koja pokriva sve dane sa satima — dodajte je u Assignments",
+    assignment_missing: () => "radnik nema dodelu na projektu koja pokriva sve dane sa satima — dodajte je u Angažmani na projektima",
     assignment_ambiguous: () => "više dodela pokriva ove dane — izaberite dodelu",
     outside_assignment: (g) => `dani van perioda dodele: ${g.dates.map(dmy).join(", ")}`,
     rate_missing: (g) => `nema tarife ${SIDE_TEXT.rs[g.side] || ""} za ${g.dates.map(dmy).join(", ")} — Finance je upisuje u Rate History`,
@@ -154,7 +154,7 @@ const CALC_TEXT = {
   },
   sk: {
     no_project: () => "výkaz nie je prepojený s projektom zo zoznamu",
-    assignment_missing: () => "zamestnanec nemá na projekte pridelenie, ktoré pokrýva všetky dni s hodinami — pridajte ho v Assignments",
+    assignment_missing: () => "zamestnanec nemá na projekte pridelenie, ktoré pokrýva všetky dni s hodinami — pridajte ho v Pridelenia na projektoch",
     assignment_ambiguous: () => "tieto dni pokrýva viac pridelení — vyberte pridelenie",
     outside_assignment: (g) => `dni mimo obdobia pridelenia: ${g.dates.map(dmy).join(", ")}`,
     rate_missing: (g) => `chýba sadzba ${SIDE_TEXT.sk[g.side] || ""} pre ${g.dates.map(dmy).join(", ")} — Finance ju zadá v Rate History`,
@@ -164,7 +164,7 @@ const CALC_TEXT = {
   },
   en: {
     no_project: () => "the timesheet is not linked to a project from the list",
-    assignment_missing: () => "the employee has no assignment on the project covering all days with hours — add it in Assignments",
+    assignment_missing: () => "the employee has no assignment on the project covering all days with hours — add it in Project Assignments",
     assignment_ambiguous: () => "several assignments cover these days — choose the assignment",
     outside_assignment: (g) => `days outside the assignment period: ${g.dates.map(dmy).join(", ")}`,
     rate_missing: (g) => `no ${SIDE_TEXT.en[g.side] || ""} rate for ${g.dates.map(dmy).join(", ")} — Finance enters it in Rate History`,

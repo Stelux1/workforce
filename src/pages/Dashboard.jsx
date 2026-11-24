@@ -18,7 +18,7 @@ import { useT, useL } from "@/lib/translations";
 import { useLang } from "@/lib/LanguageContext";
 import { formatDate } from "@/lib/dateFormat";
 import { canAccessPath } from "@/lib/access";
-import { listUrl } from "@/lib/listLinks";
+import { listUrl, activeAssignmentsUrl } from "@/lib/listLinks";
 import { projectOnboarding, WORKER_STATUS } from "@/lib/onboarding";
 import { billingBalance, billingTotals, payableBalance, payablesTotals, unbilledRevenue } from "@/lib/finance";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -461,9 +461,9 @@ export default function Dashboard() {
       data={wf}
       loading={schedulesQ.isLoading || leavesQ.isLoading}
       error={schedulesQ.isError || leavesQ.isError || shiftsQ.isError}
-      assignmentsTo={listUrl("/assignments", { status: "active", ...noPeriod })}
-      projectTo={(r) => listUrl("/assignments", { status: "active", project: r.key })}
-      positionTo={() => listUrl("/assignments", { status: "active", ...noPeriod })}
+      assignmentsTo={activeAssignmentsUrl(noPeriod)}
+      projectTo={(r) => activeAssignmentsUrl({ project: r.key })}
+      positionTo={() => activeAssignmentsUrl(noPeriod)}
     />
   );
   const actionCard = <ActionCenter items={items} loading={actionLoading} error={actionFailed} />;
@@ -566,7 +566,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
         <TopTable title={t("Top Profitable Projects")} viewAllTo="/projects" columns={projectCols} rows={top.projects} />
         <TopTable title={t("Top Profitable Clients")} viewAllTo="/clients" columns={clientCols} rows={top.clients} />
-        <TopTable title={t("Top Profitable Workers")} viewAllTo={listUrl("/assignments", { status: "active", ...noPeriod })} columns={workerCols} rows={top.workers} />
+        <TopTable title={t("Top Profitable Workers")} viewAllTo={activeAssignmentsUrl(noPeriod)} columns={workerCols} rows={top.workers} />
       </div>
     </div>
   );

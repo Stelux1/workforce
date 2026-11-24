@@ -9,6 +9,9 @@ import { formatIsoDate } from "@/lib/dateFormat";
 import { shortageTotals } from "@/lib/replacements";
 import { ErrorNote } from "./common";
 
+// Naziv iz lokalnih podataka, a za projekat koji korisnik ne vidi (RLS) — naziv koji je poslala baza (`leave_shortage`).
+const named = (local, fromDb) => (local && local !== "—" ? local : fromDb || local || "—");
+
 export default function CapacityImpact({ rows, loading, error, lookups, snapshot = false }) {
   const L = useL();
   const { lang } = useLang();
@@ -66,9 +69,9 @@ export default function CapacityImpact({ rows, loading, error, lookups, snapshot
           <tbody>
             {rows.map((r) => (
               <tr key={`${r.projectId}|${r.projectRoleId}|${r.shiftId}|${r.date}`} className="border-t">
-                <td className="px-3 py-2">{lookups.project(r.projectId)}</td>
-                <td className="px-3 py-2">{lookups.role(r.projectRoleId)}</td>
-                <td className="px-3 py-2 whitespace-nowrap">{formatIsoDate(r.date, lang)} · {lookups.shift(r.shiftId)}</td>
+                <td className="px-3 py-2">{named(lookups.project(r.projectId), r.projectName)}</td>
+                <td className="px-3 py-2">{named(lookups.role(r.projectRoleId), r.roleTitle)}</td>
+                <td className="px-3 py-2 whitespace-nowrap">{formatIsoDate(r.date, lang)} · {named(lookups.shift(r.shiftId), r.shiftName)}</td>
                 <td className="px-3 py-2 text-right tabular-nums">{r.required}</td>
                 <td className="px-3 py-2 text-right tabular-nums">{r.available}</td>
                 <td className="px-3 py-2 text-right tabular-nums font-semibold text-destructive">

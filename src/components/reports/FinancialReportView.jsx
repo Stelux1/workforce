@@ -32,6 +32,7 @@ function useMoney() {
     locale,
     m: (amount, cur) => formatMoney(amount, cur, locale),
     h: (n) => `${Number(n || 0).toLocaleString(locale, { maximumFractionDigits: 2 })} h`,
+    pct: (n) => new Intl.NumberFormat(locale, { style: "percent", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n) / 100),
     d: (iso) => (iso ? formatIsoDate(String(iso).slice(0, 10), lang) : "—"),
   };
 }
@@ -92,7 +93,7 @@ function EmptyFlow({ status, what = ["this data", "ove podatke", "tieto údaje"]
 
 function SummaryTable({ summary, vis }) {
   const L = useL();
-  const { m } = useMoney();
+  const { m, pct } = useMoney();
   const curs = sortCurrencies(summary.currencies);
   const cols = [
     { key: "laborRevenue", label: L("Labor Revenue", "Prihod od rada", "Tržby z práce"), hint: L("Approved hours × B2B × client coefficient", "Odobreni sati × B2B × koeficijent klijenta", "Schválené hodiny × B2B × koeficient klienta") },
@@ -124,7 +125,7 @@ function SummaryTable({ summary, vis }) {
                   if (!vis[c.key]) return <td key={c.key} className="py-2 px-2 text-right"><Hidden /></td>;
                   const v = k[c.key];
                   if (c.key === "profitMargin") {
-                    return <td key={c.key} className="py-2 px-2 text-right tabular-nums">{v === null ? <span className="text-muted-foreground" title={L("Labor revenue is 0", "Prihod od rada je 0", "Tržby z práce sú 0")}>—</span> : `${v.toFixed(2)} %`}</td>;
+                    return <td key={c.key} className="py-2 px-2 text-right tabular-nums">{v === null ? <span className="text-muted-foreground" title={L("Labor revenue is 0", "Prihod od rada je 0", "Tržby z práce sú 0")}>—</span> : pct(v)}</td>;
                   }
                   const tone = c.key === "netProfit" || c.key === "laborMargin" ? (v < 0 ? "text-destructive" : "text-success") : "";
                   return <td key={c.key} className={`py-2 px-2 text-right tabular-nums font-semibold ${tone}`}>{m(v, cur)}</td>;
@@ -140,7 +141,7 @@ function SummaryTable({ summary, vis }) {
 
 function ConvertedPanel({ converted, vis }) {
   const L = useL();
-  const { m, d } = useMoney();
+  const { m, d, pct } = useMoney();
   if (!converted) return null;
   const c = converted;
   const item = (key, label) => (
@@ -148,7 +149,7 @@ function ConvertedPanel({ converted, vis }) {
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className="font-semibold tabular-nums">
         {!vis[key] ? <Hidden /> : c[key] === null ? <span className="text-warning">{L("not calculated", "nije izračunato", "nevypočítané")}</span>
-          : key === "profitMargin" ? `${c[key].toFixed(2)} %` : m(c[key], c.to)}
+          : key === "profitMargin" ? pct(c[key]) : m(c[key], c.to)}
       </p>
     </div>
   );

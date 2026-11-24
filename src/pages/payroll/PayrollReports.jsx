@@ -10,6 +10,7 @@ import StatusBadge from "@/components/shared/StatusBadge";
 import { parseISO } from "date-fns";
 import { useT, pick } from "@/lib/translations";
 import { useLang } from "@/lib/LanguageContext";
+import { pageTitle } from "@/lib/pageTitles";
 import { formatDate } from "@/lib/dateFormat";
 import { CalendarDays, Lock } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
@@ -345,7 +346,7 @@ export default function PayrollReports() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title={rs("Financial Reports", "Finansijski izveštaji", "Finančné prehľady")}
+      <PageHeader title={pageTitle("Payroll Reports", lang)}
         subtitle={rs("Managerial profitability by currency — internal calculation, separate from invoiced amounts, client payments and payouts.",
           "Menadžerska profitabilnost po valuti — interni obračun, odvojeno od fakturisanog, uplata klijenata i isplata.",
           "Manažérska ziskovosť podľa meny — interný výpočet, oddelene od fakturovaného, platieb klientov a výplat.")} />

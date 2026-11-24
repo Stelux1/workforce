@@ -50,6 +50,10 @@ export function normalizeCoverageRow(r) {
     available: Number(r.available ?? 0),
     deficit: Number(r.deficit ?? 0),
     surplus: Number(r.surplus ?? 0),
+    // Nazivi iz `leave_shortage` / snimka (i za projekte koje korisnik ne vidi, §14.1); samo kad ih baza pošalje.
+    ...(r.project_name != null ? { projectName: r.project_name } : {}),
+    ...(r.role_title != null ? { roleTitle: r.role_title } : {}),
+    ...(r.shift_name != null ? { shiftName: r.shift_name } : {}),
   };
 }
 

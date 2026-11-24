@@ -28,6 +28,7 @@ import { resolveAffiliation } from "@/lib/rateEngine";
 import { useL } from "@/lib/translations";
 import { assignmentWeekDays, employeesForProject } from "@/lib/projectSite";
 import { useLang } from "@/lib/LanguageContext";
+import { pageTitle } from "@/lib/pageTitles";
 import { formatDate } from "@/lib/dateFormat";
 import { useAuth } from "@/lib/AuthContext";
 import { readListParams } from "@/lib/listLinks";
@@ -96,7 +97,7 @@ const UI = {
     selectEmployeeError: "Select an employee",
     selectStatusError: "Select a status to apply",
     cost: "Cost", revenue: "Revenue", rev: "Rev", margin: "Margin", totalShort: "Total",
-    missingRate: "No rate for this employee at any level (Rates & Assignments, project, profile) — the row is saved without a rate and can't be approved until a rate is entered.",
+    missingRate: "No rate for this employee at any level (assignment in Project Assignments, Job Role, project) — the row is saved without a rate and can't be approved until a rate is entered.",
     noRate: "no rate",
     selectProjectError: "Select a project",
     hourType: { redovni: "Regular", prekovremeni: "Overtime", vikend: "Weekend", praznik: "Holiday", praznik_vikend: "Holiday on weekend" },
@@ -105,8 +106,8 @@ const UI = {
     rateOfWorker: "worker",
     rateOfClient: "client",
     missingCoef: (list) => `Missing coefficient for hour type: ${list} — an admin enters it in Settings → Coefficients & Holidays.`,
-    noRateFor: (sides) => `No ${sides} rate at any level for this week (Rates & Assignments, project, profile) — the timesheet can't be approved.`,
-    rateUnit: (amount, currency, unit) => `The chosen rate is ${amount} ${currency} / ${unit} — only EUR per hour can be used. Fix it in Rates & Assignments.`,
+    noRateFor: (sides) => `No ${sides} rate at any level for this week (assignment in Project Assignments, Job Role, project) — the timesheet can't be approved.`,
+    rateUnit: (amount, currency, unit) => `The chosen rate is ${amount} ${currency} / ${unit} — only EUR per hour can be used. Fix it in Project Assignments.`,
     and: " and ",
     skippedApproved: (n) => `${n} row(s) skipped — approved rows are corrected from the row details, and a draft needs an assignment to be submitted.`,
   },
@@ -163,7 +164,7 @@ const UI = {
     selectEmployeeError: "Izaberite radnika",
     selectStatusError: "Izaberite status",
     cost: "Trošak", revenue: "Prihod", rev: "Prihod", margin: "Marža", totalShort: "Ukupno",
-    missingRate: "Radnik nema tarifu ni na jednom nivou (Tarife i angažmani, projekat, profil) — unos se čuva bez tarife i ne može da se odobri dok se tarifa ne upiše.",
+    missingRate: "Radnik nema tarifu ni na jednom nivou (angažman u Angažmani na projektima, Job Role, projekat) — unos se čuva bez tarife i ne može da se odobri dok se tarifa ne upiše.",
     noRate: "nema tarife",
     selectProjectError: "Izaberite projekat",
     hourType: { redovni: "Redovni", prekovremeni: "Prekovremeni", vikend: "Vikend", praznik: "Praznik", praznik_vikend: "Praznik vikendom" },
@@ -172,8 +173,8 @@ const UI = {
     rateOfWorker: "radnika",
     rateOfClient: "klijenta",
     missingCoef: (list) => `Nedostaje koeficijent za vrstu sati: ${list} — admin ga upisuje u Podešavanja → Koeficijenti i praznici.`,
-    noRateFor: (sides) => `Nema tarife ${sides} ni na jednom nivou za ovu nedelju (Tarife i angažmani, projekat, profil) — satnica ne može da se odobri.`,
-    rateUnit: (amount, currency, unit) => `Izabrana tarifa je ${amount} ${currency} / ${unit} — obračun prima samo EUR po satu. Ispravite je u Tarifama i angažmanima.`,
+    noRateFor: (sides) => `Nema tarife ${sides} ni na jednom nivou za ovu nedelju (angažman u Angažmani na projektima, Job Role, projekat) — satnica ne može da se odobri.`,
+    rateUnit: (amount, currency, unit) => `Izabrana tarifa je ${amount} ${currency} / ${unit} — obračun prima samo EUR po satu. Ispravite je u Angažmanima na projektima.`,
     and: " i ",
     skippedApproved: (n) => `Preskočeno ${n} unosa — odobreni se koriguju iz detalja unosa, a nacrt bez dodele ne može da se pošalje.`,
   },
@@ -230,7 +231,7 @@ const UI = {
     selectEmployeeError: "Vyberte zamestnanca",
     selectStatusError: "Vyberte stav na použitie",
     cost: "Náklad", revenue: "Tržba", rev: "Trž.", margin: "Rozpätie", totalShort: "Spolu",
-    missingRate: "Pre tohto zamestnanca nie je sadzba na žiadnej úrovni (Sadzby a pridelenia, projekt, profil) — riadok sa uloží bez sadzby a nemožno ho schváliť, kým sa sadzba nezadá.",
+    missingRate: "Pre tohto zamestnanca nie je sadzba na žiadnej úrovni (pridelenie v Pridelenia na projektoch, Job Role, projekt) — riadok sa uloží bez sadzby a nemožno ho schváliť, kým sa sadzba nezadá.",
     noRate: "bez sadzby",
     selectProjectError: "Vyberte projekt",
     hourType: { redovni: "Bežné", prekovremeni: "Nadčas", vikend: "Víkend", praznik: "Sviatok", praznik_vikend: "Sviatok cez víkend" },
@@ -239,8 +240,8 @@ const UI = {
     rateOfWorker: "zamestnanca",
     rateOfClient: "klienta",
     missingCoef: (list) => `Chýba koeficient pre druh hodín: ${list} — zadáva ho administrátor v Nastaveniach → Koeficienty a sviatky.`,
-    noRateFor: (sides) => `Na tento týždeň nie je sadzba ${sides} na žiadnej úrovni (Sadzby a pridelenia, projekt, profil) — pracovný výkaz nemožno schváliť.`,
-    rateUnit: (amount, currency, unit) => `Vybraná sadzba je ${amount} ${currency} / ${unit} — možno použiť iba EUR za hodinu. Opravte ju v Sadzbách a pridelených.`,
+    noRateFor: (sides) => `Na tento týždeň nie je sadzba ${sides} na žiadnej úrovni (pridelenie v Pridelenia na projektoch, Job Role, projekt) — pracovný výkaz nemožno schváliť.`,
+    rateUnit: (amount, currency, unit) => `Vybraná sadzba je ${amount} ${currency} / ${unit} — možno použiť iba EUR za hodinu. Opravte ju v Prideleniach na projektoch.`,
     and: " a ",
     skippedApproved: (n) => `Preskočených riadkov: ${n} — schválené sa opravujú v detailoch riadku a koncept bez pridelenia nemožno odoslať.`,
   },
@@ -729,7 +730,7 @@ export default function Timesheets() {
   return (
     <div className="space-y-6">
       <PageHeader
-         title={T.title}
+         title={pageTitle("Timesheets", lang)}
          subtitle={T.subtitle}
          actionLabel={T.addRow}
          onAction={() => { setDialogOpen(true); setManualProject(false); setNewRowForm({}); }}

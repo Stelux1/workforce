@@ -10,6 +10,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import ConfirmDeleteDialog from "@/components/shared/ConfirmDeleteDialog";
 import { useAuth } from "@/lib/AuthContext";
+import { useStaffDirectory } from "@/hooks/useStaffDirectory";
+import { useL } from "@/lib/translations";
 import { formatDate, formatIsoDate } from "@/lib/dateFormat";
 import { roleLabel } from "@/lib/permissions";
 import {
@@ -35,6 +37,8 @@ function Stat({ label, hint, children, tone }) {
 
 export default function BillingSummaryDetail({ summary, data, canManage, T, lang, onClose }) {
   const { user } = useAuth();
+  const staff = useStaffDirectory();
+  const tr = useL();
   const invalidate = useInvalidateBilling();
   const [view, setView] = useState("lines");
   const [paying, setPaying] = useState(false);
@@ -87,8 +91,10 @@ export default function BillingSummaryDetail({ summary, data, canManage, T, lang
   const L = data.lookup;
   const exportData = () => billingExportData(summary, calc, { costs: linked, balance, lookup: L });
   const who = (h) => {
-    if (h.changed_by && h.changed_by === user?.id) return user.full_name || user.email;
-    return h.actorRole ? roleLabel(h.actorRole, lang) : "—";
+    const name = staff.name(h.changed_by) || (h.changed_by && h.changed_by === user?.id ? user.full_name || user.email : null);
+    const role = h.actorRole || staff.role(h.changed_by);
+    if (name) return role ? `${name} (${roleLabel(role, lang)})` : name;
+    return role ? roleLabel(role, lang) : "—";
   };
 
   const table = view === "lines" ? (
@@ -291,7 +297,8 @@ export default function BillingSummaryDetail({ summary, data, canManage, T, lang
                   <span className="w-24 shrink-0 text-muted-foreground">{formatIsoDate(p.payment_date, lang)}</span>
                   <span className="flex-1 min-w-0">
                     <span className={`block truncate ${p.voided_at ? "line-through" : ""}`}>{p.reference || "—"}{p.ext_invoice_reference ? ` · ${p.ext_invoice_reference}` : ""}</span>
-                    {p.voided_at && <span className="block text-xs text-destructive">{T.voided}: {p.void_reason}</span>}
+                    {p.voided_at && <span className="block text-xs text-destructive">{T.voided}: {p.void_reason}{staff.name(p.voided_by) ? ` · ${staff.name(p.voided_by)}` : ""}</span>}
+                    {staff.name(p.recorded_by) && <span className="block text-xs text-muted-foreground">{tr("Recorded by", "Evidentirao", "Zaevidoval")}: {staff.name(p.recorded_by)}</span>}
                     {p.notes && !p.voided_at && <span className="block text-xs text-muted-foreground truncate">{p.notes}</span>}
                   </span>
                   <span className={`tabular-nums font-medium ${p.voided_at ? "line-through" : ""}`}>{money(p.amount, p.currency, lang)}</span>

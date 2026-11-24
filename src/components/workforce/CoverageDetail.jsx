@@ -111,6 +111,7 @@ export default function CoverageDetail({ selection, data, canManage, onClose, on
                       need={{ projectId: selection.projectId, projectRoleId: selection.projectRoleId, roleKey: role?.title_key, shiftId: d.shiftId, from: selection.date, to: selection.date }}
                       role={role}
                       data={data}
+                      excludeEmployeeIds={d.absentWorkers.map((a) => a.employee.id)}
                     />
                   )}
                 </section>

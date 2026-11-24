@@ -239,3 +239,64 @@ export function qualifiedEmployeeIds({ role, assignments = [], projectRoles = []
   }
   return [...ids];
 }
+
+/**
+ * Ulaz za `rankCandidates` (src/lib/replacements.js) iz podataka ekrana Workforce Planning: isti skup polja kao
+ * Leave Requests (`useReplacementData`) — Job Roles projekta, potrebe (za uticaj na izvorni projekat), tipovi dokumenata,
+ * tarife samo uz `rates.view_b2c`. Bez `projectRoles` bi svaki kandidat bio `not_eligible` (uloga se ne prepoznaje).
+ * Odsutni radnici iz reda pokrivenosti (`excludeEmployeeIds`) se ne predlažu za sopstvenu smenu.
+ */
+export function workforceRankInput({ need, data, candidateIds = null, documents = [], requiredDocuments = [], documentTypes = [],
+  rates = null, canViewB2C = false, today = null, excludeEmployeeIds = [] }) {
+  const ids = candidateIds ? new Set(candidateIds) : null;
+  return {
+    need,
+    employees: (data.employees || []).filter((e) => !ids || ids.has(e.id)),
+    assignments: data.assignments || [],
+    schedules: data.schedules || [],
+    leaves: data.leaves || [],
+    shifts: data.shifts || [],
+    documents,
+    requiredDocuments,
+    documentTypes,
+    projects: data.projects || [],
+    projectRoles: data.roles || [],
+    requirements: data.requirements || [],
+    rates: canViewB2C && Array.isArray(rates) ? rates : null,
+    canViewB2C: Boolean(canViewB2C),
+    today: today || need?.from || null,
+    excludeEmployeeIds,
+  };
+}
+
+// ───────────────────────────── početno stanje iz adrese ─────────────────────────────
+
+const daysBetween = (from, to) => Math.round((dayMs(to) - dayMs(from)) / 86_400_000) + 1;
+
+/**
+ * Početni prikaz Workforce Planning-a iz parametara adrese (src/lib/listLinks.js), da link sa Dashboard-a, obaveštenja
+ * ili Project Assignments Quick Insights otvori isto što je kartica brojala:
+ *  - `view=available` + `date` (+ `shift`, `role`): dnevni prikaz tog dana, Gantt i spisak slobodnih radnika;
+ *  - `view=shortages` + `from`/`to` (+ `role`): kartica Coverage, samo redovi sa manjkom;
+ *  - samo `from`/`to`: 1 dan → dan, do 7 dana → nedelja, duže → mesec.
+ */
+export function workforceStartState({ view = "", date = "", from = "", to = "", today }) {
+  const byRange = () => {
+    if (!from) return { view: "week", anchor: today };
+    if (!to || to <= from) return { view: "day", anchor: from };
+    return { view: daysBetween(from, to) <= 7 ? "week" : "month", anchor: from };
+  };
+  if (view === "available") {
+    const day = date || from || today;
+    return { view: "day", anchor: day, tab: "gantt", coverageFilter: "all", availableDate: day };
+  }
+  if (view === "shortages") return { ...byRange(), tab: "coverage", coverageFilter: "deficit", availableDate: null };
+  return { ...byRange(), tab: "gantt", coverageFilter: "all", availableDate: null };
+}
+
+/** Id-jevi Job Role-ova sa datim ključem (`title_key`, ili naziv bez razlike velikih slova); prazan ključ → null (bez filtera). */
+export function roleIdsForKey(roles = [], key) {
+  const k = String(key || "").trim().toLowerCase();
+  if (!k) return null;
+  return new Set(roles.filter((r) => String(r.title_key ?? r.title ?? "").trim().toLowerCase() === k).map((r) => r.id));
+}

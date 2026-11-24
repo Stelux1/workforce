@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "@/lib/utils";
 import { useL } from "@/lib/translations";
 import { useLang } from "@/lib/LanguageContext";
+import { intlLocale } from "@/lib/dateFormat";
 import { formatDate, shortDatePattern } from "@/lib/dateFormat";
 import { STATUS_META, useAssignmentStatusLabels } from "./status";
 
@@ -21,6 +22,7 @@ const TOP_PROJECTS = 5;
 
 function StatusDonut({ breakdown, activeStatus, onPick }) {
   const L = useL();
+  const { lang } = useLang();
   const labels = useAssignmentStatusLabels();
   const data = breakdown.total
     ? breakdown.items.filter((i) => i.count > 0)
@@ -54,7 +56,7 @@ function StatusDonut({ breakdown, activeStatus, onPick }) {
                 <span className={cn("h-2.5 w-2.5 rounded-full", STATUS_META[i.status].swatch)} aria-hidden />
                 {labels[i.status]}
               </span>
-              <span className="font-medium tabular-nums">{i.count} <span className="text-muted-foreground">({i.pct.toFixed(1)}%)</span></span>
+              <span className="font-medium tabular-nums">{i.count} <span className="text-muted-foreground">({new Intl.NumberFormat(intlLocale(lang), { style: "percent", minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(i.pct / 100)})</span></span>
             </button>
           </li>
         ))}

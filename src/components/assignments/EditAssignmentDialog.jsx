@@ -94,25 +94,14 @@ export default function EditAssignmentDialog({ open, onOpenChange, assignment, t
       if ((form.end_date || null) !== (assignment.end_date || null)) patch.end_date = form.end_date || null;
       if ((form.default_shift_id || null) !== (assignment.default_shift_id || null)) patch.default_shift_id = form.default_shift_id || null;
       if ((form.notes || null) !== (assignment.notes || null)) patch.notes = form.notes || null;
-      if (Object.keys(patch).length > 0) {
-        await base44.rpc("update_assignment", { p_id: assignment.id, p: patch, p_reason: reason });
-      }
-      const end = form.end_date || null;
-      for (const side of rateChanges) {
-        const current = rateRowOn(ratesQ.data, side.kind, form.rate_from);
-        if (current) {
-          await base44.rpc("change_rate", {
-            p_rate: current.id, p_effective_from: form.rate_from, p_amount: side.input.amount, p_currency: side.input.currency, p_reason: reason,
-          });
-        } else {
-          await base44.rpc("set_rate", {
-            p: {
-              scope: "assignment", kind: side.kind, unit: "hourly", assignment_id: assignment.id, amount: side.input.amount,
-              currency: side.input.currency, effective_from: form.rate_from, effective_to: end, reason,
-            },
-          });
-        }
-      }
+      // Jedan RPC u jednoj transakciji (izmena dodele + tarife od datuma): greška vraća sve, ništa se ne upiše napola.
+      await base44.rpc("update_assignment_with_rates", {
+        p_id: assignment.id,
+        p: patch,
+        p_rates: rateChanges.map((side) => ({ kind: side.kind, amount: side.input.amount, currency: side.input.currency })),
+        p_rate_from: rateChanges.length > 0 ? form.rate_from : null,
+        p_reason: reason,
+      });
     },
     onSuccess: () => {
       invalidateAssignmentHistory(queryClient, assignment);
@@ -120,7 +109,6 @@ export default function EditAssignmentDialog({ open, onOpenChange, assignment, t
       onOpenChange(false);
     },
     onError: (e) => {
-      invalidateAssignmentHistory(queryClient, assignment); // deo izmena je možda već upisan
       toast.error(e.message);
     },
   });

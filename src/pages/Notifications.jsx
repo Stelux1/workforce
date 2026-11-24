@@ -14,6 +14,7 @@ import {
 } from "@/components/notifications/useNotifications";
 import { useL } from "@/lib/translations";
 import { useLang } from "@/lib/LanguageContext";
+import { pageTitle } from "@/lib/pageTitles";
 import { formatIsoDate } from "@/lib/dateFormat";
 import { cn } from "@/lib/utils";
 import {
@@ -167,7 +168,7 @@ export default function Notifications() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={L("Notifications", "Obaveštenja", "Upozornenia")}
+        title={pageTitle("Notifications", lang)}
         subtitle={
           isLoading ? "" : unread > 0
             ? L(`${unread} unread`, `${unread} nepročitano`, `${unread} neprečítaných`)

@@ -7,6 +7,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Ban, CheckCircle2, ExternalLink, Plus, Trash2, Undo2, Wallet } from "lucide-react";
 import { base44 } from "@/api/base44Client";
+import { useStaffDirectory } from "@/hooks/useStaffDirectory";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
   AlertDialogHeader, AlertDialogTitle,
@@ -43,8 +44,9 @@ function Section({ title, hint, action, children }) {
   );
 }
 
-export default function PayableDetail({ row, open, onOpenChange, T, lang, canManage, canRecord, employees, projects, users = [] }) {
+export default function PayableDetail({ row, open, onOpenChange, T, lang, canManage, canRecord, employees, projects }) {
   const queryClient = useQueryClient();
+  const staff = useStaffDirectory({ enabled: open });
   const [payOpen, setPayOpen] = useState(false);
   const [adjOpen, setAdjOpen] = useState(false);
   const [adjPreset, setAdjPreset] = useState({ amount: null, reason: "" });
@@ -84,8 +86,8 @@ export default function PayableDetail({ row, open, onOpenChange, T, lang, canMan
   const isConfirmed = p.status === "confirmed";
   const empById = new Map((employees || []).map((e) => [e.id, e]));
   const projectName = (id) => (projects || []).find((x) => x.id === id)?.name || T.noProject;
-  // Imena korisnika su vidljiva samo uz users.manage (RLS profila); bez toga se prikazuje samo datum.
-  const userName = (id) => { const u = (users || []).find((x) => x.id === id); return u ? u.full_name || u.email || null : null; };
+  // Imena osoblja iz staff_directory() (id, ime, uloga) — vidljiva svakom osoblju, ne samo uz users.manage.
+  const userName = staff.name;
   const join = (...parts) => parts.filter(Boolean).join(" · ");
   const workers = workerBreakdown(row, employees);
   const net = wantsNet && !runsLoading && !slipsLoading ? netComparison(row, { runs, payslips }) : null;
