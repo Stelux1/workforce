@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import PageHeader from "@/components/shared/PageHeader";
 import EmptyState from "@/components/shared/EmptyState";
@@ -27,7 +28,7 @@ export default function CostCategoriesSettings() {
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState(null);
-  const [form, setForm] = useState({ name: "", subcategories: [] });
+  const [form, setForm] = useState({ name: "", subcategories: [], payroll_linked: false });
   const [newSub, setNewSub] = useState("");
   const [editingSubKey, setEditingSubKey] = useState(null);
 
@@ -63,7 +64,7 @@ export default function CostCategoriesSettings() {
 
   const openNew = () => {
     setEditingCategory(null);
-    setForm({ name: "", subcategories: [] });
+    setForm({ name: "", subcategories: [], payroll_linked: false });
     setNewSub("");
     setEditingSubKey(null);
     setDialogOpen(true);
@@ -71,7 +72,7 @@ export default function CostCategoriesSettings() {
 
   const openEdit = (cat) => {
     setEditingCategory(cat);
-    setForm({ name: cat.name, subcategories: (cat.subcategories || []).map(toSubObject) });
+    setForm({ name: cat.name, subcategories: (cat.subcategories || []).map(toSubObject), payroll_linked: !!cat.payroll_linked });
     setNewSub("");
     setEditingSubKey(null);
     setDialogOpen(true);
@@ -119,7 +120,7 @@ export default function CostCategoriesSettings() {
   const handleSave = async () => {
     if (!form.name.trim()) { toast.error(L("Category name is required", "Naziv kategorije je obavezan", "Názov kategórie je povinný")); return; }
     // Kolona `translation` ostaje u bazi (bez gubitka podataka), ali se više ne unosi ni prikazuje (zahtev 6).
-    const data = { name: form.name.trim(), subcategories: form.subcategories };
+    const data = { name: form.name.trim(), subcategories: form.subcategories, payroll_linked: !!form.payroll_linked };
     if (editingCategory) {
       await updateMutation.mutateAsync({ id: editingCategory.id, data });
       toast.success(L("Category updated", "Kategorija ažurirana", "Kategória bola aktualizovaná"));
@@ -184,6 +185,7 @@ export default function CostCategoriesSettings() {
               <div className="flex items-start justify-between mb-3">
                 <div>
                   <h3 className="font-semibold text-base">{cat.name}</h3>
+                  {cat.payroll_linked && <Badge variant="outline" className="text-[10px] mt-1">{L("Labour — via Payroll", "Trošak rada — kroz Payroll", "Náklady na prácu — cez Payroll")}</Badge>}
                   <p className="text-xs text-muted-foreground">
                     {(cat.subcategories || []).length} {lang === "rs" ? "podkategorija" : lang === "sk" ? "podkategórií" : "subcategories"}
                   </p>
@@ -222,6 +224,7 @@ export default function CostCategoriesSettings() {
               <div className="flex items-center justify-between">
                 <div className="flex-1">
                   <h3 className="font-semibold text-base">{cat.name}</h3>
+                  {cat.payroll_linked && <Badge variant="outline" className="text-[10px] mt-1">{L("Labour — via Payroll", "Trošak rada — kroz Payroll", "Náklady na prácu — cez Payroll")}</Badge>}
                   <p className="text-xs text-muted-foreground mt-0.5">
                     {(cat.subcategories || []).length} {lang === "rs" ? "podkategorija" : lang === "sk" ? "podkategórií" : "subcategories"}
                   </p>
@@ -288,6 +291,18 @@ export default function CostCategoriesSettings() {
                 placeholder={L("e.g. Materials, Equipment...", "npr. Materials, Equipment...", "napr. Materiály, Vybavenie...")}
               />
             </div>
+
+            <label className="flex items-start gap-3 rounded-lg border p-3 cursor-pointer">
+              <Checkbox checked={!!form.payroll_linked} onCheckedChange={(v) => setForm(p => ({ ...p, payroll_linked: v === true }))} className="mt-0.5" />
+              <span>
+                <span className="text-sm font-medium">{L("Labour cost (goes through Payroll)", "Trošak rada (ide kroz Payroll)", "Náklady na prácu (idú cez Payroll)")}</span>
+                <span className="block text-xs text-muted-foreground">
+                  {L("Costs in this category can't be added as Project Costs — labour is counted from Timesheets/Payroll, so it is never counted twice.",
+                     "Troškovi u ovoj kategoriji ne mogu da se dodaju kao Troškovi projekta — trošak rada se računa iz Timesheets/Payroll, pa se nikad ne računa dvaput.",
+                     "Náklady v tejto kategórii nemožno pridať ako Náklady projektu — práca sa počíta z Timesheets/Payroll, takže sa nikdy nezapočíta dvakrát.")}
+                </span>
+              </span>
+            </label>
 
             <div className="space-y-2">
               <Label>{lang === "rs" ? "Podkategorije" : lang === "sk" ? "Podkategórie" : "Subcategories"}</Label>

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { projectAddress, employeesForProject, negativeLabourMargin, projectQueryKeys } from "@/lib/projectSite";
+import { projectAddress, employeesForProject, assignmentWeekDays, negativeLabourMargin, projectQueryKeys } from "@/lib/projectSite";
 
 const DEJAN = { id: "5b0c3f2e-8d1a-4c7e-9f00-0000000000d1", first_name: "Dejan", last_name: "Starcevic", status: "active" };
 const MARKO = { id: "5b0c3f2e-8d1a-4c7e-9f00-0000000000d2", first_name: "Marko", last_name: "Antic", status: "active" };
@@ -62,5 +62,37 @@ describe("negativna marža rada (spec §5)", () => {
     expect(negativeLabourMargin(45, null)).toBe(false);
     expect(negativeLabourMargin("", 50)).toBe(false);
     expect(negativeLabourMargin(45, 0)).toBe(false);
+  });
+});
+
+describe("employeesForProject iz dodela (Phase 7, §2.4)", () => {
+  const P = "a0000000-0000-4000-8000-0000000000p1";
+  const WEEK = "2034-03-06"; // pon–ned 6.–12.3.
+  const dodela = (o) => ({ id: o.id, employee_id: DEJAN.id, project_id: P, status: "active", start_date: "2034-01-01", end_date: null, ...o });
+
+  it("nudi dodele koje pokrivaju bar jedan dan nedelje; otkazana i tuđi projekat se ne nude", () => {
+    const assignments = [
+      dodela({ id: "A1" }),
+      dodela({ id: "A2", employee_id: MARKO.id, status: "cancelled" }),
+      dodela({ id: "A3", employee_id: MARKO.id, project_id: "drugi" }),
+      dodela({ id: "A4", employee_id: MARKO.id, start_date: "2034-03-13" }), // počinje posle nedelje
+      dodela({ id: "A5", employee_id: MARKO.id, end_date: "2034-03-05" }),   // završena pre nedelje
+    ];
+    const out = employeesForProject({ id: P }, [DEJAN, MARKO], { assignments, weekStart: WEEK });
+    expect(out.map((x) => x.assignment.id)).toEqual(["A1"]);
+  });
+
+  it("prelazak usred nedelje: dve dodele istog radnika su dve stavke, po početku", () => {
+    const assignments = [dodela({ id: "B2", start_date: "2034-03-09" }), dodela({ id: "B1", end_date: "2034-03-08" })];
+    const out = employeesForProject({ id: P }, [DEJAN], { assignments, weekStart: WEEK });
+    expect(out.map((x) => x.assignment.id)).toEqual(["B1", "B2"]);
+    expect(assignmentWeekDays(out[0].assignment, WEEK)).toEqual([0, 1, 2]);
+    expect(assignmentWeekDays(out[1].assignment, WEEK)).toEqual([3, 4, 5, 6]);
+    expect(assignmentWeekDays(null, WEEK)).toEqual([0, 1, 2, 3, 4, 5, 6]);
+  });
+
+  it("neaktivan radnik se ne nudi ni kad ima dodelu; bez nedelje → prazno", () => {
+    expect(employeesForProject({ id: P }, [BIVSI], { assignments: [dodela({ id: "C1", employee_id: BIVSI.id })], weekStart: WEEK })).toEqual([]);
+    expect(employeesForProject({ id: P }, [DEJAN], { assignments: [dodela({ id: "C2" })] })).toEqual([]);
   });
 });

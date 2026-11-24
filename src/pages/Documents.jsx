@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
-import { FileText, Upload, Trash2, Download, Search, Calendar, Eye } from "lucide-react";
+import { FileText, Upload, Trash2, Download, Search, Calendar, Eye, Lock, Settings2 } from "lucide-react";
 import ConfirmDeleteDialog from "@/components/shared/ConfirmDeleteDialog";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,10 @@ import { useUnsavedUpload } from "@/lib/useUnsavedUpload";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { parseISO } from "date-fns";
 import { formatDate, longDatePattern } from "@/lib/dateFormat";
-import { DOCUMENT_CATEGORIES, documentCategoryLabel } from "@/lib/documentCategories";
+import { documentCategoryLabel, documentTypeOptions, useDocumentTypes, useMyPermissions } from "@/lib/documentCategories";
+import { useAuth } from "@/lib/AuthContext";
+import { Switch } from "@/components/ui/switch";
+import DocumentTypesDialog from "@/components/documents/DocumentTypesDialog";
 import { useLang } from "@/lib/LanguageContext";
 import { toast } from "sonner";
 import PageHeader from "@/components/shared/PageHeader";
@@ -42,6 +45,12 @@ export default function Documents() {
   const [sort, setSort] = useState("title_asc");
   const [previewDoc, setPreviewDoc] = useState(null);
   const [deleteDocId, setDeleteDocId] = useState(null);
+  const [typesOpen, setTypesOpen] = useState(false);
+  const { data: docTypes = [] } = useDocumentTypes();
+  const { can } = useMyPermissions(useAuth());
+  const typeOptions = documentTypeOptions(docTypes, lang);
+  const typeLabel = (code) => documentCategoryLabel(code, lang, docTypes);
+  const isSensitive = (doc) => doc.restricted || (docTypes.find((t) => t.code === doc.category)?.sensitive ?? false);
 
   const { data: documents = [], isLoading } = useQuery({
     queryKey: ["documents"],
@@ -101,6 +110,10 @@ export default function Documents() {
       toast.error(t("Please fill in all required fields"));
       return;
     }
+    if (form.issue_date && form.expiration_date && form.issue_date > form.expiration_date) {
+      toast.error(L("The issue date can't be after the expiration date.", "Datum izdavanja ne može biti posle datuma isteka.", "Dátum vydania nemôže byť po dátume platnosti."));
+      return;
+    }
     createMutation.mutate(form);
   };
 
@@ -137,6 +150,11 @@ export default function Documents() {
         actionLabel={t("Upload Document")}
         onAction={() => { setForm({}); setUploadFailed(false); setDialogOpen(true); }}
       >
+        {can("settings.manage") && (
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setTypesOpen(true)}>
+            <Settings2 className="w-4 h-4" /> {L("Document types", "Vrste dokumenata", "Typy dokumentov")}
+          </Button>
+        )}
         <ViewToggle view={view} onViewChange={setView} />
       </PageHeader>
 
@@ -151,8 +169,8 @@ export default function Documents() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">{t("All Categories")}</SelectItem>
-            {DOCUMENT_CATEGORIES.map((c) => (
-              <SelectItem key={c.value} value={c.value}>{documentCategoryLabel(c.value, lang)}</SelectItem>
+            {documentTypeOptions(docTypes, lang, catFilter).map((c) => (
+              <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -178,8 +196,11 @@ export default function Documents() {
                   <StatusBadge status={documentStatus(doc.expiration_date)} />
                 </div>
                 <p className="font-semibold text-sm truncate mb-1">{doc.title}</p>
-                <p className="text-xs text-muted-foreground capitalize mb-1">{documentCategoryLabel(doc.category, lang)}</p>
+                <p className="text-xs text-muted-foreground capitalize mb-1">{typeLabel(doc.category)}</p>
                 <p className="text-xs text-muted-foreground truncate">{getEmployeeName(doc.employee_id)}</p>
+                {doc.issue_date && (
+                  <p className="text-xs text-muted-foreground mt-2">{L("Issued", "Izdat", "Vydaný")} {formatDate(parseISO(doc.issue_date), longDatePattern(lang), lang)}</p>
+                )}
                 {doc.expiration_date && (
                   <div className="flex items-center gap-1 mt-2 text-xs text-muted-foreground">
                     <Calendar className="w-3 h-3" />
@@ -187,6 +208,7 @@ export default function Documents() {
                   </div>
                 )}
                 <div className="flex items-center gap-1 mt-3 pt-3 border-t">
+                  {doc.file_unavailable && <RestrictedFile sensitive={isSensitive(doc)} L={L} />}
                   {doc.file_url && (
                     <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => setPreviewDoc(doc)}>
                       <Eye className="w-3.5 h-3.5 text-purple-500" />
@@ -233,17 +255,19 @@ export default function Documents() {
                         <div>
                           <p className="font-medium text-sm">{doc.title}</p>
                           {doc.file_name && <p className="text-xs text-muted-foreground">{doc.file_name}</p>}
+                          {doc.issue_date && <p className="text-xs text-muted-foreground">{L("Issued", "Izdat", "Vydaný")} {formatDate(parseISO(doc.issue_date), longDatePattern(lang), lang)}</p>}
                         </div>
                       </div>
                     </td>
                     <td className="px-4 py-3 text-muted-foreground hidden sm:table-cell">{getEmployeeName(doc.employee_id)}</td>
-                    <td className="px-4 py-3 text-muted-foreground capitalize hidden md:table-cell">{documentCategoryLabel(doc.category, lang)}</td>
+                    <td className="px-4 py-3 text-muted-foreground capitalize hidden md:table-cell">{typeLabel(doc.category)}</td>
                     <td className="px-4 py-3 text-muted-foreground hidden lg:table-cell">
                       {doc.expiration_date ? formatDate(parseISO(doc.expiration_date), longDatePattern(lang), lang) : "—"}
                     </td>
                     <td className="px-4 py-3"><StatusBadge status={documentStatus(doc.expiration_date)} /></td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1 justify-end">
+                        {doc.file_unavailable && <RestrictedFile sensitive={isSensitive(doc)} L={L} />}
                         {doc.file_url && (
                           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setPreviewDoc(doc)}>
                             <Eye className="w-3.5 h-3.5 text-purple-500" />
@@ -268,6 +292,7 @@ export default function Documents() {
       )}
 
       <DocumentPreviewModal doc={previewDoc} open={!!previewDoc} onClose={() => setPreviewDoc(null)} />
+      {typesOpen && <DocumentTypesDialog open onClose={() => setTypesOpen(false)} types={docTypes} />}
       <ConfirmDeleteDialog
         open={!!deleteDocId}
         onClose={() => setDeleteDocId(null)}
@@ -300,15 +325,32 @@ export default function Documents() {
               <Select value={form.category || ""} onValueChange={(v) => setForm((p) => ({ ...p, category: v }))}>
                 <SelectTrigger id="doc-category"><SelectValue placeholder={t("Select category")} /></SelectTrigger>
                 <SelectContent>
-                  {DOCUMENT_CATEGORIES.map((c) => (
-                    <SelectItem key={c.value} value={c.value}>{documentCategoryLabel(c.value, lang)}</SelectItem>
+                  {typeOptions.map((c) => (
+                    <SelectItem key={c.value} value={c.value}>{c.label}{c.sensitive ? ` · ${L("sensitive", "osetljiv", "citlivý")}` : ""}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="doc-expiration">{t("Expiration Date")}</Label>
-              <Input id="doc-expiration" type="date" value={form.expiration_date || ""} onChange={(e) => setForm((p) => ({ ...p, expiration_date: e.target.value }))} />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="doc-issue">{L("Issue Date", "Datum izdavanja", "Dátum vydania")}</Label>
+                <Input id="doc-issue" type="date" value={form.issue_date || ""} onChange={(e) => setForm((p) => ({ ...p, issue_date: e.target.value }))} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="doc-expiration">{t("Expiration Date")}</Label>
+                <Input id="doc-expiration" type="date" value={form.expiration_date || ""} onChange={(e) => setForm((p) => ({ ...p, expiration_date: e.target.value }))} />
+              </div>
+            </div>
+            <div className="flex items-center justify-between gap-4 rounded-lg border p-3">
+              <div>
+                <Label htmlFor="doc-restricted">{L("Restricted access", "Ograničen pristup", "Obmedzený prístup")}</Label>
+                <p className="text-xs text-muted-foreground">
+                  {L("Only users allowed to see sensitive documents can open or export the file, whatever its type.",
+                    "Fajl otvaraju i izvoze samo korisnici sa pravom na osetljiva dokumenta, bez obzira na vrstu.",
+                    "Súbor môžu otvárať a exportovať len používatelia s oprávnením na citlivé dokumenty, bez ohľadu na typ.")}
+                </p>
+              </div>
+              <Switch id="doc-restricted" checked={Boolean(form.restricted)} onCheckedChange={(v) => setForm((p) => ({ ...p, restricted: v }))} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="doc-file">{t("File")}</Label>
@@ -335,5 +377,16 @@ export default function Documents() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+// Fajl postoji, ali ga storage ne izdaje ovom korisniku (osetljiv dokument bez prava, T19).
+function RestrictedFile({ sensitive, L }) {
+  return (
+    <span className="inline-flex items-center gap-1 text-xs text-muted-foreground px-1.5" title={sensitive
+      ? L("Sensitive document — you don't have permission to open the file.", "Osetljiv dokument — nemate pravo da otvorite fajl.", "Citlivý dokument — nemáte oprávnenie otvoriť súbor.")
+      : L("The file is not available.", "Fajl nije dostupan.", "Súbor nie je dostupný.")}>
+      <Lock className="w-3.5 h-3.5" /> {L("Restricted", "Ograničeno", "Obmedzené")}
+    </span>
   );
 }

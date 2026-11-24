@@ -13,7 +13,7 @@ insert into auth.users (id, email, instance_id, aud, role) values
   ('81111111-1111-4111-8111-111111111111', 'qa5-admin@radnici.local', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated'),
   ('82222222-2222-4222-8222-222222222222', 'qa5-operater@radnici.local', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated');
 update public.profiles set role = 'admin', active = true where id = '81111111-1111-4111-8111-111111111111';
-update public.profiles set role = 'operater', active = true where id = '82222222-2222-4222-8222-222222222222';
+update public.profiles set role = 'hr', active = true where id = '82222222-2222-4222-8222-222222222222';
 update public.work_rules set daily_regular_hours = 8;
 update public.hour_types set worker_coef = 1, client_coef = 1 where code = 'redovni';
 -- Parametri za 2034. (isti brojevi kao 2026) da test ne zavisi od onoga što je upisano u lokalnu bazu.
@@ -23,12 +23,9 @@ values ('2034-01-01', 0.10, 34221, 51297, 732820, 0.14, 0.0515, 0.0075, 0.10, 0.
 
 insert into public.clients (id, name) values ('c8000000-0000-4000-8000-0000000000c1', 'QA-5 klijent');
 insert into public.vendors (id, name) values ('e8000000-0000-4000-8000-0000000000e1', 'QA-5 dobavljač');
-insert into public.projects (id, name, client_name, assigned_employees) values
-  ('b8000000-0000-4000-8000-0000000000b1', 'QA-5 projekat 1', 'QA-5 klijent',
-   '[{"employee_id": "d8000000-0000-4000-8000-0000000000d1", "b2c_rate": 12, "b2b_rate": 20},
-     {"employee_id": "d8000000-0000-4000-8000-0000000000d2", "b2c_rate": 15, "b2b_rate": 24}]'),
-  ('b8000000-0000-4000-8000-0000000000b2', 'QA-5 projekat 2', 'QA-5 klijent',
-   '[{"employee_id": "d8000000-0000-4000-8000-0000000000d1", "b2c_rate": 14, "b2b_rate": 25}]');
+insert into public.projects (id, name, client_name) values
+  ('b8000000-0000-4000-8000-0000000000b1', 'QA-5 projekat 1', 'QA-5 klijent'),
+  ('b8000000-0000-4000-8000-0000000000b2', 'QA-5 projekat 2', 'QA-5 klijent');
 insert into public.employees (id, first_name, last_name, employee_id) values
   ('d8000000-0000-4000-8000-0000000000d1', 'QA-5', 'Zaposleni', 'QA-5-001'),
   ('d8000000-0000-4000-8000-0000000000d2', 'QA-5', 'Podizvođač', 'QA-5-002'),
@@ -36,12 +33,26 @@ insert into public.employees (id, first_name, last_name, employee_id) values
 insert into public.employment_history (employee_id, engagement_type, vendor_id, start_date) values
   ('d8000000-0000-4000-8000-0000000000d1', 'direct_employee', null, '2034-01-01'),
   ('d8000000-0000-4000-8000-0000000000d2', 'subcontractor_worker', 'e8000000-0000-4000-8000-0000000000e1', '2034-01-01');
+-- Phase 7: radnik na projektu = dodela (project_assignments), tarife samo u public.rates (B2C = cost, B2B = revenue)
+-- po dodeli — isti brojevi kao ranije u projects.assigned_employees (12/20, 14/25, 15/24).
+insert into public.project_assignments (id, employee_id, project_id, start_date, status) values
+  ('a8000000-0000-4000-8000-0000000000a1', 'd8000000-0000-4000-8000-0000000000d1', 'b8000000-0000-4000-8000-0000000000b1', '2034-01-01', 'active'),
+  ('a8000000-0000-4000-8000-0000000000a2', 'd8000000-0000-4000-8000-0000000000d1', 'b8000000-0000-4000-8000-0000000000b2', '2034-01-01', 'active'),
+  ('a8000000-0000-4000-8000-0000000000a3', 'd8000000-0000-4000-8000-0000000000d2', 'b8000000-0000-4000-8000-0000000000b1', '2034-01-01', 'active');
+insert into public.rates (scope, kind, amount, unit, currency, assignment_id, effective_from) values
+  ('assignment', 'cost', 12, 'hourly', 'EUR', 'a8000000-0000-4000-8000-0000000000a1', '2034-01-01'),
+  ('assignment', 'revenue', 20, 'hourly', 'EUR', 'a8000000-0000-4000-8000-0000000000a1', '2034-01-01'),
+  ('assignment', 'cost', 14, 'hourly', 'EUR', 'a8000000-0000-4000-8000-0000000000a2', '2034-01-01'),
+  ('assignment', 'revenue', 25, 'hourly', 'EUR', 'a8000000-0000-4000-8000-0000000000a2', '2034-01-01'),
+  ('assignment', 'cost', 15, 'hourly', 'EUR', 'a8000000-0000-4000-8000-0000000000a3', '2034-01-01'),
+  ('assignment', 'revenue', 24, 'hourly', 'EUR', 'a8000000-0000-4000-8000-0000000000a3', '2034-01-01');
 
 -- ───── admin odobrava satnice i zaključava mart ─────
 set local role authenticated;
 set local request.jwt.claims to '{"sub":"81111111-1111-4111-8111-111111111111","role":"authenticated"}';
 
--- 2034-02-27 je ponedeljak: pon/uto su februar, sre/čet (1.3. i 2.3.) mart.
+-- 2034-02-27 je ponedeljak: pon/uto su februar, sre/čet (1.3. i 2.3.) mart. b2c_rate/b2b_rate sa ekrana baza ignoriše
+-- (Phase 7) — tarife bira iz public.rates po datumu rada; brojevi su isti.
 insert into public.timesheets (id, employee_id, project_id, week_start, mon_hours, tue_hours, wed_hours, thu_hours, fri_hours,
                                b2c_rate, b2b_rate, approval_status) values
   ('f8000000-0000-4000-8000-0000000000f1', 'd8000000-0000-4000-8000-0000000000d1', 'b8000000-0000-4000-8000-0000000000b1',
@@ -158,13 +169,13 @@ select is((select count(*)::int from public.payroll_params), 0, 'operater ne vid
 select throws_ok($$insert into public.payroll_runs (month, eur_rsd_rate, params) values ('2034-03-01', 117.2, '{}')$$,
   '42501', null, 'operater ne može da napravi obračun (RLS)');
 select throws_ok($$select public.save_payroll_draft('2034-03-01', 117.2, (select p from qa5_params), '[]')$$,
-  '42501', 'Samo admin može da pravi obračun', 'operater ne može da generiše nacrt');
+  '42501', 'Nemate pravo „payroll.manage"', 'operater ne može da generiše nacrt');
 select throws_ok($$select public.payroll_run_problems((select id from public.payroll_runs limit 1))$$,
-  '42501', 'Samo admin može da vidi obračun', 'operater ne vidi probleme obračuna');
+  '42501', 'Nemate pravo „payroll.view"', 'operater ne vidi probleme obračuna');
 select throws_ok($$select public.approve_payroll_run('00000000-0000-4000-8000-000000000000')$$,
-  '42501', 'Samo admin može da odobri obračun', 'operater ne može da odobri obračun');
+  '42501', 'Nemate pravo „payroll.manage"', 'operater ne može da odobri obračun');
 select throws_ok($$select public.mark_payroll_paid('00000000-0000-4000-8000-000000000000')$$,
-  '42501', 'Samo admin može da označi isplatu', 'operater ne može da označi isplatu');
+  '42501', 'Nemate pravo „payroll.manage"', 'operater ne može da označi isplatu');
 update public.payroll_runs set notes = 'QA-5 operater';
 delete from public.payslips;
 

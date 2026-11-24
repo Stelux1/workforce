@@ -10,7 +10,8 @@ import { LanguageProvider } from '@/lib/LanguageContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import SetupRequired from '@/components/SetupRequired';
 import Login from '@/pages/Login';
-import { isAdminOnlyPath } from '@/lib/access';
+import { canAccessPath } from '@/lib/access';
+import { PermissionDenied } from '@/components/ProtectedRoute';
 import { supabaseConfigured } from '@/api/supabase';
 
 import AppLayout from '@/components/layout/AppLayout';
@@ -44,11 +45,11 @@ import GeneralSettings from '@/pages/GeneralSettings';
 import Vendors from '@/pages/Vendors';
 import RatesPage from '@/pages/rates/RatesPage';
 
-// Operater koji otvori adresu stranice samo za admina vraća se na početnu (D3).
+// Korisnik koji otvori adresu stranice za koju nema pravo vidi jasnu poruku (§15, src/lib/access.js ROUTE_PERMISSIONS).
 const AdminRouteGuard = ({ children }) => {
-  const { isAdmin } = useAuth();
+  const { permissions } = useAuth();
   const location = useLocation();
-  if (!isAdmin && isAdminOnlyPath(location.pathname)) return <Navigate to="/" replace />;
+  if (!canAccessPath(location.pathname, permissions)) return <PermissionDenied />;
   return children;
 };
 

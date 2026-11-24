@@ -199,3 +199,18 @@ describe("tarife samo admin (migracija 20261114240000)", () => {
     expect(describeError(fk("projects", "rates_project_id_fkey"), "en").text).toBe("The project has rates (Rates & Assignments), so it can't be deleted. An admin has to delete those rates first.");
   });
 });
+
+describe("prava (T-B, 42501 po pravu)", () => {
+  it("kod prava iz baze → naziv prava na jeziku korisnika", () => {
+    const e = { code: "42501", message: "Nemate pravo „payroll.manage\"" };
+    expect(describeError(e, "rs")).toEqual({ key: "missingPermission", text: "Nemate pravo za ovu radnju: Zaključavanje meseca, obračun, obaveze." });
+    expect(describeError(e, "en").text).toBe("You don't have the permission for this action: Lock months, run payroll, generate payables.");
+    expect(describeError({ code: "42501", message: 'Nemate pravo "rates.manage"' }, "sk").text).toContain("Zadávanie a zmena sadzieb");
+  });
+
+  it("poruke guard-ova uloga na engleskom", () => {
+    expect(describeError({ code: "42501", message: "Ulogu admin i nalog admina menja samo admin" }, "en").text)
+      .toBe("Only an admin can give or remove the admin role or change an admin's account.");
+    expect(describeError({ code: "42501", message: "Audit log se ne menja i ne briše" }, "rs").text).toBe("Audit log se ne menja i ne briše");
+  });
+});

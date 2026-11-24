@@ -165,21 +165,31 @@ function CoefficientsCard({ hourTypes, L }) {
 function DailyThresholdCard({ rules, L }) {
   const queryClient = useQueryClient();
   const [text, setText] = useState("8");
-  useEffect(() => { if (rules) setText(toText(rules.daily_regular_hours)); }, [rules]);
+  const [maxText, setMaxText] = useState("24");
+  useEffect(() => {
+    if (rules) {
+      setText(toText(rules.daily_regular_hours));
+      setMaxText(toText(rules.max_daily_hours ?? 24));
+    }
+  }, [rules]);
 
   const value = parseDailyHours(text);
+  const maxValue = parseDailyHours(maxText);
+  // Najviše sati u danu (spec §6) ne može biti manje od redovnog praga — baza proverava samo opseg 0–24.
+  const maxBelowThreshold = value !== null && maxValue !== null && maxValue < value;
+  const invalid = value === null || maxValue === null || maxBelowThreshold;
   const save = useMutation({
-    mutationFn: () => base44.entities.WorkRules.update(true, { daily_regular_hours: value }),
+    mutationFn: () => base44.entities.WorkRules.update(true, { daily_regular_hours: value, max_daily_hours: maxValue }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["work-rules"] });
-      toast.success(L("Daily threshold saved", "Dnevni prag je sačuvan", "Denný limit bol uložený"));
+      toast.success(L("Daily hours saved", "Dnevni sati su sačuvani", "Denné hodiny boli uložené"));
     },
   });
 
   return (
     <Card className="p-5 space-y-4">
       <div>
-        <h2 className="font-semibold text-base">{L("Daily threshold", "Dnevni prag", "Denný limit")}</h2>
+        <h2 className="font-semibold text-base">{L("Daily hours", "Dnevni sati", "Denné hodiny")}</h2>
         <p className="text-xs text-muted-foreground mt-1">
           {L(
             "Hours worked on a weekday above this threshold count as overtime.",
@@ -197,13 +207,36 @@ function DailyThresholdCard({ rules, L }) {
             className={`w-28 ${value === null ? "border-red-500" : ""}`}
           />
         </div>
-        <Button onClick={() => save.mutate()} disabled={value === null || save.isPending} className="gap-2">
+        <div className="space-y-1.5">
+          <Label htmlFor="max-daily-hours">{L("Maximum hours per day", "Najviše sati dnevno", "Najviac hodín za deň")}</Label>
+          <Input
+            id="max-daily-hours" type="number" step="0.25" min="0.25" max="24"
+            value={maxText} onChange={(e) => setMaxText(e.target.value)}
+            aria-invalid={maxValue === null || maxBelowThreshold}
+            className={`w-28 ${maxValue === null || maxBelowThreshold ? "border-red-500" : ""}`}
+          />
+        </div>
+        <Button onClick={() => save.mutate()} disabled={invalid || save.isPending} className="gap-2">
           <Save className="w-4 h-4" />
           {L("Save", "Sačuvaj", "Uložiť")}
         </Button>
       </div>
-      {value === null && (
+      <p className="text-xs text-muted-foreground">
+        {L(
+          "Maximum hours per day is the total of all of an employee's timesheets for one date, across all projects; a timesheet that would exceed it is rejected.",
+          "Najviše sati dnevno je zbir svih satnica radnika za jedan datum, na svim projektima; satnica koja bi ga prešla se odbija.",
+          "Najviac hodín za deň je súčet všetkých výkazov zamestnanca za jeden dátum na všetkých projektoch; výkaz, ktorý by ho prekročil, sa zamietne."
+        )}
+      </p>
+      {(value === null || maxValue === null) && (
         <p className="text-xs text-red-600">{L("Enter a number greater than 0 and at most 24.", "Unesite broj veći od 0, najviše 24.", "Zadajte číslo väčšie ako 0, najviac 24.")}</p>
+      )}
+      {maxBelowThreshold && (
+        <p className="text-xs text-red-600">{L(
+          "Maximum hours per day can't be lower than regular hours per day.",
+          "Najviše sati dnevno ne može biti manje od redovnih sati dnevno.",
+          "Najviac hodín za deň nemôže byť menej ako bežné hodiny za deň."
+        )}</p>
       )}
     </Card>
   );

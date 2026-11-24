@@ -8,7 +8,7 @@ insert into auth.users (id, email, instance_id, aud, role) values
   ('13111111-1111-4111-8111-111111111111', 'qa13-admin@radnici.local', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated'),
   ('13222222-2222-4222-8222-222222222222', 'qa13-operater@radnici.local', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated');
 update public.profiles set role = 'admin', active = true where id = '13111111-1111-4111-8111-111111111111';
-update public.profiles set role = 'operater', active = true where id = '13222222-2222-4222-8222-222222222222';
+update public.profiles set role = 'hr', active = true where id = '13222222-2222-4222-8222-222222222222';
 
 -- ───── spisak sa slika 8 i 9 ─────
 select is(jsonb_array_length(public.default_cost_categories()), 12, '12 podrazumevanih kategorija');

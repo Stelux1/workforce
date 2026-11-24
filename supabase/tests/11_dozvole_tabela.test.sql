@@ -2,7 +2,10 @@
 --  * prijavljen korisnik (authenticated) ima select/insert/update/delete na svakoj tabeli u public — bez toga
 --    server vraća 403 i pre nego što RLS dođe na red (produkcija 22.11.2026: prijava je „vraćala na početak");
 --  * neprijavljen (anon) nema nijednu dozvolu ni na jednoj tabeli;
---  * tabela iz neke buduće migracije dobija iste dozvole sama (podrazumevane dozvole za postgres).
+--  * tabela iz neke buduće migracije dobija iste dozvole sama (podrazumevane dozvole za postgres);
+--  * izuzeci namerno: audit_log (nepromenljiv, upisuje ga samo audit_row/audit_event) i migration_report (upisuju
+--    ga samo migracije; korisnik sa pravom samo označava rešeno) — migracija 20261125010000; timesheets (select samo
+--    nad kolonama bez iznosa, iznosi kroz view timesheet_money — T-A2, migracija 20261125040000, R6).
 begin;
 create extension if not exists pgtap with schema extensions;
 select plan(4);
@@ -11,6 +14,7 @@ select is(
   (select array_agg(c.relname order by c.relname)
      from pg_class c join pg_namespace n on n.oid = c.relnamespace
     where n.nspname = 'public' and c.relkind in ('r', 'p')
+      and c.relname not in ('audit_log', 'migration_report', 'timesheets', 'employee_private') -- T26: column grant (20261125040000)
       and not (has_table_privilege('authenticated', c.oid, 'select')
            and has_table_privilege('authenticated', c.oid, 'insert')
            and has_table_privilege('authenticated', c.oid, 'update')

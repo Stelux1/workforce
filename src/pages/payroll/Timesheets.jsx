@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
-import { ChevronLeft, ChevronRight, Check, X, Trash2, Send, Download, Eye, Clock, Pencil, Paperclip, FileText } from "lucide-react";
+import { ChevronLeft, ChevronRight, Check, X, Trash2, Send, Download, Eye, Clock, Pencil, Paperclip, FileText, AlertTriangle, Undo2, ListChecks } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,23 +20,20 @@ import { useViewPreference } from "@/hooks/useViewPreference";
 import SortSelect from "@/components/shared/SortSelect";
 import { exportTimesheetPDF } from "@/lib/timesheetPdf";
 import TimesheetPreviewModal from "@/components/timesheets/TimesheetPreviewModal";
-import NegativeMarginNote from "@/components/projects/NegativeMarginNote";
+import TimesheetDetailsDialog from "@/components/timesheets/TimesheetDetailsDialog";
 import { useUnsavedUpload } from "@/lib/useUnsavedUpload";
 import ConfirmDeleteDialog from "@/components/shared/ConfirmDeleteDialog";
 import { resolveAffiliation } from "@/lib/rateEngine";
-import { useT, useL } from "@/lib/translations";
-import { employeesForProject, negativeLabourMargin } from "@/lib/projectSite";
+import { useL } from "@/lib/translations";
+import { assignmentWeekDays, employeesForProject } from "@/lib/projectSite";
 import { useLang } from "@/lib/LanguageContext";
 import { formatDate } from "@/lib/dateFormat";
 import { useAuth } from "@/lib/AuthContext";
 import { totalHours as sumHours } from "@/lib/payroll/timesheet";
-import { MissingCoefficientError } from "@/lib/payroll/hours";
-import { MissingRateError } from "@/lib/payroll/monthly";
-import { RateUnitError } from "@/lib/payroll/rates";
+import { sum2 } from "@/lib/payroll/money";
 import {
-  approvalPayload, dailyThresholdOf, dayHours, draftRates, hoursByTypeOf, isMoneyError, overtimeHours, previewAmounts,
+  calcProblemText, canApprove, canSubmit, dailyThresholdOf, dayHours, estimateTotals, groupedProblems, hoursByTypeOf, overtimeHours,
 } from "@/lib/payroll/timesheetRow";
-import { loadHourRules, loadRateInputs } from "@/lib/timesheetInputs";
 
 const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 const DAY_LABELS_EN = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -109,7 +106,7 @@ const UI = {
     noRateFor: (sides) => `No ${sides} rate at any level for this week (Rates & Assignments, project, profile) — the timesheet can't be approved.`,
     rateUnit: (amount, currency, unit) => `The chosen rate is ${amount} ${currency} / ${unit} — only EUR per hour can be used. Fix it in Rates & Assignments.`,
     and: " and ",
-    skippedApproved: (n) => `${n} approved row(s) skipped — only an admin can change them.`,
+    skippedApproved: (n) => `${n} row(s) skipped — approved rows are corrected from the row details, and a draft needs an assignment to be submitted.`,
   },
   rs: {
     title: "Radni sati",
@@ -176,7 +173,7 @@ const UI = {
     noRateFor: (sides) => `Nema tarife ${sides} ni na jednom nivou za ovu nedelju (Tarife i angažmani, projekat, profil) — satnica ne može da se odobri.`,
     rateUnit: (amount, currency, unit) => `Izabrana tarifa je ${amount} ${currency} / ${unit} — obračun prima samo EUR po satu. Ispravite je u Tarifama i angažmanima.`,
     and: " i ",
-    skippedApproved: (n) => `Preskočeno ${n} odobrenih unosa — njih može da menja samo admin.`,
+    skippedApproved: (n) => `Preskočeno ${n} unosa — odobreni se koriguju iz detalja unosa, a nacrt bez dodele ne može da se pošalje.`,
   },
   sk: {
     title: "Pracovné výkazy",
@@ -243,7 +240,7 @@ const UI = {
     noRateFor: (sides) => `Na tento týždeň nie je sadzba ${sides} na žiadnej úrovni (Sadzby a pridelenia, projekt, profil) — pracovný výkaz nemožno schváliť.`,
     rateUnit: (amount, currency, unit) => `Vybraná sadzba je ${amount} ${currency} / ${unit} — možno použiť iba EUR za hodinu. Opravte ju v Sadzbách a pridelených.`,
     and: " a ",
-    skippedApproved: (n) => `Preskočených schválených riadkov: ${n} — môže ich meniť iba administrátor.`,
+    skippedApproved: (n) => `Preskočených riadkov: ${n} — schválené sa opravujú v detailoch riadku a koncept bez pridelenia nemožno odoslať.`,
   },
 };
 
@@ -251,27 +248,22 @@ function getWeekStart(date) {
   return startOfWeek(date, { weekStartsOn: 1 });
 }
 
-// Zbir, vrste sati, tarife i iznosi dolaze iz src/lib/payroll (D11). Iznose, vrste sati i prekovremeno u bazi
-// računa guard_timesheet (D16) — ekran ih ne šalje, samo bira tarifu kroz jedinstveni izbor (rates.js).
+// Zbir i vrste sati dolaze iz src/lib/payroll (D11). Tarife po datumu rada, iznose, procenu i probleme obračuna
+// računa baza (guard_timesheet v4, D16/K12) — ekran šalje samo sate, dodelu i status. Iznose vidi samo korisnik sa
+// pravom (timesheet_money, T26); bez prava polja ne postoje u redu.
 const calcTotals = sumHours;
-const money = (v) => (v === null || v === undefined ? "—" : `€${Number(v).toFixed(0)}`);
 const hoursText = (v) => (v === null || v === undefined ? "—" : Number(v).toFixed(1));
-
-// Greška izbora tarife / koeficijenta kao rečenica za korisnika (EN/RS). MissingCoefficientError je i MissingRateError.
-function moneyErrorText(error, T) {
-  if (error instanceof MissingCoefficientError) {
-    const list = (error.coefficients || [])
-      .map((c) => `${T.hourType[c.code] || c.code} (${c.side === "worker" ? T.sideWorker : T.sideClient})`)
-      .join(", ");
-    return T.missingCoef(list);
+const CURRENCY_SIGN = { EUR: "€", GBP: "£", USD: "$" };
+/** Zbir po valuti, nikad jedan broj iz više valuta (K3): „€1.200 · £300". */
+function moneyByCurrency(items) {
+  const totals = new Map();
+  for (const { amount, currency } of items) {
+    if (amount === null || amount === undefined) continue;
+    const c = currency || "EUR";
+    totals.set(c, [...(totals.get(c) || []), amount]);
   }
-  if (error instanceof RateUnitError) return T.rateUnit(error.amount, error.currency, error.unit);
-  if (error instanceof MissingRateError) {
-    const fields = new Set((error.missing || []).map((m) => m.field));
-    const sides = [fields.has("workerRate") && T.rateOfWorker, fields.has("clientRate") && T.rateOfClient].filter(Boolean);
-    return T.noRateFor(sides.join(T.and) || `${T.rateOfWorker}${T.and}${T.rateOfClient}`);
-  }
-  return error?.message || String(error);
+  if (!totals.size) return "—";
+  return [...totals.entries()].map(([c, list]) => `${CURRENCY_SIGN[c] || `${c} `}${sum2(list).toFixed(0)}`).join(" · ");
 }
 
 // Generate the traceable week reference ID: e.g. 2026W20-EMP001
@@ -285,14 +277,13 @@ function makeWeekRef(weekDate, emp, projectNumber) {
 
 const statusColor = {
   draft: "bg-muted text-muted-foreground",
-  submitted: "bg-amber-100 text-amber-700",
-  approved: "bg-emerald-100 text-emerald-700",
-  rejected: "bg-red-100 text-red-700",
+  submitted: "bg-warning-soft text-warning",
+  approved: "bg-success-soft text-success",
+  rejected: "bg-destructive/10 text-destructive",
 };
 
 export default function Timesheets() {
   const queryClient = useQueryClient();
-  const t = useT();
   const { lang } = useLang();
   const pdfLang = lang;
   const [weekDate, setWeekDate] = useState(getWeekStart(new Date()));
@@ -310,10 +301,19 @@ export default function Timesheets() {
   const [confirmMassDelete, setConfirmMassDelete] = useState(false);
   const [uploadingFile, setUploadingFile] = useState(false);
   const [manualProject, setManualProject] = useState(false);
-  const [resolvingRates, setResolvingRates] = useState(false);
   const [approving, setApproving] = useState(false);
+  const [rejectIds, setRejectIds] = useState(null); // redovi koji se odbijaju (dijalog razloga)
+  const [rejectReason, setRejectReason] = useState("");
+  const [detailsTs, setDetailsTs] = useState(null);
 
-  const { isAdmin } = useAuth();
+  // Prava (T-B): ista pravila sprovodi baza (guard_timesheet, RLS, timesheet_money) — ovde samo prikaz dugmadi.
+  const { can } = useAuth();
+  const canEdit = can("timesheets.edit");
+  const canApprovePerm = can("timesheets.approve");
+  const canCorrect = can("timesheets.correct");
+  const seeB2C = can("rates.view_b2c");
+  const seeB2B = can("rates.view_b2b");
+  const perms = { canEdit, canApprove: canApprovePerm, canCorrect, seeB2C, seeB2B };
   const L = useL();
   const T = UI[lang] || UI.en;
   const DAY_LABELS = lang === "rs" ? DAY_LABELS_RS : lang === "sk" ? DAY_LABELS_SK : DAY_LABELS_EN;
@@ -355,10 +355,6 @@ export default function Timesheets() {
   });
 
   // Pravila razvrstavanja sati (D5) — vidi ih i operater; isti ključevi kao Podešavanja → Koeficijenti i praznici.
-  const { data: hourTypes = [] } = useQuery({
-    queryKey: ["hour-types"],
-    queryFn: () => base44.entities.HourType.list("sort", 20),
-  });
   const { data: workRules = [] } = useQuery({
     queryKey: ["work-rules"],
     queryFn: () => base44.entities.WorkRules.list(null, 1),
@@ -378,13 +374,28 @@ export default function Timesheets() {
     enabled: Boolean(dialogProjectId),
     staleTime: 0,
   });
+  // Dodele izabranog projekta (jedna evidencija angažmana, §2.4) — izbor radnika ide po dodeli koja pokriva nedelju.
+  const { data: dialogAssignments = [], isLoading: dialogAssignmentsLoading } = useQuery({
+    queryKey: ["project-assignments", "project", dialogProjectId],
+    queryFn: () => base44.entities.ProjectAssignment.filter({ project_id: dialogProjectId }, "start_date"),
+    enabled: Boolean(dialogProjectId),
+    staleTime: 0,
+  });
+
+  // Dodele redova ove nedelje (prikaz u detaljima satnice).
+  const weekAssignmentIds = [...new Set(timesheets.map((t) => t.assignment_id).filter(Boolean))].sort();
+  const { data: weekAssignments = [] } = useQuery({
+    queryKey: ["project-assignments", "ids", weekAssignmentIds.join(",")],
+    queryFn: () => base44.entities.ProjectAssignment.filter({ id: weekAssignmentIds }),
+    enabled: weekAssignmentIds.length > 0,
+  });
 
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.Timesheet.create(data),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["timesheets"] }); toast.success(T.rowAdded); attachmentUpload.commit(); setDialogOpen(false); setNewRowForm({}); },
   });
   // Kreira se posle mutacije da bi znao da li čuvanje traje (odbacivanje se tada odlaže).
-  const attachmentUpload = useUnsavedUpload(createMutation.isPending || resolvingRates);
+  const attachmentUpload = useUnsavedUpload(createMutation.isPending);
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.Timesheet.update(id, data),
@@ -444,32 +455,10 @@ export default function Timesheets() {
     setInlineEdits((prev) => ({ ...prev, [tsId]: { ...(prev[tsId] || {}), [field]: value } }));
   };
 
-  // Tarife nacrta kroz jedinstveni izbor tarife (rates.js), sveže iz baze. Nacrt se čuva i bez tarife (null, nikad 0);
-  // upozorenje vidi samo admin — operateru baza ne vraća Tarife ni profil radnika, pa ono za njega ne bi bilo tačno.
-  const resolveDraftRates = async (row) => {
-    const inputFor = await loadRateInputs([row], { isAdmin });
-    const { b2c_rate, b2b_rate, problems } = draftRates(inputFor(row));
-    if (isAdmin && problems.length) {
-      const unit = problems.find((p) => p instanceof RateUnitError);
-      toast.warning(unit ? moneyErrorText(unit, T) : T.missingRate, { duration: 10000 });
-    }
-    return { b2c_rate, b2b_rate };
-  };
-
-  const saveInlineRow = async (ts) => {
+  const saveInlineRow = (ts) => {
     const merged = { ...ts, ...(inlineEdits[ts.id] || {}) };
-    // Šalju se samo sati (prazno polje = 0); vrste sati, prekovremeno i iznose računa baza.
-    const data = { ...dayHours(merged), ...vendorSnapshot(merged.employee_id, merged.week_start) };
-    if (isAdmin) {
-      // Admin ponovo bira tarifu (Tarife su se možda promenile). Operater ne dira tarifu reda.
-      setResolvingRates(true);
-      try {
-        Object.assign(data, await resolveDraftRates(merged));
-      } finally {
-        setResolvingRates(false);
-      }
-    }
-    updateMutation.mutate({ id: ts.id, data });
+    // Šalju se samo sati (prazno polje = 0); vrste sati, tarife po danu, procenu i probleme računa baza.
+    updateMutation.mutate({ id: ts.id, data: { ...dayHours(merged), ...vendorSnapshot(merged.employee_id, merged.week_start) } });
   };
 
   const handleFileUpload = async (file) => {
@@ -484,71 +473,74 @@ export default function Timesheets() {
     }
   };
 
-  const handleAddRow = async () => {
+  const handleAddRow = () => {
     const emp = employees.find((e) => e.id === newRowForm.employee_id);
     if (!manualProject && !newRowForm._project_id) { toast.error(T.selectProjectError); return; }
     if (!emp) { toast.error(T.selectEmployeeError); return; }
     const selectedProject = projects.find((p) => p.id === newRowForm._project_id);
     const weekRef = makeWeekRef(weekDate, emp, selectedProject?.project_number);
-    // Strip internal _fields before saving
-    const { _project_id, _rates, ...formData } = newRowForm;
+    const { _project_id, _assignment_id, ...formData } = newRowForm;
     // Veza po ID-u (ranije samo po imenu — dva projekta istog imena su mešala satnice, QA 14.11.2026).
     const projectId = manualProject ? null : _project_id || null;
-    setResolvingRates(true);
-    try {
-      // Tarifa koja fali ostaje prazna (null), nikad 0 — takav red ne može da se odobri (D4/D11, baza).
-      const rates = await resolveDraftRates({ employee_id: emp.id, project_id: projectId, week_start: weekStartStr });
-      createMutation.mutate({
-        ...formData,
-        ...dayHours(newRowForm), // prazno polje = 0
-        project_id: projectId,
-        employee_name: `${emp.first_name} ${emp.last_name}`,
-        week_start: weekStartStr,
-        week_ref: weekRef,
-        ...rates,
-        approval_status: "draft",
-        ...vendorSnapshot(emp.id, weekStartStr),
-      });
-    } finally {
-      setResolvingRates(false);
+    // Tarife i iznose bira baza po datumu rada (K12); ekran ih ne šalje.
+    createMutation.mutate({
+      ...formData,
+      ...dayHours(newRowForm), // prazno polje = 0
+      project_id: projectId,
+      assignment_id: manualProject ? null : _assignment_id || null,
+      employee_name: `${emp.first_name} ${emp.last_name}`,
+      week_start: weekStartStr,
+      week_ref: weekRef,
+      approval_status: "draft",
+      ...vendorSnapshot(emp.id, weekStartStr),
+    });
+  };
+
+  // Promena statusa više redova: svaki red posebno (baza proverava prava i pravila), uz zbir uspelih i neuspelih.
+  const setStatus = async (rows, data) => {
+    const results = await Promise.allSettled(rows.map((r) => updateMutation.mutateAsync({ id: r.id, data })));
+    const failed = results.filter((r) => r.status === "rejected").length;
+    if (failed && rows.length > 1) {
+      toast.error(L(`${failed} of ${rows.length} rows were not changed.`, `${failed} od ${rows.length} unosa nije promenjeno.`, `${failed} z ${rows.length} riadkov sa nezmenilo.`));
     }
+    return rows.length - failed;
   };
 
-  // Pregled tarifa u dijalogu (samo admin): isti izbor tarife kao pri čuvanju. Stigne li odgovor za radnika koji
-  // više nije izabran, odbacuje se.
-  const previewDialogRates = async (employeeId, projectId) => {
-    const row = { employee_id: employeeId, project_id: projectId, week_start: weekStartStr };
-    const input = (await loadRateInputs([row], { isAdmin }))(row);
-    const { b2c_rate, b2b_rate } = draftRates(input);
-    const p = input.employeePrivate || {};
-    const special = { overtime_rate: p.overtime_rate, weekend_rate: p.weekend_rate, holiday_rate: p.holiday_rate };
-    setNewRowForm((f) => (f.employee_id === employeeId ? { ...f, _rates: { b2c_rate, b2b_rate, special } } : f));
-  };
-
-  // Odobravanje (samo admin, baza to i sprovodi): tarifa iz jedinstvenog izbora za nedelju reda, sveži koeficijenti,
-  // prag i praznici. Red kome fali tarifa ili koeficijent se ne šalje — admin dobija poruku šta tačno fali.
-  // Snimak koeficijenata i iznose upisuje baza; posle odobravanja promena tarife više ne menja red (D10).
+  // Odobravanje (timesheets.approve): baza bira tarifu po datumu rada, proverava dodelu, koeficijente i valutu i
+  // upisuje snimak v2. Red koji ima probleme obračuna se ne šalje — poruka kaže šta tačno fali.
   const approveRows = async (rows) => {
-    if (!isAdmin) return 0;
-    const todo = rows.filter((r) => r.approval_status !== "approved");
-    if (!todo.length) return 0;
+    if (!canApprovePerm) return 0;
+    const todo = rows.filter((r) => r.approval_status === "submitted" || r.approval_status === "draft");
+    const blocked = todo.filter((r) => !canApprove(r));
+    for (const r of blocked) {
+      const text = groupedProblems(r).map((g) => calcProblemText(g, lang)).join("; ");
+      toast.error(`${r.employee_name || r.week_ref || ""}: ${text}`, { duration: 12000 });
+    }
+    const ready = todo.filter((r) => canApprove(r));
+    if (!ready.length) return 0;
     setApproving(true);
     try {
-      const [inputFor, rules] = await Promise.all([loadRateInputs(todo, { isAdmin }), loadHourRules(todo)]);
-      const ready = [];
-      for (const ts of todo) {
-        try {
-          ready.push({ id: ts.id, data: approvalPayload({ ...inputFor(ts), ...rules, row: ts }).data });
-        } catch (error) {
-          if (!isMoneyError(error)) throw error;
-          toast.error(`${ts.employee_name || ts.week_ref || ""}: ${moneyErrorText(error, T)}`, { duration: 12000 });
-        }
-      }
-      await Promise.all(ready.map((p) => updateMutation.mutateAsync(p)));
-      return ready.length;
+      return await setStatus(ready, { approval_status: "approved" });
     } finally {
       setApproving(false);
     }
+  };
+
+  const submitRow = (ts) => {
+    if (!canSubmit(ts)) {
+      toast.error(groupedProblems(ts).map((g) => calcProblemText(g, lang)).join("; "), { duration: 12000 });
+      return;
+    }
+    updateMutation.mutate({ id: ts.id, data: { approval_status: "submitted" } });
+  };
+
+  const confirmReject = async () => {
+    const rows = weekTimesheets.filter((t) => rejectIds?.includes(t.id) && t.approval_status === "submitted");
+    const n = await setStatus(rows, { approval_status: "rejected", rejection_reason: rejectReason.trim() || null });
+    if (n) toast.success(T.updated(n, T.rejected));
+    setRejectIds(null);
+    setRejectReason("");
+    setSelected(new Set());
   };
 
   // Totals
@@ -557,14 +549,17 @@ export default function Timesheets() {
     return acc;
   }, {});
   const grandTotal = weekTimesheets.reduce((s, t) => s + (t.total_hours || 0), 0);
-  const totalCost = weekTimesheets.reduce((s, t) => s + (t.worker_cost || 0), 0);
-  const totalRevenue = weekTimesheets.reduce((s, t) => s + (t.client_revenue || 0), 0);
-  const totalProfit = weekTimesheets.reduce((s, t) => s + (t.profit || 0), 0);
-  // D11: red sa satima bez izračunatog iznosa (fali tarifa/koeficijent) nije 0 — broji se i prikazuje.
-  const hasHours = (t) => (Number(t.total_hours) || 0) > 0;
-  const missingCost = weekTimesheets.filter((t) => hasHours(t) && t.worker_cost == null).length;
-  const missingRevenue = weekTimesheets.filter((t) => hasHours(t) && t.client_revenue == null).length;
-  const missingProfit = Math.max(missingCost, missingRevenue);
+  // Konačni iznosi su samo iz odobrenih satnica (spec §6.04, T09); poslate i nacrti su odvojena procena.
+  const approvedRows = weekTimesheets.filter((t) => t.approval_status === "approved");
+  const pendingRows = weekTimesheets.filter((t) => t.approval_status === "submitted" || t.approval_status === "draft");
+  const approvedHours = approvedRows.reduce((s, t) => s + (Number(t.total_hours) || 0), 0);
+  const totalCost = moneyByCurrency(approvedRows.map((t) => ({ amount: t.worker_cost, currency: t.worker_currency })));
+  const totalRevenue = moneyByCurrency(approvedRows.map((t) => ({ amount: t.client_revenue, currency: t.client_currency })));
+  const totalProfit = moneyByCurrency(approvedRows.map((t) => ({ amount: t.profit, currency: t.worker_currency })));
+  const estimates = pendingRows.map((t) => ({ t, e: estimateTotals(t) }));
+  const estimateCost = moneyByCurrency(estimates.map(({ e }) => ({ amount: e?.workerCost ?? null, currency: e?.workerCurrency })));
+  const estimateRevenue = moneyByCurrency(estimates.map(({ e }) => ({ amount: e?.clientRevenue ?? null, currency: e?.clientCurrency })));
+  const withProblems = weekTimesheets.filter((t) => t.approval_status !== "approved" && groupedProblems(t).length > 0).length;
 
   const exportAllPDF = async () => {
     await exportTimesheetPDF(
@@ -591,18 +586,22 @@ export default function Timesheets() {
 
   const handleMassEditTs = async () => {
     if (!massStatus) { toast.error(T.selectStatusError); return; }
-    // Odobravanje i odbijanje sme samo admin (baza); odobravanje ide kroz isti izbor tarife kao dugme u redu.
-    if (!isAdmin && (massStatus === "approved" || massStatus === "rejected")) return;
     const rows = weekTimesheets.filter((t) => selected.has(t.id));
+    if (massStatus === "rejected") {
+      // Odbijanje traži dijalog razloga (isti kao za jedan red); odbija se samo poslato.
+      setMassEditOpen(false);
+      setRejectIds(rows.filter((t) => t.approval_status === "submitted").map((t) => t.id));
+      setMassStatus("");
+      return;
+    }
     let count;
     if (massStatus === "approved") {
       count = await approveRows(rows);
     } else {
-      // Operater ne menja odobrene redove (baza to odbija) — preskaču se uz poruku.
-      const editable = isAdmin ? rows : rows.filter((t) => t.approval_status !== "approved");
+      // Odobrene se ne menjaju (korekcija ide kroz detalje uz razlog); poslato iz nacrta prolazi samo uz dodelu.
+      const editable = rows.filter((t) => t.approval_status !== "approved" && (massStatus !== "submitted" || canSubmit(t)));
       if (editable.length < rows.length) toast.warning(T.skippedApproved(rows.length - editable.length));
-      await Promise.all(editable.map((t) => updateMutation.mutateAsync({ id: t.id, data: { approval_status: massStatus } })));
-      count = editable.length;
+      count = await setStatus(editable, { approval_status: massStatus });
     }
     queryClient.invalidateQueries({ queryKey: ["timesheets"] });
     toast.success(T.updated(count, T[massStatus] || massStatus));
@@ -631,6 +630,68 @@ export default function Timesheets() {
       projects
     );
     toast.success(T.pdfExported);
+  };
+
+  // Akcije reda po statusu i pravu (baza ih ponovo proverava): nacrt → Submit, poslato → Approve/Reject/nazad u
+  // nacrt, odbijeno → nazad u nacrt, odobreno → korekcija uz razlog (u detaljima, timesheets.correct).
+  const renderActions = (ts) => {
+    const status = ts.approval_status;
+    const problems = groupedProblems(ts);
+    const problemText = problems.map((g) => calcProblemText(g, lang)).join("\n");
+    const btn = "h-7 w-7";
+    return (
+      <>
+        {status !== "approved" && problems.length > 0 && (
+          <span className="inline-flex h-7 w-7 items-center justify-center text-warning" title={problemText} aria-label={problemText}>
+            <AlertTriangle className="w-3.5 h-3.5" />
+          </span>
+        )}
+        <Button size="icon" variant="outline" className={`${btn} text-primary`} onClick={() => setDetailsTs(ts)}
+          title={L("Details, intervals and corrections", "Detalji, intervali i korekcije", "Detaily, intervaly a opravy")}>
+          <ListChecks className="w-3 h-3" />
+        </Button>
+        <Button size="icon" variant="outline" className={`${btn} text-primary`} onClick={() => setPreviewTs(ts)} title="Preview">
+          <Eye className="w-3 h-3" />
+        </Button>
+        {canEdit && status !== "approved" && (
+          <Button size="icon" variant="outline" className={btn} onClick={() => setEditRow(ts.id)} title={L("Edit hours", "Izmeni sate", "Upraviť hodiny")}>
+            <Pencil className="w-3 h-3" />
+          </Button>
+        )}
+        {canEdit && status === "draft" && (
+          <Button size="icon" variant="outline" className={`${btn} text-warning`} onClick={() => submitRow(ts)}
+            title={canSubmit(ts) ? L("Submit for approval", "Pošalji na odobrenje", "Odoslať na schválenie") : problemText}>
+            <Send className="w-3 h-3" />
+          </Button>
+        )}
+        {canApprovePerm && status === "submitted" && (
+          <>
+            <Button size="icon" variant="outline" className={`${btn} text-success`} disabled={approving || !canApprove(ts)}
+              onClick={() => approveRows([ts])} title={canApprove(ts) ? L("Approve", "Odobri", "Schváliť") : problemText}>
+              <Check className="w-3 h-3" />
+            </Button>
+            <Button size="icon" variant="outline" className={`${btn} text-destructive`} onClick={() => setRejectIds([ts.id])}
+              title={L("Reject", "Odbij", "Zamietnuť")}>
+              <X className="w-3 h-3" />
+            </Button>
+          </>
+        )}
+        {canEdit && (status === "submitted" || status === "rejected") && (
+          <Button size="icon" variant="outline" className={btn} onClick={() => updateMutation.mutate({ id: ts.id, data: { approval_status: "draft" } })}
+            title={L("Back to draft", "Vrati u nacrt", "Vrátiť do konceptu")}>
+            <Undo2 className="w-3 h-3" />
+          </Button>
+        )}
+        <Button size="icon" variant="outline" className={`${btn} text-primary`} onClick={() => exportRowPDF(ts)} title="Export PDF">
+          <Download className="w-3 h-3" />
+        </Button>
+        {canEdit && status !== "approved" && (
+          <Button size="icon" variant="outline" className={`${btn} text-destructive`} onClick={() => setDeleteTsId(ts.id)} title={L("Delete", "Obriši", "Odstrániť")}>
+            <Trash2 className="w-3 h-3" />
+          </Button>
+        )}
+      </>
+    );
   };
 
   return (
@@ -673,28 +734,36 @@ export default function Timesheets() {
         <span className="text-xs text-muted-foreground ml-1">{isoYear}W{String(isoWeek).padStart(2, "0")}</span>
       </div>
 
-      {/* KPI row */}
+      {/* KPI row — iznosi samo uz pravo (T26); procena neodobrenih odvojeno (T09) */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
-          { label: T.totalHours, value: grandTotal.toFixed(1) + "h" },
-          // Novac vidi samo admin (D3); operater unosi sate.
-          ...(isAdmin
-            ? [
-                { label: T.workerCost, value: "€" + totalCost.toFixed(0), missing: missingCost },
-                { label: T.clientRevenue, value: "€" + totalRevenue.toFixed(0), missing: missingRevenue },
-                { label: T.profit, value: missingProfit ? "—" : "€" + totalProfit.toFixed(0), green: !missingProfit, missing: missingProfit },
-              ]
+          { label: T.totalHours, value: grandTotal.toFixed(1) + "h",
+            note: L(`approved ${approvedHours.toFixed(1)}h`, `odobreno ${approvedHours.toFixed(1)}h`, `schválené ${approvedHours.toFixed(1)}h`) },
+          ...(seeB2C ? [{ label: T.workerCost, value: totalCost, note: estimateCost !== "—" && L(`estimate ${estimateCost}`, `procena ${estimateCost}`, `odhad ${estimateCost}`) }] : []),
+          ...(seeB2B ? [{ label: T.clientRevenue, value: totalRevenue, note: estimateRevenue !== "—" && L(`estimate ${estimateRevenue}`, `procena ${estimateRevenue}`, `odhad ${estimateRevenue}`) }] : []),
+          ...(seeB2C && seeB2B ? [{ label: T.profit, value: totalProfit, green: totalProfit !== "—" }] : []),
+          ...(!(seeB2C || seeB2B) && withProblems > 0
+            ? [{ label: L("Needs attention", "Traži pažnju", "Vyžaduje pozornosť"), value: String(withProblems),
+                 note: L("rows that can't be approved yet", "unosa koji još ne mogu da se odobre", "riadkov, ktoré zatiaľ nemožno schváliť") }]
             : []),
         ].map((k) => (
-          <Card key={k.label}>
+          <Card key={k.label} className="shadow-card">
             <CardContent className="p-4">
               <p className="text-xs text-muted-foreground">{k.label}</p>
               <p className={`text-xl font-bold ${k.green ? "text-success" : ""}`}>{k.value}</p>
-              {k.missing > 0 && <p className="text-xs font-medium text-warning mt-0.5">{T.missingRate(k.missing)}</p>}
+              {k.note && <p className="text-xs text-muted-foreground mt-0.5">{k.note}</p>}
             </CardContent>
           </Card>
         ))}
       </div>
+      {(seeB2C || seeB2B) && withProblems > 0 && (
+        <p className="text-xs font-medium text-warning flex items-center gap-1.5">
+          <AlertTriangle className="w-3.5 h-3.5" />
+          {L(`${withProblems} row(s) can't be approved yet — open the row details to see why.`,
+             `${withProblems} unos(a) još ne može da se odobri — u detaljima unosa piše zašto.`,
+             `${withProblems} riadok(y) zatiaľ nemožno schváliť — dôvod je v detailoch riadku.`)}
+        </p>
+      )}
 
       {/* Main Content: Grid or List */}
       {view === "grid" ? (
@@ -710,7 +779,6 @@ export default function Timesheets() {
             {weekTimesheets.map((ts) => {
               const emp = employees.find((e) => e.id === ts.employee_id);
               const ref = ts.week_ref || makeWeekRef(weekDate, emp);
-              const isApproved = ts.approval_status === "approved";
               return (
                 <Card key={ts.id} className="hover:shadow-md transition-shadow">
                   <CardContent className="p-5">
@@ -749,7 +817,7 @@ export default function Timesheets() {
 
                     {/* Mini day bars */}
                     <div className="grid grid-cols-7 gap-0.5 mb-3">
-                      {dayLabelsWithDates.map(({ key, label, date, weekend }) => {
+                      {dayLabelsWithDates.map(({ key, label, weekend }) => {
                         const h = ts[`${key}_hours`] || 0;
                         return (
                           <div key={key} className="text-center">
@@ -768,48 +836,15 @@ export default function Timesheets() {
                             <span className="text-xs text-amber-600 font-normal ml-1">+{hoursText(overtimeHours(ts, hourRules))}{T.ot}</span>
                           )}
                         </div>
-                        {isAdmin && ts.profit > 0 && (
-                          <span className="text-xs text-emerald-600 font-semibold">€{ts.profit.toFixed(0)} {T.profit.toLowerCase()}</span>
+                        {ts.approval_status === "approved" && ts.profit !== null && ts.profit !== undefined && (
+                          <span className="text-xs text-success font-semibold">
+                            {moneyByCurrency([{ amount: ts.profit, currency: ts.worker_currency }])} {T.profit.toLowerCase()}
+                          </span>
                         )}
                     </div>
 
-                    <div className="flex items-center gap-1 mt-2 justify-end">
-                      {!isApproved && (
-                        <Button size="icon" variant="outline" className="h-7 w-7" onClick={() => setEditRow(ts.id)}>✏️</Button>
-                      )}
-                      {ts.approval_status === "draft" && (
-                        <Button size="icon" variant="outline" className="h-7 w-7 text-amber-600 border-amber-200"
-                          onClick={() => updateMutation.mutate({ id: ts.id, data: { approval_status: "submitted" } })}>
-                          <Send className="w-3 h-3" />
-                        </Button>
-                      )}
-                      {isAdmin && ts.approval_status === "submitted" && (
-                        <>
-                          <Button size="icon" variant="outline" className="h-7 w-7 text-emerald-600 border-emerald-200"
-                            disabled={approving} onClick={() => approveRows([ts])}>
-                            <Check className="w-3 h-3" />
-                          </Button>
-                          <Button size="icon" variant="outline" className="h-7 w-7 text-red-500 border-red-200"
-                            onClick={() => updateMutation.mutate({ id: ts.id, data: { approval_status: "rejected" } })}>
-                            <X className="w-3 h-3" />
-                          </Button>
-                        </>
-                      )}
-                      <Button size="icon" variant="outline" className="h-7 w-7 text-violet-500 border-violet-200"
-                        onClick={() => setPreviewTs(ts)} title="Preview">
-                        <Eye className="w-3 h-3" />
-                      </Button>
-                      <Button size="icon" variant="outline" className="h-7 w-7 text-blue-500 border-blue-200"
-                        onClick={() => exportRowPDF(ts)} title="Export PDF">
-                        <Download className="w-3 h-3" />
-                      </Button>
-
-                      {!isApproved && (
-                        <Button size="icon" variant="outline" className="h-7 w-7 text-red-400"
-                          onClick={() => setDeleteTsId(ts.id)}>
-                          <Trash2 className="w-3 h-3" />
-                        </Button>
-                      )}
+                    <div className="flex items-center gap-1 mt-2 justify-end flex-wrap">
+                      {renderActions(ts)}
                     </div>
                   </CardContent>
                 </Card>
@@ -907,54 +942,16 @@ export default function Timesheets() {
                         </td>
                         <td className="px-2 py-2">
                           <div className="flex items-center gap-1 justify-end">
-                            <Button size="icon" variant="outline" className="h-7 w-7 text-violet-500 border-violet-200"
-                              onClick={() => setPreviewTs(ts)} title="Preview">
-                              <Eye className="w-3 h-3" />
-                            </Button>
                             {isEditing ? (
                               <>
-                                <Button size="icon" className="h-7 w-7 bg-emerald-500 hover:bg-emerald-600" disabled={resolvingRates || updateMutation.isPending} onClick={() => saveInlineRow(ts)}>
+                                <Button size="icon" className="h-7 w-7 bg-success hover:bg-success/90" disabled={updateMutation.isPending} onClick={() => saveInlineRow(ts)}>
                                   <Check className="w-3 h-3" />
                                 </Button>
                                 <Button size="icon" variant="outline" className="h-7 w-7" onClick={() => { setEditRow(null); setInlineEdits((p) => { const n = { ...p }; delete n[ts.id]; return n; }); }}>
                                   <X className="w-3 h-3" />
                                 </Button>
                               </>
-                            ) : (
-                              <>
-                                {!isApproved && (
-                                  <Button size="icon" variant="outline" className="h-7 w-7" onClick={() => setEditRow(ts.id)}>✏️</Button>
-                                )}
-                                {ts.approval_status === "draft" && (
-                                  <Button size="icon" variant="outline" className="h-7 w-7 text-amber-600 border-amber-200"
-                                    onClick={() => updateMutation.mutate({ id: ts.id, data: { approval_status: "submitted" } })}>
-                                    <Send className="w-3 h-3" />
-                                  </Button>
-                                )}
-                                {isAdmin && ts.approval_status === "submitted" && (
-                                  <>
-                                    <Button size="icon" variant="outline" className="h-7 w-7 text-emerald-600 border-emerald-200"
-                                      disabled={approving} onClick={() => approveRows([ts])}>
-                                      <Check className="w-3 h-3" />
-                                    </Button>
-                                    <Button size="icon" variant="outline" className="h-7 w-7 text-red-500 border-red-200"
-                                      onClick={() => updateMutation.mutate({ id: ts.id, data: { approval_status: "rejected" } })}>
-                                      <X className="w-3 h-3" />
-                                    </Button>
-                                  </>
-                                )}
-                                <Button size="icon" variant="outline" className="h-7 w-7 text-blue-500 border-blue-200"
-                                  onClick={() => exportRowPDF(ts)} title="Export PDF">
-                                  <Download className="w-3 h-3" />
-                                </Button>
-                                {!isApproved && (
-                                  <Button size="icon" variant="outline" className="h-7 w-7 text-red-400"
-                                    onClick={() => setDeleteTsId(ts.id)}>
-                                    <Trash2 className="w-3 h-3" />
-                                  </Button>
-                                )}
-                              </>
-                            )}
+                            ) : renderActions(ts)}
                           </div>
                         </td>
                       </tr>
@@ -970,9 +967,10 @@ export default function Timesheets() {
                     <td className="px-2 py-2 text-center text-sm">{grandTotal.toFixed(1)}</td>
                     <td className="px-2 py-2 text-center text-xs text-amber-600">{weekTimesheets.reduce((s, t) => s + (overtimeHours(t, hourRules) || 0), 0).toFixed(1)}</td>
                     <td colSpan={2} className="px-2 py-2 text-right text-xs text-muted-foreground pr-4">
-                      {isAdmin && (
-                        <>{T.cost}: €{totalCost.toFixed(0)} · {T.rev}: €{totalRevenue.toFixed(0)} · <span className="text-emerald-600">{T.profit}: €{totalProfit.toFixed(0)}</span></>
-                      )}
+                      {seeB2C && <>{T.cost}: {totalCost}</>}
+                      {seeB2C && seeB2B && " · "}
+                      {seeB2B && <>{T.rev}: {totalRevenue}</>}
+                      {seeB2C && seeB2B && <> · <span className="text-success">{T.profit}: {totalProfit}</span></>}
                     </td>
                   </tr>
                 )}
@@ -994,11 +992,11 @@ export default function Timesheets() {
             <Select value={massStatus} onValueChange={setMassStatus}>
               <SelectTrigger><SelectValue placeholder={T.selectStatus} /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="draft">{T.draft}</SelectItem>
-                <SelectItem value="submitted">{T.submitted}</SelectItem>
-                {/* Odobrava i odbija samo admin (baza); operater menja samo nacrt/poslato. */}
-                {isAdmin && <SelectItem value="approved">{T.approved}</SelectItem>}
-                {isAdmin && <SelectItem value="rejected">{T.rejected}</SelectItem>}
+                {canEdit && <SelectItem value="draft">{T.draft}</SelectItem>}
+                {canEdit && <SelectItem value="submitted">{T.submitted}</SelectItem>}
+                {/* Odobrava i odbija samo korisnik sa timesheets.approve (baza to i sprovodi). */}
+                {canApprovePerm && <SelectItem value="approved">{T.approved}</SelectItem>}
+                {canApprovePerm && <SelectItem value="rejected">{T.rejected}</SelectItem>}
               </SelectContent>
             </Select>
           </div>
@@ -1033,6 +1031,40 @@ export default function Timesheets() {
         onClose={() => setPreviewTs(null)}
         lang={pdfLang}
         projects={projects}
+      />
+
+      {/* Odbijanje uz razlog */}
+      <Dialog open={!!rejectIds} onOpenChange={(o) => { if (!o) { setRejectIds(null); setRejectReason(""); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{L(`Reject ${rejectIds?.length || 0} timesheet(s)`, `Odbij ${rejectIds?.length || 0} unos(a)`, `Zamietnuť ${rejectIds?.length || 0} výkaz(y)`)}</DialogTitle>
+            <p className="text-sm text-muted-foreground">
+              {L("Only submitted timesheets are rejected. The reason is shown to whoever entered the hours.",
+                 "Odbijaju se samo poslati unosi. Razlog vidi onaj ko je uneo sate.",
+                 "Zamietajú sa iba odoslané výkazy. Dôvod uvidí ten, kto zadal hodiny.")}
+            </p>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label>{L("Reason", "Razlog", "Dôvod")}</Label>
+            <Textarea rows={3} value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setRejectIds(null); setRejectReason(""); }}>{T.cancel}</Button>
+            <Button variant="destructive" disabled={!rejectIds?.length || updateMutation.isPending} onClick={confirmReject}>
+              <X className="w-4 h-4 mr-1" />{L("Reject", "Odbij", "Zamietnuť")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <TimesheetDetailsDialog
+        ts={detailsTs ? weekTimesheets.find((t) => t.id === detailsTs.id) || detailsTs : null}
+        open={!!detailsTs}
+        onClose={() => setDetailsTs(null)}
+        lang={lang}
+        L={L}
+        perms={perms}
+        assignment={detailsTs ? weekAssignments.find((a) => a.id === (weekTimesheets.find((t) => t.id === detailsTs.id) || detailsTs).assignment_id) : null}
       />
 
       {/* Add Row Dialog */}
@@ -1101,67 +1133,67 @@ export default function Timesheets() {
               const selectedProject =
                 (dialogProject?.id === newRowForm._project_id ? dialogProject : null) ||
                 projects.find((p) => p.id === newRowForm._project_id);
-              // Aktivni radnici dodati na projekat, po ID-u (ručni unos projekta → svi aktivni).
-              const availableEmps = employeesForProject(selectedProject, employees, { manual: manualProject });
+              // Dodele projekta koje pokrivaju bar jedan dan nedelje (jedna stavka po dodeli); ručni unos → svi aktivni.
+              const availableEmps = employeesForProject(selectedProject, employees, {
+                manual: manualProject, assignments: dialogAssignments, weekStart: weekStartStr,
+              });
+              const optionValue = (x) => (x.assignment?.id ? x.assignment.id : x.employee.id);
+              const chosen = availableEmps.find((x) => optionValue(x) === (manualProject ? newRowForm.employee_id : newRowForm._assignment_id));
 
               return (
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>{T.employeeLabel}</Label>
                     <Select
-                      value={newRowForm.employee_id || ""}
+                      value={chosen ? optionValue(chosen) : ""}
                       onValueChange={(v) => {
-                        setNewRowForm((p) => ({ ...p, employee_id: v, _rates: null }));
-                        // Tarife i novac u dijalogu vidi samo admin (D3); čuvanje tarifu ionako bira ponovo.
-                        if (isAdmin) previewDialogRates(v, manualProject ? null : newRowForm._project_id || null);
+                        const x = availableEmps.find((o) => optionValue(o) === v);
+                        if (!x) return;
+                        // Dani van perioda dodele se ne unose (Submit bi ih ionako odbio).
+                        const allowed = assignmentWeekDays(x.assignment, weekStartStr);
+                        setNewRowForm((p) => ({
+                          ...p,
+                          employee_id: x.employee.id,
+                          _assignment_id: x.assignment?.id || "",
+                          ...Object.fromEntries(DAYS.map((d, i) => [`${d}_hours`, allowed.includes(i) ? p[`${d}_hours`] : 0])),
+                        }));
                       }}
                     >
                       <SelectTrigger><SelectValue placeholder={T.selectEmployee} /></SelectTrigger>
                       <SelectContent>
-                        {availableEmps.length === 0 && (
+                        {!manualProject && dialogAssignmentsLoading && (
+                          <div className="px-2 py-1.5 text-sm text-muted-foreground">{T.loading}</div>
+                        )}
+                        {availableEmps.length === 0 && !(dialogAssignmentsLoading && !manualProject) && (
                           <div className="px-2 py-1.5 text-sm text-muted-foreground" data-testid="no-project-employees">
                             {L(
-                              "No active employees on this project. Add them in the project's \"Employees on the project\" card.",
-                              "Na ovom projektu nema aktivnih radnika. Dodajte ih na kartici „Radnici na projektu“ u projektu.",
-                              "Na tomto projekte nie sú aktívni zamestnanci. Pridajte ich na karte „Zamestnanci na projekte“ v projekte."
+                              "No active assignment on this project covers this week. Add the employee in the project's Workers / Assignments.",
+                              "Nijedna aktivna dodela na ovom projektu ne pokriva ovu nedelju. Dodajte radnika u projektu (Radnici / Assignments).",
+                              "Žiadne aktívne pridelenie na tomto projekte nepokrýva tento týždeň. Pridajte zamestnanca v projekte (Zamestnanci / Assignments)."
                             )}
                           </div>
                         )}
-                        {availableEmps.map(({ employee: e, assignment }) => {
+                        {availableEmps.map((x) => {
+                          const { employee: e, assignment } = x;
+                          const period = assignment?.start_date
+                            ? ` · ${formatDate(new Date(`${assignment.start_date}T00:00:00`), "d.M.", lang)}–${assignment.end_date ? formatDate(new Date(`${assignment.end_date}T00:00:00`), "d.M.", lang) : "…"}`
+                            : "";
                           return (
-                            <SelectItem key={e.id} value={e.id}>
+                            <SelectItem key={optionValue(x)} value={optionValue(x)}>
                               {e.last_name} {e.first_name}
                               {assignment?.position ? ` · ${assignment.position}` : ""}
+                              {period}
                               {e.employee_id ? ` · ${e.employee_id}` : ""}
                             </SelectItem>
                           );
                         })}
                       </SelectContent>
                     </Select>
-                    {newRowForm.employee_id && (() => {
-                      const emp = employees.find((e) => e.id === newRowForm.employee_id);
-                      // Tarife iz jedinstvenog izbora (rates.js) za ovu nedelju; dok se učitavaju (ili za operatera) — ništa.
-                      const r = newRowForm._rates;
-                      const b2c = r?.b2c_rate ?? null;
-                      const b2b = r?.b2b_rate ?? null;
-                      return emp ? (
-                        <div className="space-y-1">
-                          <div className="font-mono text-xs bg-muted rounded px-2 py-1 text-primary">
-                            Ref: {makeWeekRef(weekDate, emp, selectedProject?.project_number)}
-                          </div>
-                          {isAdmin && r && (
-                            <div className="flex gap-3 text-xs text-muted-foreground bg-muted/50 rounded-lg p-2">
-                              <span className={b2c === null ? "text-red-600 font-medium" : ""}>B2C: {b2c === null ? T.noRate : `€${b2c}/h`}</span>
-                              <span className={b2b === null ? "text-red-600 font-medium" : ""}>B2B: {b2b === null ? T.noRate : `€${b2b}/h`}</span>
-                              {b2c !== null && b2b !== null && (
-                                <span className={b2b - b2c < 0 ? "text-red-600 font-medium" : "text-emerald-600"}>{T.margin}: €{(b2b - b2c).toFixed(2)}/h</span>
-                              )}
-                            </div>
-                          )}
-                          {isAdmin && r && negativeLabourMargin(b2c, b2b) && <NegativeMarginNote L={L} />}
-                        </div>
-                      ) : null;
-                    })()}
+                    {chosen && (
+                      <div className="font-mono text-xs bg-muted rounded px-2 py-1 text-primary">
+                        Ref: {makeWeekRef(weekDate, chosen.employee, selectedProject?.project_number)}
+                      </div>
+                    )}
                   </div>
                   <div className="space-y-2">
                     <Label>{T.clientLabel}</Label>
@@ -1181,53 +1213,47 @@ export default function Timesheets() {
              <div>
                <Label className="mb-2 block">{T.hoursPerDay}</Label>
               <div className="grid grid-cols-7 gap-2">
-                {dayLabelsWithDates.map(({ key, label, date, weekend }) => (
-                  <div key={key} className="text-center">
-                    <div className={`text-xs font-medium ${weekend ? "text-amber-600" : "text-muted-foreground"}`}>{label}</div>
-                    <div className="text-[10px] text-muted-foreground mb-1">{date}</div>
-                    <Input
-                      type="number" min={0} max={24} step={0.5}
-                      value={newRowForm[`${key}_hours`] || ""}
-                      onChange={(e) => setNewRowForm((p) => ({ ...p, [`${key}_hours`]: parseFloat(e.target.value) || 0 }))}
-                      className={`text-center px-1 ${weekend ? "border-amber-200" : ""}`}
-                      placeholder="0"
-                    />
-                  </div>
-                ))}
+                {dayLabelsWithDates.map(({ key, label, date, weekend }, i) => {
+                  const assignment = dialogAssignments.find((a) => a.id === newRowForm._assignment_id);
+                  const outside = !manualProject && Boolean(assignment) && !assignmentWeekDays(assignment, weekStartStr).includes(i);
+                  return (
+                    <div key={key} className="text-center">
+                      <div className={`text-xs font-medium ${weekend ? "text-warning" : "text-muted-foreground"}`}>{label}</div>
+                      <div className="text-[10px] text-muted-foreground mb-1">{date}</div>
+                      <Input
+                        type="number" min={0} max={24} step={0.5}
+                        value={newRowForm[`${key}_hours`] || ""}
+                        disabled={outside}
+                        title={outside ? L("Outside the assignment period", "Van perioda dodele", "Mimo obdobia pridelenia") : undefined}
+                        onChange={(e) => setNewRowForm((p) => ({ ...p, [`${key}_hours`]: parseFloat(e.target.value) || 0 }))}
+                        className={`text-center px-1 ${weekend ? "border-warning/40" : ""}`}
+                        placeholder={outside ? "—" : "0"}
+                      />
+                    </div>
+                  );
+                })}
               </div>
               {(() => {
                 const total = calcTotals(newRowForm);
                 if (total === 0) return null;
-                // Vrste sati (D5) vidi svako; iznos po vrsti (sati × tarifa × koeficijent) samo admin.
-                const r = newRowForm._rates;
-                const preview = previewAmounts({
-                  row: { ...newRowForm, week_start: weekStartStr },
-                  workerRate: r?.b2c_rate,
-                  clientRate: r?.b2b_rate,
-                  hourTypes,
-                  ...hourRules,
-                  employeePrivate: r?.special,
-                });
-                const byType = preview.hoursByType;
-                const fin = preview.amounts;
-                const showMoney = isAdmin && !!r;
+                // Vrste sati (D5) vidi svako. Tarife po danu i procenu iznosa računa baza pri čuvanju (K12).
+                const byType = hoursByTypeOf({ ...newRowForm, week_start: weekStartStr }, hourRules);
                 return (
                   <div className="mt-3 space-y-1 text-sm bg-muted/50 rounded-lg p-3">
                     <div className="flex flex-wrap gap-4">
                       <span className="font-semibold">{T.totalShort}: {total.toFixed(1)}h</span>
-                      {byType?.prekovremeni > 0 && <span className="text-amber-600">{T.ot}: {byType.prekovremeni.toFixed(1)}h</span>}
-                      {byType?.vikend > 0 && <span className="text-amber-600">{T.hourType.vikend}: {byType.vikend.toFixed(1)}h</span>}
-                      {byType?.praznik > 0 && <span className="text-amber-600">{T.hourType.praznik}: {byType.praznik.toFixed(1)}h</span>}
-                      {byType?.praznik_vikend > 0 && <span className="text-amber-600">{T.hourType.praznik_vikend}: {byType.praznik_vikend.toFixed(1)}h</span>}
-                      {showMoney && fin && (
-                        <>
-                          <span>{T.cost}: {money(fin.worker_cost)}</span>
-                          <span>{T.revenue}: {money(fin.client_revenue)}</span>
-                          <span className="text-emerald-600 font-semibold">{T.profit}: {money(fin.profit)}</span>
-                        </>
-                      )}
+                      {byType?.prekovremeni > 0 && <span className="text-warning">{T.ot}: {byType.prekovremeni.toFixed(1)}h</span>}
+                      {byType?.vikend > 0 && <span className="text-warning">{T.hourType.vikend}: {byType.vikend.toFixed(1)}h</span>}
+                      {byType?.praznik > 0 && <span className="text-warning">{T.hourType.praznik}: {byType.praznik.toFixed(1)}h</span>}
+                      {byType?.praznik_vikend > 0 && <span className="text-warning">{T.hourType.praznik_vikend}: {byType.praznik_vikend.toFixed(1)}h</span>}
                     </div>
-                    {showMoney && preview.error && <p className="text-xs text-amber-700">{moneyErrorText(preview.error, T)}</p>}
+                    {(seeB2C || seeB2B) && (
+                      <p className="text-xs text-muted-foreground">
+                        {L("Rates are applied per work date when the row is saved; the estimate is shown in the row details.",
+                           "Tarife se primenjuju po datumu rada pri čuvanju; procena se vidi u detaljima unosa.",
+                           "Sadzby sa uplatnia podľa dátumu práce pri uložení; odhad je v detailoch riadku.")}
+                      </p>
+                    )}
                   </div>
                 );
               })()}
@@ -1275,7 +1301,7 @@ export default function Timesheets() {
             </div>
             <DialogFooter>
             <Button variant="outline" onClick={() => { attachmentUpload.discard(); setDialogOpen(false); setNewRowForm({}); setManualProject(false); }}>{T.cancel}</Button>
-            <Button onClick={handleAddRow} disabled={createMutation.isPending || resolvingRates}>{T.addRow}</Button>
+            <Button onClick={handleAddRow} disabled={createMutation.isPending || !canEdit}>{T.addRow}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

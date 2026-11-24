@@ -2,31 +2,41 @@
 -- Sopstveni podaci sa oznakom QA-3 i 2032. godina; koeficijenti, prag i praznici se postavljaju ovde. Sve se vraća (rollback).
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(23);
+select plan(24);
 
 -- ───── priprema (kao postgres) ─────
 insert into auth.users (id, email, instance_id, aud, role) values
   ('61111111-1111-4111-8111-111111111111', 'qa3-admin@radnici.local', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated'),
   ('62222222-2222-4222-8222-222222222222', 'qa3-operater@radnici.local', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated');
 update public.profiles set role = 'admin', active = true where id = '61111111-1111-4111-8111-111111111111';
-update public.profiles set role = 'operater', active = true where id = '62222222-2222-4222-8222-222222222222';
+update public.profiles set role = 'hr', active = true where id = '62222222-2222-4222-8222-222222222222';
 
 -- Pravila kao u šemi: prag 8h, redovni = 1, ostali koeficijenti prazni (D5: admin ih još nije upisao).
-update public.work_rules set daily_regular_hours = 8;
+update public.work_rules set daily_regular_hours = 8, max_daily_hours = 24;
 update public.hour_types set worker_coef = 1, client_coef = 1 where code = 'redovni';
 update public.hour_types set worker_coef = null, client_coef = null where code <> 'redovni';
 -- 2032-03-06 je subota (nedelja od 01.03.); nedelja od 08.03. nema praznik.
 insert into public.holidays (date, name) values ('2032-03-06', 'QA-3 praznik') on conflict (date) do nothing;
 
 insert into public.clients (id, name) values ('c6000000-0000-4000-8000-0000000000c1', 'QA-3 klijent');
--- Važeće tarife oba radnika: satnica radnika na projektu 12 / 20 (odobravanje proverava da je tarifa reda baš ta).
-insert into public.projects (id, name, client_name, assigned_employees) values ('b6000000-0000-4000-8000-0000000000b1', 'QA-3 projekat', 'QA-3 klijent',
-  '[{"employee_id": "d6000000-0000-4000-8000-0000000000d1", "b2c_rate": 12, "b2b_rate": 20},
-    {"employee_id": "d6000000-0000-4000-8000-0000000000d2", "b2c_rate": 12, "b2b_rate": 20}]');
+insert into public.projects (id, name, client_name) values ('b6000000-0000-4000-8000-0000000000b1', 'QA-3 projekat', 'QA-3 klijent');
 insert into public.employees (id, first_name, last_name, employee_id) values
   ('d6000000-0000-4000-8000-0000000000d1', 'QA-3', 'Radnik', 'QA-3-001'),
   ('d6000000-0000-4000-8000-0000000000d2', 'QA-3', 'Posebni', 'QA-3-002');
--- Drugi radnik ima posebnu satnicu za prekovremeni rad u profilu.
+-- Phase 7: radnik na projektu = dodela; tarife su samo u public.rates i bira ih baza PO DATUMU RADA (resolve_rate).
+-- Prvi radnik: 12 / 20 do 14.03.2032, pa 12,35 / 19,99 od 15.03. (ranije su te tarife slate sa ekrana za red f3).
+-- Drugi radnik: 12 / 20.
+insert into public.project_assignments (id, employee_id, project_id, start_date, status) values
+  ('a6000000-0000-4000-8000-0000000000a1', 'd6000000-0000-4000-8000-0000000000d1', 'b6000000-0000-4000-8000-0000000000b1', '2032-01-01', 'active'),
+  ('a6000000-0000-4000-8000-0000000000a2', 'd6000000-0000-4000-8000-0000000000d2', 'b6000000-0000-4000-8000-0000000000b1', '2032-01-01', 'active');
+insert into public.rates (id, scope, kind, amount, unit, currency, assignment_id, effective_from, effective_to) values
+  ('a6100000-0000-4000-8000-000000000001', 'assignment', 'cost', 12, 'hourly', 'EUR', 'a6000000-0000-4000-8000-0000000000a1', '2032-01-01', '2032-03-14'),
+  ('a6100000-0000-4000-8000-000000000002', 'assignment', 'revenue', 20, 'hourly', 'EUR', 'a6000000-0000-4000-8000-0000000000a1', '2032-01-01', '2032-03-14'),
+  ('a6100000-0000-4000-8000-000000000003', 'assignment', 'cost', 12.35, 'hourly', 'EUR', 'a6000000-0000-4000-8000-0000000000a1', '2032-03-15', null),
+  ('a6100000-0000-4000-8000-000000000004', 'assignment', 'revenue', 19.99, 'hourly', 'EUR', 'a6000000-0000-4000-8000-0000000000a1', '2032-03-15', null),
+  ('a6100000-0000-4000-8000-000000000005', 'assignment', 'cost', 12, 'hourly', 'EUR', 'a6000000-0000-4000-8000-0000000000a2', '2032-01-01', null),
+  ('a6100000-0000-4000-8000-000000000006', 'assignment', 'revenue', 20, 'hourly', 'EUR', 'a6000000-0000-4000-8000-0000000000a2', '2032-01-01', null);
+-- Drugi radnik ima posebnu satnicu za prekovremeni rad u profilu (od Phase 7 se NE primenjuje na nove satnice, K5).
 insert into public.employee_private (employee_id, overtime_rate) values ('d6000000-0000-4000-8000-0000000000d2', 15);
 
 -- ───── operater ─────
@@ -45,10 +55,13 @@ select is((select hours_by_type from public.timesheets where id = 'f6000000-0000
   'pon 10h + sub 8h uz prag 8h = 8 redovno + 2 prekovremeno + 8 vikend (hours_by_type sa ekrana se ignoriše)');
 select is((select overtime_hours from public.timesheets where id = 'f6000000-0000-4000-8000-0000000000f1'), 2.00::numeric,
   'prekovremeno = sati preko dnevnog praga, ne preko 40h nedeljno');
+-- T26: iznosi i snimak nisu čitljivi korisniku iz timesheets — provere iznosa idu kao postgres (reset role).
+reset role;
 select is((select (worker_cost, client_revenue, profit)::text from public.timesheets where id = 'f6000000-0000-4000-8000-0000000000f1'),
   '(,,)', 'koeficijent koji fali: iznos je prazan (ne 0 i ne broj sa ekrana), a nacrt se ipak čuva');
 select is((select rate_snapshot from public.timesheets where id = 'f6000000-0000-4000-8000-0000000000f1'), null::jsonb,
   'neodobrena satnica nema snimak tarifa (snimak sa ekrana se ignoriše)');
+set local role authenticated;
 
 insert into public.timesheets (id, employee_id, project_id, week_start, mon_hours, sat_hours, sun_hours, b2c_rate, b2b_rate)
 values ('f6000000-0000-4000-8000-0000000000f2', 'd6000000-0000-4000-8000-0000000000d1', 'b6000000-0000-4000-8000-0000000000b1',
@@ -58,12 +71,15 @@ select is((select hours_by_type from public.timesheets where id = 'f6000000-0000
   'praznik u subotu je jedna konačna vrsta „praznik vikendom" (ne i praznik i vikend; 20261124150000)');
 
 -- Samo redovni sati (koeficijent 1): 15,5 × 12,35 = 191,425 → 191,43; 15,5 × 19,99 = 309,845 → 309,85.
+-- Tarife 12,35 / 19,99 dolaze iz Tarifa za datum rada (od 15.03.); one sa ekrana se ignorišu.
 insert into public.timesheets (id, employee_id, project_id, week_start, mon_hours, tue_hours, b2c_rate, b2b_rate,
   worker_cost, client_revenue)
 values ('f6000000-0000-4000-8000-0000000000f3', 'd6000000-0000-4000-8000-0000000000d1', 'b6000000-0000-4000-8000-0000000000b1',
   '2032-03-15', 8, 7.5, 12.35, 19.99, 1, 1);
+reset role;
 select is((select (worker_cost, client_revenue, profit)::text from public.timesheets where id = 'f6000000-0000-4000-8000-0000000000f3'),
   '(191.43,309.85,118.42)', 'iznos = sati × tarifa × koeficijent, na cent (pola od nule, kao round2); upisan iznos se ignoriše');
+set local role authenticated;
 
 select throws_ok($$update public.timesheets set approval_status = 'approved' where id = 'f6000000-0000-4000-8000-0000000000f1'$$,
   '42501', null, 'operater ne može da odobri satnicu');
@@ -71,8 +87,9 @@ select throws_ok($$update public.timesheets set approval_status = 'approved' whe
 -- ───── admin ─────
 set local request.jwt.claims to '{"sub":"61111111-1111-4111-8111-111111111111","role":"authenticated"}';
 
+-- Poruka v4 (calc_problems coef_missing): svaka vrsta i strana koja fali, redom.
 select throws_like($$update public.timesheets set approval_status = 'approved' where id = 'f6000000-0000-4000-8000-0000000000f1'$$,
-  'Nedostaje koeficijent za vrstu sati: prekovremeni (radnik), prekovremeni (klijent), vikend (radnik), vikend (klijent) — admin ga upisuje u Koeficijenti i praznici',
+  'Satnica ne može da se odobri: nedostaje koeficijent prekovremeni (radnik)%; nedostaje koeficijent prekovremeni (klijent)%; nedostaje koeficijent vikend (radnik)%; nedostaje koeficijent vikend (klijent) — Podešavanja → Koeficijenti i praznici',
   'odobravanje bez koeficijenta za vrstu sa satima je odbijeno i kaže šta tačno fali');
 
 -- Admin upisuje koeficijente (Podešavanja → Koeficijenti i praznici).
@@ -85,37 +102,47 @@ select lives_ok($$update public.timesheets set approval_status = 'approved',
                       "client": {"rate": 99, "source": "job_role", "ref": "QA-3-ref-c"},
                       "lines": "lažno", "daily_regular_hours": 1}'
   where id = 'f6000000-0000-4000-8000-0000000000f1'$$, 'admin odobrava kad postoje tarife i koeficijenti');
+reset role;
 select is((select (worker_cost, client_revenue, profit, overtime_hours)::text from public.timesheets where id = 'f6000000-0000-4000-8000-0000000000f1'),
   '(256.80,448.00,191.20,2.00)', 'odobren iznos: 8×12 + 2×12×1,5 + 8×12×1,3 = 256,80; 8×20 + 2×20×1,6 + 8×20×1,4 = 448');
-select is((select rate_snapshot -> 'worker' || jsonb_build_object('client', rate_snapshot -> 'client')
+-- Snimak v2: izvor i oznaka tarife su po danu (days[*].worker/client), na vrhu je samo tarifa reda i „mixed".
+select is((select jsonb_build_object('worker', rate_snapshot -> 'worker', 'client', rate_snapshot -> 'client',
+             'refs', (select jsonb_agg(distinct jsonb_build_array(l -> 'worker' ->> 'source', l -> 'worker' ->> 'ref',
+                                                                 l -> 'client' ->> 'source', l -> 'client' ->> 'ref'))
+                      from jsonb_array_elements(rate_snapshot -> 'days') l))
            from public.timesheets where id = 'f6000000-0000-4000-8000-0000000000f1'),
-  '{"rate": 12, "source": "project_employee", "ref": "project:b6000000-0000-4000-8000-0000000000b1:employee:d6000000-0000-4000-8000-0000000000d1",
-    "client": {"rate": 20, "source": "project_employee", "ref": "project:b6000000-0000-4000-8000-0000000000b1:employee:d6000000-0000-4000-8000-0000000000d1"}}'::jsonb,
-  'snimak: tarifa je ona iz reda (ne broj sa ekrana), izvor i oznaka iz izbora tarife u bazi (ne sa ekrana)');
-select is((select rate_snapshot - 'worker' - 'client' - 'approved_at' from public.timesheets where id = 'f6000000-0000-4000-8000-0000000000f1'),
-  '{"daily_regular_hours": 8, "holidays": [], "lines": [
-     {"code": "redovni", "worker_from": "redovni", "client_from": "redovni", "hours": 8, "worker_source": "coef", "worker_rate": 12, "worker_coef": 1, "special_rate": null,
-      "client_rate": 20, "client_coef": 1, "worker_cost": 96, "client_revenue": 160},
-     {"code": "prekovremeni", "worker_from": "prekovremeni", "client_from": "prekovremeni", "hours": 2, "worker_source": "coef", "worker_rate": 12, "worker_coef": 1.5, "special_rate": null,
-      "client_rate": 20, "client_coef": 1.6, "worker_cost": 36, "client_revenue": 64},
-     {"code": "vikend", "worker_from": "vikend", "client_from": "vikend", "hours": 8, "worker_source": "coef", "worker_rate": 12, "worker_coef": 1.3, "special_rate": null,
-      "client_rate": 20, "client_coef": 1.4, "worker_cost": 124.8, "client_revenue": 224}]}'::jsonb,
+  '{"worker": {"rate": 12, "mixed": false}, "client": {"rate": 20, "mixed": false},
+    "refs": [["assignment_rate", "a6100000-0000-4000-8000-000000000001", "assignment_rate", "a6100000-0000-4000-8000-000000000002"]]}'::jsonb,
+  'snimak: tarifa je ona iz Tarifa za datum rada (ne broj sa ekrana), izvor i oznaka iz izbora tarife u bazi (ne sa ekrana)');
+-- Snimak v2: lines su zbir po vrsti (ravna polja kao v1; posebne satnice i *_from više ne postoje — K5), plus valuta.
+select is((select rate_snapshot - 'worker' - 'client' - 'approved_at' - 'days' from public.timesheets where id = 'f6000000-0000-4000-8000-0000000000f1'),
+  '{"version": 2, "daily_regular_hours": 8, "max_daily_hours": 24, "holidays": [], "lines": [
+     {"code": "redovni", "hours": 8, "worker_source": "coef", "worker_rate": 12, "worker_coef": 1, "worker_currency": "EUR",
+      "client_rate": 20, "client_coef": 1, "client_currency": "EUR", "worker_cost": 96, "client_revenue": 160},
+     {"code": "prekovremeni", "hours": 2, "worker_source": "coef", "worker_rate": 12, "worker_coef": 1.5, "worker_currency": "EUR",
+      "client_rate": 20, "client_coef": 1.6, "client_currency": "EUR", "worker_cost": 36, "client_revenue": 64},
+     {"code": "vikend", "hours": 8, "worker_source": "coef", "worker_rate": 12, "worker_coef": 1.3, "worker_currency": "EUR",
+      "client_rate": 20, "client_coef": 1.4, "client_currency": "EUR", "worker_cost": 124.8, "client_revenue": 224}]}'::jsonb,
   'snimak: koeficijenti po vrsti, dnevni prag i praznici nedelje upisuje baza');
+set local role authenticated;
 
--- Posebna satnica iz profila (prekovremeni 15 €/h) ima prednost nad koeficijentom radnika; klijent ostaje × koeficijent.
+-- Pravilo namerno promenjeno (Phase 7, K5): posebna satnica iz profila (prekovremeni 15 €/h) se više ne primenjuje;
+-- i radnik ide × koeficijent: 8×12 + 2×12×1,5 = 132 (ranije 8×12 + 2×15 = 126); klijent 8×20 + 2×20×1,6 = 224.
 insert into public.timesheets (id, employee_id, project_id, week_start, mon_hours, b2c_rate, b2b_rate, approval_status)
 values ('f6000000-0000-4000-8000-0000000000f4', 'd6000000-0000-4000-8000-0000000000d2', 'b6000000-0000-4000-8000-0000000000b1',
   '2032-03-08', 10, 12, 20, 'approved');
+reset role;
 select is((select (worker_cost, client_revenue, profit)::text from public.timesheets where id = 'f6000000-0000-4000-8000-0000000000f4'),
-  '(126.00,224.00,98.00)', 'posebna satnica: 8×12 + 2×15 = 126 (ne 2×12×1,5); klijent 8×20 + 2×20×1,6 = 224');
-select is((select l ->> 'worker_source' || ' ' || (l ->> 'special_rate')
+  '(132.00,224.00,92.00)', 'posebna satnica iz profila se ne primenjuje: 8×12 + 2×12×1,5 = 132; klijent 8×20 + 2×20×1,6 = 224');
+select is((select l ->> 'worker_source' || ' ' || (l ->> 'worker_coef')
            from public.timesheets t, jsonb_array_elements(t.rate_snapshot -> 'lines') l
            where t.id = 'f6000000-0000-4000-8000-0000000000f4' and l ->> 'code' = 'prekovremeni'),
-  'special 15.00', 'snimak beleži da je korišćena posebna satnica');
+  'coef 1.5', 'snimak beleži koeficijent (ne posebnu satnicu iz profila)');
+set local role authenticated;
 
 -- ───── posle odobravanja se menjaju tarife, koeficijenti, posebna satnica, prag i praznici ─────
-insert into public.rates (scope, kind, amount, project_id, effective_from)
-  values ('project', 'cost', 50, 'b6000000-0000-4000-8000-0000000000b1', '2032-01-01');
+-- Tarifa koja važi za odobrenu nedelju se menja kroz change_rate (guard_rate_history ne da izmenu iznosa).
+select public.change_rate('a6100000-0000-4000-8000-000000000001', '2032-03-01', 50, null, 'QA-3 nova cena posle odobravanja');
 update public.hour_types set worker_coef = 3, client_coef = 3 where code in ('prekovremeni', 'vikend');
 update public.employee_private set overtime_rate = 99 where employee_id = 'd6000000-0000-4000-8000-0000000000d2';
 update public.work_rules set daily_regular_hours = 6;
@@ -124,6 +151,7 @@ insert into public.holidays (date, name) values ('2032-03-08', 'QA-3 praznik 2')
 update public.timesheets set notes = 'QA-3 napomena posle odobravanja'
   where id in ('f6000000-0000-4000-8000-0000000000f1', 'f6000000-0000-4000-8000-0000000000f4');
 
+reset role;
 select is((select (worker_cost, client_revenue, profit, overtime_hours)::text from public.timesheets where id = 'f6000000-0000-4000-8000-0000000000f1'),
   '(256.80,448.00,191.20,2.00)', 'promena tarife i koeficijenta posle odobravanja ne menja iznose odobrene satnice');
 select is((select hours_by_type from public.timesheets where id = 'f6000000-0000-4000-8000-0000000000f1'),
@@ -131,22 +159,34 @@ select is((select hours_by_type from public.timesheets where id = 'f6000000-0000
   'ni razvrstane sate (novi praznik i prag 6h ne važe za odobreno)');
 select is((select (rate_snapshot -> 'lines' -> 1 ->> 'worker_coef')::numeric from public.timesheets where id = 'f6000000-0000-4000-8000-0000000000f1'),
   1.5, 'snimak i dalje nosi koeficijent iz trenutka odobravanja');
-select is((select worker_cost from public.timesheets where id = 'f6000000-0000-4000-8000-0000000000f4'), 126.00::numeric,
-  'promena posebne satnice posle odobravanja ne menja odobrenu satnicu');
-select throws_ok($$update public.timesheets set b2c_rate = 50 where id = 'f6000000-0000-4000-8000-0000000000f1'$$,
-  '23514', null, 'tarifa odobrene satnice ne može da se promeni');
+select is((select worker_cost from public.timesheets where id = 'f6000000-0000-4000-8000-0000000000f4'), 132.00::numeric,
+  'promena posebne satnice i koeficijenta posle odobravanja ne menja odobrenu satnicu');
+set local role authenticated;
+-- Pravilo promenjeno (v4): tarifa sa ekrana se uvek ignoriše, pa izmena b2c_rate odobrenog reda ne baca grešku nego
+-- ostaje odobrena tarifa (greška 23514 ostaje za izmenu sati — test 01).
+update public.timesheets set b2c_rate = 50 where id = 'f6000000-0000-4000-8000-0000000000f1';
+reset role;
+select is((select b2c_rate from public.timesheets where id = 'f6000000-0000-4000-8000-0000000000f1'), 12.00::numeric,
+  'tarifa odobrene satnice ne može da se promeni');
+set local role authenticated;
 
 -- Nacrt se pri izmeni računa po važećim pravilima: prag 6h → pon 8 = 6 + 2, uto 7,5 = 6 + 1,5.
 update public.timesheets set notes = 'QA-3 izmena nacrta' where id = 'f6000000-0000-4000-8000-0000000000f3';
 select is((select hours_by_type from public.timesheets where id = 'f6000000-0000-4000-8000-0000000000f3'),
   '{"redovni": 12, "prekovremeni": 3.5, "vikend": 0, "praznik": 0, "praznik_vikend": 0}'::jsonb, 'nacrt se pri izmeni razvrstava po važećem pragu');
 -- radnik: 12×12,35 = 148,20 + 3,5×12,35×3 = 129,675 → 129,68; klijent: 12×19,99 = 239,88 + 3,5×19,99×3 = 209,895 → 209,90
+reset role;
 select is((select (worker_cost, client_revenue)::text from public.timesheets where id = 'f6000000-0000-4000-8000-0000000000f3'),
   '(277.88,449.78)', 'nacrt se pri izmeni računa po važećim koeficijentima');
+set local role authenticated;
 
+-- Pravilo promenjeno (K11): odobrena satnica se u nacrt vraća samo korekcijom uz razlog (reopen_timesheet).
+select throws_ok($$update public.timesheets set approval_status = 'draft' where id = 'f6000000-0000-4000-8000-0000000000f1'$$,
+  '42501', null, 'direktno vraćanje odobrene satnice u nacrt je odbijeno');
+select lives_ok($$select public.reopen_timesheet('f6000000-0000-4000-8000-0000000000f1', 'QA-3 korekcija posle odobravanja')$$,
+  'admin vraća odobrenu satnicu u nacrt (korekcija uz razlog)');
 -- Vraćena u nacrt, satnica gubi snimak i računa se po važećim pravilima (ponedeljak je sada praznik, prag 6h).
-select lives_ok($$update public.timesheets set approval_status = 'draft' where id = 'f6000000-0000-4000-8000-0000000000f1'$$,
-  'admin vraća odobrenu satnicu u nacrt');
+reset role;
 select is((select (rate_snapshot is null, hours_by_type = '{"redovni": 0, "prekovremeni": 0, "vikend": 8, "praznik": 10, "praznik_vikend": 0}'::jsonb)::text
            from public.timesheets where id = 'f6000000-0000-4000-8000-0000000000f1'),
   '(t,t)', 'nacrt nema snimak i razvrstava se po važećim praznicima');

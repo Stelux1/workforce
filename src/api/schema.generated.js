@@ -4,7 +4,8 @@ export const TABLE_COLUMNS = {
     "id",
     "language",
     "currency",
-    "updated_date"
+    "updated_date",
+    "time_zone"
   ],
   "attendance_records": [
     "id",
@@ -20,6 +21,20 @@ export const TABLE_COLUMNS = {
     "created_date",
     "updated_date",
     "created_by"
+  ],
+  "audit_log": [
+    "id",
+    "table_name",
+    "record_id",
+    "action",
+    "old_data",
+    "new_data",
+    "changed_fields",
+    "reason",
+    "project_id",
+    "actor",
+    "actor_role",
+    "occurred_at"
   ],
   "clients": [
     "id",
@@ -57,7 +72,8 @@ export const TABLE_COLUMNS = {
     "color",
     "created_date",
     "updated_date",
-    "created_by"
+    "created_by",
+    "payroll_linked"
   ],
   "department_configs": [
     "id",
@@ -68,6 +84,13 @@ export const TABLE_COLUMNS = {
     "created_date",
     "updated_date",
     "created_by"
+  ],
+  "document_types": [
+    "code",
+    "name",
+    "sensitive",
+    "sort",
+    "active"
   ],
   "documents": [
     "id",
@@ -81,7 +104,9 @@ export const TABLE_COLUMNS = {
     "notes",
     "created_date",
     "updated_date",
-    "created_by"
+    "created_by",
+    "issue_date",
+    "restricted"
   ],
   "email_templates": [
     "id",
@@ -119,6 +144,15 @@ export const TABLE_COLUMNS = {
     "rate_basis",
     "work_fraction",
     "updated_date"
+  ],
+  "employee_private_money": [
+    "employee_id",
+    "salary",
+    "b2c_hourly_rate",
+    "b2b_hourly_rate",
+    "overtime_rate",
+    "weekend_rate",
+    "holiday_rate"
   ],
   "employees": [
     "id",
@@ -167,6 +201,15 @@ export const TABLE_COLUMNS = {
     "updated_date",
     "created_by"
   ],
+  "exchange_rates": [
+    "id",
+    "rate_date",
+    "currency",
+    "units_per_eur",
+    "source",
+    "created_by",
+    "created_date"
+  ],
   "holidays": [
     "date",
     "name"
@@ -192,6 +235,17 @@ export const TABLE_COLUMNS = {
     "updated_date",
     "created_by"
   ],
+  "migration_report": [
+    "id",
+    "migration",
+    "entity",
+    "entity_id",
+    "issue",
+    "details",
+    "created_date",
+    "resolved_at",
+    "resolved_by"
+  ],
   "month_locks": [
     "month",
     "locked_by",
@@ -208,6 +262,24 @@ export const TABLE_COLUMNS = {
     "created_date",
     "updated_date",
     "created_by"
+  ],
+  "onboarding_package_downloads": [
+    "id",
+    "package_id",
+    "downloaded_by",
+    "downloaded_at",
+    "document_ids",
+    "file_count"
+  ],
+  "onboarding_packages": [
+    "id",
+    "project_id",
+    "employee_ids",
+    "status",
+    "manifest",
+    "prepared_by",
+    "prepared_at",
+    "notes"
   ],
   "payroll_params": [
     "id",
@@ -291,13 +363,19 @@ export const TABLE_COLUMNS = {
     "warnings",
     "created_date"
   ],
+  "permissions": [
+    "code",
+    "description",
+    "sensitive"
+  ],
   "profiles": [
     "id",
     "email",
     "full_name",
     "role",
     "active",
-    "created_date"
+    "created_date",
+    "project_scope"
   ],
   "project_assignments": [
     "id",
@@ -317,7 +395,16 @@ export const TABLE_COLUMNS = {
     "notes",
     "created_date",
     "updated_date",
-    "created_by"
+    "created_by",
+    "project_role_id",
+    "assignment_type",
+    "source_assignment_id",
+    "leave_request_id",
+    "default_shift_id",
+    "ended_at",
+    "ended_by",
+    "end_reason",
+    "legacy_source"
   ],
   "project_costs": [
     "id",
@@ -332,7 +419,28 @@ export const TABLE_COLUMNS = {
     "updated_date",
     "created_by",
     "eur_rsd_rate",
-    "eur_amount"
+    "eur_amount",
+    "cost_date",
+    "cost_category_id",
+    "employee_id",
+    "vendor_id",
+    "billable",
+    "receipt_url",
+    "receipt_name",
+    "fx_rate_date"
+  ],
+  "project_roles": [
+    "id",
+    "project_id",
+    "title",
+    "title_key",
+    "department_position",
+    "description",
+    "status",
+    "sort",
+    "created_date",
+    "updated_date",
+    "created_by"
   ],
   "projects": [
     "id",
@@ -352,7 +460,8 @@ export const TABLE_COLUMNS = {
     "created_by",
     "address",
     "zip",
-    "city"
+    "city",
+    "time_zone"
   ],
   "rates": [
     "id",
@@ -373,7 +482,33 @@ export const TABLE_COLUMNS = {
     "notes",
     "created_date",
     "updated_date",
+    "created_by",
+    "project_role_id",
+    "superseded_by",
+    "change_reason",
+    "rate_key"
+  ],
+  "required_documents": [
+    "id",
+    "project_id",
+    "project_role_id",
+    "document_type",
+    "mandatory",
+    "validity_rule",
+    "expiring_soon_days",
+    "exportable",
+    "notes",
+    "created_date",
+    "updated_date",
     "created_by"
+  ],
+  "role_permissions": [
+    "role",
+    "permission"
+  ],
+  "roles": [
+    "code",
+    "name"
   ],
   "schedules": [
     "id",
@@ -385,6 +520,26 @@ export const TABLE_COLUMNS = {
     "shift_type",
     "location",
     "notes",
+    "created_date",
+    "updated_date",
+    "created_by",
+    "project_id",
+    "assignment_id",
+    "shift_id",
+    "status",
+    "start_at",
+    "end_at"
+  ],
+  "shifts": [
+    "id",
+    "project_id",
+    "code",
+    "name",
+    "start_time",
+    "end_time",
+    "crosses_midnight",
+    "sort",
+    "active",
     "created_date",
     "updated_date",
     "created_by"
@@ -404,6 +559,35 @@ export const TABLE_COLUMNS = {
     "created_date",
     "updated_date",
     "created_by"
+  ],
+  "timesheet_entries": [
+    "id",
+    "timesheet_id",
+    "employee_id",
+    "project_id",
+    "assignment_id",
+    "work_date",
+    "shift_id",
+    "start_time",
+    "end_time",
+    "break_minutes",
+    "hours",
+    "work_interval",
+    "counts",
+    "notes",
+    "created_date",
+    "updated_date",
+    "created_by"
+  ],
+  "timesheet_money": [
+    "timesheet_id",
+    "b2b_rate",
+    "client_revenue",
+    "b2c_rate",
+    "worker_cost",
+    "profit",
+    "rate_snapshot",
+    "estimate_days"
   ],
   "timesheets": [
     "id",
@@ -441,7 +625,32 @@ export const TABLE_COLUMNS = {
     "approved_date",
     "created_date",
     "updated_date",
-    "created_by"
+    "created_by",
+    "assignment_id",
+    "worker_currency",
+    "client_currency",
+    "submitted_by",
+    "submitted_at",
+    "rejected_by",
+    "rejected_at",
+    "rejection_reason",
+    "calc_problems",
+    "estimate_days",
+    "correction_count",
+    "last_correction_reason"
+  ],
+  "user_permission_overrides": [
+    "user_id",
+    "permission",
+    "granted",
+    "created_by",
+    "created_date"
+  ],
+  "user_project_access": [
+    "user_id",
+    "project_id",
+    "created_by",
+    "created_date"
   ],
   "vendors": [
     "id",
@@ -471,6 +680,20 @@ export const TABLE_COLUMNS = {
   "work_rules": [
     "id",
     "daily_regular_hours",
-    "updated_date"
+    "updated_date",
+    "max_daily_hours"
+  ],
+  "workforce_requirements": [
+    "id",
+    "project_id",
+    "project_role_id",
+    "shift_id",
+    "date_from",
+    "date_to",
+    "required_count",
+    "notes",
+    "created_date",
+    "updated_date",
+    "created_by"
   ]
 };

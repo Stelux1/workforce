@@ -13,59 +13,53 @@ const S = RATE_SOURCES;
 const LABELS = {
   en: {
     title: "Rate Resolution Check", employee: "Employee", project: "Project", date: "Work Date",
-    worker: "Worker rate (cost)", client: "Client rate (revenue)", perHour: "EUR per hour", level: "Source",
+    worker: "Worker rate (cost)", client: "Client rate (revenue)", perHour: "per hour", level: "Source",
     missing_rate: "No rate at any level for this date — the timesheet can't be calculated or approved.",
-    unit: (source, amount, currency, unit) => `${source}: ${amount} ${currency} ${unit}. Only EUR per hour is accepted — fix this rate (the next level is not used instead).`,
+    unit: (source, amount, currency, unit) => `${source}: ${amount} ${currency} ${unit}. Only hourly rates are accepted — fix this rate (the next level is not used instead).`,
     noEmployee: "Choose an employee", noDate: "Choose a work date",
     conflict: "Two active rates of the same level conflict — resolve before invoicing.",
     position: "position", validFrom: "from",
-    order: "Order: ", orderNote: " (job role for the client only).",
+    order: "Order (same for B2B and B2C): ", orderNote: ".",
     hint: "Rates are resolved for the work date, so a later rate change never rewrites earlier work.",
     sources: {
-      [S.ASSIGNMENT_RATE]: "Assignment rate (Rates)",
-      [S.PROJECT_EMPLOYEE]: "Worker's rate on the project",
-      [S.PROJECT_RATE]: "Project / position rate (Rates)",
-      [S.JOB_ROLE]: "Job role on the project",
-      [S.EMPLOYEE_RATE]: "Employee rate (Rates)",
-      [S.PROFILE]: "Rate from the employee profile",
+      [S.ASSIGNMENT_RATE]: "Assignment rate (exception)",
+      [S.ROLE_RATE]: "Job role rate on the project",
+      [S.PROJECT_RATE]: "Whole-project rate",
+      [S.EMPLOYEE_RATE]: "Employee rate (legacy)",
     },
   },
   rs: {
     title: "Provera primene tarife", employee: "Zaposleni", project: "Projekat", date: "Datum rada",
-    worker: "Tarifa radnika (trošak)", client: "Tarifa klijenta (prihod)", perHour: "EUR po satu", level: "Izvor",
+    worker: "Tarifa radnika (trošak)", client: "Tarifa klijenta (prihod)", perHour: "po satu", level: "Izvor",
     missing_rate: "Nema tarife ni na jednom nivou za ovaj datum — satnica ne može da se obračuna ni odobri.",
-    unit: (source, amount, currency, unit) => `${source}: ${amount} ${currency} ${unit}. Prima se samo EUR po satu — ispravite ovu tarifu (sledeći nivo se ne koristi umesto nje).`,
+    unit: (source, amount, currency, unit) => `${source}: ${amount} ${currency} ${unit}. Prima se samo tarifa po satu — ispravite ovu tarifu (sledeći nivo se ne koristi umesto nje).`,
     noEmployee: "Izaberite zaposlenog", noDate: "Izaberite datum rada",
     conflict: "Dve aktivne tarife istog nivoa su u konfliktu — rešite pre fakturisanja.",
     position: "pozicija", validFrom: "od",
-    order: "Redosled: ", orderNote: " (zanimanje samo za klijenta).",
+    order: "Redosled (isti za B2B i B2C): ", orderNote: ".",
     hint: "Tarife se određuju prema datumu rada, pa kasnija promena tarife ne menja raniji rad.",
     sources: {
-      [S.ASSIGNMENT_RATE]: "Tarifa angažmana (Tarife)",
-      [S.PROJECT_EMPLOYEE]: "Satnica radnika na projektu",
-      [S.PROJECT_RATE]: "Tarifa projekta / pozicije (Tarife)",
-      [S.JOB_ROLE]: "Zanimanje na projektu",
-      [S.EMPLOYEE_RATE]: "Tarifa radnika (Tarife)",
-      [S.PROFILE]: "Satnica iz profila radnika",
+      [S.ASSIGNMENT_RATE]: "Tarifa angažmana (izuzetak)",
+      [S.ROLE_RATE]: "Tarifa Job Role na projektu",
+      [S.PROJECT_RATE]: "Tarifa za ceo projekat",
+      [S.EMPLOYEE_RATE]: "Tarifa radnika (stari unos)",
     },
   },
   sk: {
     title: "Kontrola určenia sadzby", employee: "Zamestnanec", project: "Projekt", date: "Dátum práce",
-    worker: "Sadzba zamestnanca (náklad)", client: "Sadzba klienta (tržba)", perHour: "EUR za hodinu", level: "Zdroj",
+    worker: "Sadzba zamestnanca (náklad)", client: "Sadzba klienta (tržba)", perHour: "za hodinu", level: "Zdroj",
     missing_rate: "Pre tento dátum nie je sadzba na žiadnej úrovni — pracovný výkaz nemožno vypočítať ani schváliť.",
-    unit: (source, amount, currency, unit) => `${source}: ${amount} ${currency} ${unit}. Akceptuje sa iba EUR za hodinu — opravte túto sadzbu (nepoužije sa namiesto nej nasledujúca úroveň).`,
+    unit: (source, amount, currency, unit) => `${source}: ${amount} ${currency} ${unit}. Akceptuje sa iba hodinová sadzba — opravte túto sadzbu (nepoužije sa namiesto nej nasledujúca úroveň).`,
     noEmployee: "Vyberte zamestnanca", noDate: "Vyberte dátum práce",
     conflict: "Dve aktívne sadzby rovnakej úrovne sú v konflikte — vyriešte pred fakturáciou.",
     position: "pozícia", validFrom: "od",
-    order: "Poradie: ", orderNote: " (pracovná rola iba pre klienta).",
+    order: "Poradie (rovnaké pre B2B aj B2C): ", orderNote: ".",
     hint: "Sadzby sa určujú podľa dátumu práce, takže neskoršia zmena sadzby nikdy neprepíše skoršiu prácu.",
     sources: {
-      [S.ASSIGNMENT_RATE]: "Sadzba pridelenia (Sadzby)",
-      [S.PROJECT_EMPLOYEE]: "Sadzba zamestnanca na projekte",
-      [S.PROJECT_RATE]: "Sadzba projektu / pozície (Sadzby)",
-      [S.JOB_ROLE]: "Pracovná rola na projekte",
-      [S.EMPLOYEE_RATE]: "Sadzba zamestnanca (Sadzby)",
-      [S.PROFILE]: "Sadzba z profilu zamestnanca",
+      [S.ASSIGNMENT_RATE]: "Sadzba pridelenia (výnimka)",
+      [S.ROLE_RATE]: "Sadzba pracovnej roly na projekte",
+      [S.PROJECT_RATE]: "Sadzba celého projektu",
+      [S.EMPLOYEE_RATE]: "Sadzba zamestnanca (starý záznam)",
     },
   },
 };
@@ -87,7 +81,6 @@ function sourceDetail(resolved, rates, L) {
       .filter(Boolean)
       .join(" · ");
   }
-  if (resolved.source === S.JOB_ROLE) return String(resolved.ref).split(":job_role:")[1] || "";
   return "";
 }
 
@@ -100,9 +93,9 @@ const RESULT = ({ label, result, rates, L, R }) => {
       message = L.unit(L.sources[error.source] || error.source, error.amount, error.currency, String(R[error.unit] || error.unit).toLowerCase());
     }
     return (
-      <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
-        <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">{label}</p>
-        <p className="flex items-center gap-1.5 text-sm text-amber-800 mt-1">
+      <div className="rounded-lg border bg-warning-soft p-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-warning">{label}</p>
+        <p className="flex items-center gap-1.5 text-sm text-warning mt-1">
           <TriangleAlert className="w-4 h-4 shrink-0" /> {message}
         </p>
       </div>
@@ -114,12 +107,12 @@ const RESULT = ({ label, result, rates, L, R }) => {
       <div className="flex items-baseline justify-between gap-2">
         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
         <p className="text-lg font-bold">
-          {resolved.rate.toFixed(2)}
+          {resolved.rate.toFixed(2)} {resolved.currency}
           <span className="text-xs font-medium text-muted-foreground"> {L.perHour}</span>
         </p>
       </div>
       <p className="flex items-center gap-1.5 text-xs text-muted-foreground mt-1">
-        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+        <CheckCircle2 className="w-3.5 h-3.5 text-success shrink-0" />
         {L.level}: {L.sources[resolved.source] || resolved.source}
         {detail ? ` · ${detail}` : ""}
       </p>
@@ -141,12 +134,10 @@ export default function RateResolver({ employees = [], projects = [], assignment
 
   const emp = employeeId || employees[0]?.id || "";
   const proj = projectId || projects[0]?.id || "";
-  // Stranica je samo za admina, pa zaposleni dolazi sa privatnim poljima (b2c/b2b satnica iz profila).
-  const employee = employees.find((e) => e.id === emp);
-  const project = projects.find((p) => p.id === proj);
 
   const blocked = !emp ? L.noEmployee : !date ? L.noDate : null;
-  const input = { date, employeeId: emp, project, assignments, rates, employeePrivate: employee };
+  // Isti ulaz kao baza (resolve_rate): tarife koje korisnik sme da vidi (RLS po vrsti), dodele i datum rada.
+  const input = { date, employeeId: emp, projectId: proj, assignments, rates };
   const worker = blocked ? { error: new Error(blocked) } : explain("worker", input);
   const client = blocked ? { error: new Error(blocked) } : explain("client", input);
 

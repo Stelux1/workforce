@@ -13,7 +13,7 @@ import BrandLogo from "./BrandLogo";
 // Mobilni meni ima iste stavke kao bočni (po ulozi), na izabranom jeziku (QA 14.11.2026).
 export default function MobileNav({ open, onClose }) {
   const location = useLocation();
-  const { logout, isAdmin } = useAuth();
+  const { logout, permissions } = useAuth();
   const { lang } = useLang();
   const T = useT();
   const pending = usePendingTimesheets();
@@ -53,7 +53,7 @@ export default function MobileNav({ open, onClose }) {
         <nav className="flex-1 py-2 px-3 space-y-1 overflow-y-auto">
           {renderItem(DASHBOARD_ITEM)}
           {NAV_SECTIONS.map((section) => {
-            const items = visibleNavItems(section.items, isAdmin);
+            const items = visibleNavItems(section.items, permissions);
             if (!items.length) return null;
             return (
               <div key={section.key} className="pt-3 border-t border-sidebar-border mt-2">

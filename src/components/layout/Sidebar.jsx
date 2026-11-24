@@ -80,7 +80,7 @@ function SectionGroup({ sectionKey, icon: Icon, items, collapsed, NL, defaultOpe
 
 export default function Sidebar({ collapsed = false, onCollapsedChange = () => {} }) {
   const { lang } = useLang();
-  const { logout, isAdmin } = useAuth();
+  const { logout, permissions } = useAuth();
   const NL = NAV_LABELS[lang] || NAV_LABELS.en;
   const pending = usePendingTimesheets();
 
@@ -101,7 +101,7 @@ export default function Sidebar({ collapsed = false, onCollapsedChange = () => {
         <NavItem item={DASHBOARD_ITEM} collapsed={collapsed} NL={NL} />
 
         {NAV_SECTIONS.map((section) => {
-          const items = visibleNavItems(section.items, isAdmin);
+          const items = visibleNavItems(section.items, permissions);
           if (!items.length) return null;
           return (
             <div key={section.key} className="space-y-1">

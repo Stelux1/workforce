@@ -7,10 +7,16 @@
 //
 // Trošak u RSD bez kursa (stari red, pre migracije) NEMA EUR iznos: ne računa se kao 0 i ne sabira se kao RSD
 // u EUR — zbir ga vraća u `missingRate`, a ekran ga prikazuje kao „nedostaje kurs".
+//
+// K3 / T28 (migracija 20261125050000_troskovi_c1.sql): trošak van EUR ulazi u EUR zbir samo uz kurs I datum kursa
+// (`fx_rate_date`). Stari red sa kursom, ali bez datuma, NIJE u zbiru: vraća se u `undatedRate` („datum kursa nije
+// evidentiran"), a radi postojećih ekrana i u `missingRate`/`missingByCurrency` (oni znaju samo „nije u zbiru").
+// Valute su EUR, RSD, GBP, USD; kurs je uvek „jedinica valute za 1 EUR".
 
 import { round2, sum2 } from "./money.js";
+import { CURRENCIES, costEurAmount } from "../finance/currency.js";
 
-export const COST_CURRENCIES = Object.freeze(["EUR", "RSD"]);
+export const COST_CURRENCIES = CURRENCIES;
 
 /** Valuta troška; prazna valuta je EUR (podrazumevana vrednost kolone u bazi). */
 export const costCurrency = (cost) => cost?.currency || "EUR";
@@ -31,37 +37,40 @@ export function rsdToEur(amount, rate) {
 }
 
 /**
- * EUR iznos troška ili null kad trošak nije u EUR i nema kurs.
- * Važi iznos koji je izračunala baza (`eur_amount`); samo kad ga nema (npr. pregled u formi pre čuvanja)
- * računa se iz iznosa i kursa po istom pravilu.
+ * EUR iznos troška ili null kad trošak nije u EUR i nema kurs ili datum kursa (K3).
+ * Važi iznos koji je izračunala baza (`eur_amount`); samo kad ga nema računa se iz iznosa i kursa po istom pravilu.
+ * Pregled u formi pre čuvanja (kurs bez datuma) ide kroz `rsdToEur`, ne kroz ovu funkciju.
  */
 export function costInEur(cost) {
-  if (costCurrency(cost) === "EUR") return round2(cost?.amount ?? 0);
-  if (cost?.eur_amount !== null && cost?.eur_amount !== undefined && cost?.eur_amount !== "") {
-    const stored = Number(cost.eur_amount);
-    if (Number.isFinite(stored)) return round2(stored);
-  }
-  return rsdToEur(cost?.amount ?? 0, cost?.eur_rsd_rate);
+  return costEurAmount({ ...cost, currency: costCurrency(cost) }).eur;
 }
 
 /**
  * Zbir troškova u EUR (u centima, bez float greške).
- *   total       — EUR troškovi + troškovi u drugoj valuti preračunati po svom kursu;
- *   missingRate — troškovi koji nisu u EUR i nemaju kurs: NISU u `total` (ekran mora da ih prikaže);
+ *   total       — EUR troškovi + troškovi u drugoj valuti preračunati po svom kursu i datumu kursa;
+ *   missingRate — troškovi koji nisu u EUR i nemaju kurs ILI datum kursa: NISU u `total` (ekran mora da ih prikaže);
  *   missingByCurrency — njihov iznos u originalnoj valuti (npr. { RSD: 12000 }), samo za prikaz;
+ *   undatedRate / undatedByCurrency — podskup: imaju kurs, ali nemaju datum kursa (stari redovi, R9);
  *   converted   — po valuti koja nije EUR: originalni iznos i EUR iznos uračunatih troškova (npr. { RSD: { amount, eur } }).
  */
 export function sumCostsEur(costs = []) {
   const eurParts = [];
   const missingRate = [];
+  const undatedRate = [];
   const missingAmounts = {};
+  const undatedAmounts = {};
   const convertedAmounts = {};
   for (const cost of costs || []) {
     const currency = costCurrency(cost);
-    const eur = costInEur(cost);
+    const conv = costEurAmount({ ...cost, currency });
+    const eur = conv.eur;
     if (eur === null) {
       missingRate.push(cost);
       (missingAmounts[currency] ||= []).push(cost?.amount ?? 0);
+      if (conv.reason === "rate_without_date") {
+        undatedRate.push(cost);
+        (undatedAmounts[currency] ||= []).push(cost?.amount ?? 0);
+      }
       continue;
     }
     eurParts.push(eur);
@@ -72,8 +81,9 @@ export function sumCostsEur(costs = []) {
     }
   }
   const missingByCurrency = Object.fromEntries(Object.entries(missingAmounts).map(([cur, list]) => [cur, sum2(list)]));
+  const undatedByCurrency = Object.fromEntries(Object.entries(undatedAmounts).map(([cur, list]) => [cur, sum2(list)]));
   const converted = Object.fromEntries(
     Object.entries(convertedAmounts).map(([cur, c]) => [cur, { amount: sum2(c.amount), eur: sum2(c.eur) }])
   );
-  return { total: sum2(eurParts), counted: eurParts.length, missingRate, missingByCurrency, converted };
+  return { total: sum2(eurParts), counted: eurParts.length, missingRate, missingByCurrency, undatedRate, undatedByCurrency, converted };
 }

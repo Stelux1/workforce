@@ -35,7 +35,7 @@ const T1 = odobrena({ id: "T1", week_start: "2026-03-02", days: [8] });
 const T2 = odobrena({ id: "T2", employee_id: "E2", employee_name: "QA Radnik 2", week_start: "2026-03-09", days: [8, 10] });
 const TROSKOVI = [
   { id: "C1", project_id: "PA", amount: 100, currency: "EUR", eur_amount: 100 },
-  { id: "C2", project_id: "PA", amount: 11720, currency: "RSD", eur_rsd_rate: 117.2, eur_amount: 100 },
+  { id: "C2", project_id: "PA", amount: 11720, currency: "RSD", eur_rsd_rate: 117.2, eur_amount: 100, fx_rate_date: "2026-04-01" },
   { id: "C3", project_id: "PA", amount: 5000, currency: "RSD", eur_rsd_rate: null, eur_amount: null }, // bez kursa
   { id: "C4", project_id: "PB", amount: 999, currency: "EUR", eur_amount: 999 }, // drugi projekat
 ];

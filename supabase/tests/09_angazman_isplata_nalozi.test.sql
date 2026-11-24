@@ -19,8 +19,8 @@ insert into auth.users (id, email, instance_id, aud, role, raw_user_meta_data) v
   ('93333333-3333-4333-8333-333333333333', 'qa9-novi@radnici.local', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', null);
 select is((select array_agg((email, full_name, role, active)::text order by email) from public.profiles
            where id in ('91111111-1111-4111-8111-111111111111', '92222222-2222-4222-8222-222222222222', '93333333-3333-4333-8333-333333333333')),
-  array['(qa9-admin@radnici.local,"QA-9 Admin",operater,f)', '(qa9-novi@radnici.local,qa9-novi@radnici.local,operater,f)',
-        '(qa9-operater@radnici.local,qa9-operater@radnici.local,operater,f)'],
+  array['(qa9-admin@radnici.local,"QA-9 Admin",hr,f)', '(qa9-novi@radnici.local,qa9-novi@radnici.local,hr,f)',
+        '(qa9-operater@radnici.local,qa9-operater@radnici.local,hr,f)'],
   'Accept: nov nalog je neaktivan operater (admin ga aktivira)');
 select is((select column_default from information_schema.columns
            where table_schema = 'public' and table_name = 'profiles' and column_name = 'active'), 'false',
@@ -44,10 +44,19 @@ insert into public.employees (id, first_name, last_name, employee_id) values
   ('d9000000-0000-4000-8000-0000000000d1', 'QA-9', 'Mali bruto', 'QA-9-001'),
   ('d9000000-0000-4000-8000-0000000000d2', 'QA-9', 'Bruto', 'QA-9-002'),
   ('d9000000-0000-4000-8000-0000000000d3', 'QA-9', 'Treći', 'QA-9-003');
--- Bruto satnica iz profila (najniži nivo izbora tarife, D4): 6 € i 12 €, klijentu 20 €.
-insert into public.employee_private (employee_id, rate_basis, b2c_hourly_rate, b2b_hourly_rate) values
-  ('d9000000-0000-4000-8000-0000000000d1', 'bruto', 6, 20),
-  ('d9000000-0000-4000-8000-0000000000d2', 'bruto', 12, 20);
+-- Bruto satnica 6 € i 12 €, klijentu 20 €. Phase 7: profil više nije nivo tarife (u profilu ostaje samo osnova
+-- „bruto"); radnik na projektu = dodela, a tarife su u public.rates po dodeli (B2C = cost, B2B = revenue).
+insert into public.employee_private (employee_id, rate_basis) values
+  ('d9000000-0000-4000-8000-0000000000d1', 'bruto'),
+  ('d9000000-0000-4000-8000-0000000000d2', 'bruto');
+insert into public.project_assignments (id, employee_id, project_id, start_date, status) values
+  ('a9000000-0000-4000-8000-0000000000a1', 'd9000000-0000-4000-8000-0000000000d1', 'b9000000-0000-4000-8000-0000000000b1', '2035-01-01', 'active'),
+  ('a9000000-0000-4000-8000-0000000000a2', 'd9000000-0000-4000-8000-0000000000d2', 'b9000000-0000-4000-8000-0000000000b1', '2035-01-01', 'active');
+insert into public.rates (scope, kind, amount, unit, currency, assignment_id, effective_from) values
+  ('assignment', 'cost', 6, 'hourly', 'EUR', 'a9000000-0000-4000-8000-0000000000a1', '2035-01-01'),
+  ('assignment', 'revenue', 20, 'hourly', 'EUR', 'a9000000-0000-4000-8000-0000000000a1', '2035-01-01'),
+  ('assignment', 'cost', 12, 'hourly', 'EUR', 'a9000000-0000-4000-8000-0000000000a2', '2035-01-01'),
+  ('assignment', 'revenue', 20, 'hourly', 'EUR', 'a9000000-0000-4000-8000-0000000000a2', '2035-01-01');
 insert into public.employment_history (employee_id, engagement_type, vendor_id, start_date) values
   ('d9000000-0000-4000-8000-0000000000d1', 'direct_employee', null, '2035-01-01'),
   ('d9000000-0000-4000-8000-0000000000d2', 'direct_employee', null, '2035-01-01');
@@ -58,16 +67,17 @@ set local request.jwt.claims to '{"sub":"93333333-3333-4333-8333-333333333333","
 select is(public.is_staff(), false, 'neaktivan nalog nije osoblje');
 select is((select count(*)::int from public.employees), 0, 'neaktivan nalog ne vidi radnike');
 select is((select count(*)::int from public.employment_history), 0, 'neaktivan nalog ne vidi angažmane');
-select is((select (role, active)::text from public.profiles where id = auth.uid()), '(operater,f)',
+select is((select (role, active)::text from public.profiles where id = auth.uid()), '(hr,f)',
   'neaktivan nalog vidi svoj profil (aplikacija prikazuje „Nalog još nije aktiviran")');
 update public.profiles set role = 'admin', active = true where id = '93333333-3333-4333-8333-333333333333';
 reset role;
-select is((select (role, active)::text from public.profiles where id = '93333333-3333-4333-8333-333333333333'), '(operater,f)',
+select is((select (role, active)::text from public.profiles where id = '93333333-3333-4333-8333-333333333333'), '(hr,f)',
   'neaktivan nalog ne može sam sebe da aktivira ni da postane admin');
 
 -- ═════════════════════════════ angažman: čita osoblje, menja samo admin ═════════════════════════════
-select policies_are('public', 'employment_history', array['employment_history_read', 'employment_history_admin_write'],
-  'angažman ima samo pravila „osoblje čita" i „admin menja"');
+select policies_are('public', 'employment_history',
+  array['employment_history_read', 'employment_history_insert', 'employment_history_update', 'employment_history_delete'],
+  'angažman: osoblje čita, menja engagement.manage (migracija 20261125020000)');
 
 set local role authenticated;
 set local request.jwt.claims to '{"sub":"92222222-2222-4222-8222-222222222222","role":"authenticated"}';
@@ -104,6 +114,7 @@ select is((select count(*)::int from public.employment_history where employee_id
 
 -- ═════════════════════════════ obračun: isplata < 0 i bruto ispod najniže osnovice ═════════════════════════════
 -- Admin odobrava satnice i zaključava mart, april i maj 2035. (5.3., 2.4. i 7.5.2035. su ponedeljci).
+-- b2c_rate/b2b_rate sa ekrana baza ignoriše; tarife bira iz public.rates po datumu rada (isti brojevi).
 insert into public.timesheets (id, employee_id, project_id, week_start, mon_hours, tue_hours, wed_hours, thu_hours, fri_hours,
                                b2c_rate, b2b_rate, approval_status) values
   ('f9000000-0000-4000-8000-0000000000f1', 'd9000000-0000-4000-8000-0000000000d1', 'b9000000-0000-4000-8000-0000000000b1',
@@ -197,7 +208,7 @@ insert into auth.users (id, email, instance_id, aud, role) values
 select is((select (full_name, role, active)::text from public.profiles where id = '94444444-4444-4444-8444-444444444444'),
   '("QA-9 Prvi",admin,t)', 'Accept: prvi nalog u sistemu postaje aktivan admin (kao i do sada)');
 select is((select (role, active)::text from public.profiles where id = '95555555-5555-4555-8555-555555555555'),
-  '(operater,f)', 'drugi nalog u novom sistemu je neaktivan operater');
+  '(hr,f)', 'drugi nalog u novom sistemu je neaktivan operater');
 select is((select count(*)::int from public.profiles where role = 'admin'), 1, 'samo jedan admin u novom sistemu');
 
 select * from finish();

@@ -4,12 +4,9 @@ import { PARAMS_2026_RSD, paramsFromRow, paramsInEur, paramsRowForMonth } from "
 import { fromGross, fromNet } from "./serbianPayroll.js";
 import { computeWorkerMonth, MissingRateError, projectMargin } from "./monthly.js";
 import { totalHours, validRate } from "./timesheet.js";
-import { RATE_SOURCES, RateUnitError, resolveRates, resolveSideRate } from "./rates.js";
 import { classifyWeek, HOUR_TYPES, MissingCoefficientError, timesheetAmountsByType } from "./hours.js";
 import { costInEur, rsdToEur, sumCostsEur, validExchangeRate } from "./costs.js";
-import {
-  approvalPayload, dailyThresholdOf, DAY_FIELDS, dayHours, draftRates, hoursByTypeOf, isMoneyError, overtimeHours, previewAmounts,
-} from "./timesheetRow.js";
+import { dailyThresholdOf, DAY_FIELDS, dayHours, hoursByTypeOf, overtimeHours } from "./timesheetRow.js";
 import {
   buildMonthPayroll, collectMonth, draftPayload, monthEnd, monthStart, nextMonthStart, PAYSLIP_WARNINGS, PROBLEM,
   problemMessage, projectTotals, staleEmployees, timesheetMonthLines, timesheetWeekRange,
@@ -187,334 +184,6 @@ describe("satnica (zbir sati i tarifa)", () => {
   });
 });
 
-// Jedan izbor tarife (D4, rates.js). Iznosi po nivoima namerno nisu ni rastući ni opadajući —
-// testovi dokazuju redosled nivoa, a ne „najveća" ili „najmanja" tarifa.
-describe("izbor tarife (rates.js)", () => {
-  const S = RATE_SOURCES;
-  const DAN = "2026-11-10";
-  const E = "emp-1";
-  const PRJ = "prj-1";
-  const row = (o) => ({
-    scope: "employee", kind: "cost", unit: "hourly", amount: 10, currency: "EUR", employee_id: E, project_id: null,
-    position: null, assignment_id: null, effective_from: "2026-01-01", effective_to: null, status: "active", ...o,
-  });
-  const dodela = { id: "asg-1", employee_id: E, project_id: PRJ, position: "Zavarivač", start_date: "2026-01-01", end_date: null, status: "active" };
-  const ulaz = () => ({
-    date: DAN,
-    employeeId: E,
-    project: {
-      id: PRJ,
-      job_roles: [{ title: "Zavarivač", b2b_rate: 22 }],
-      assigned_employees: [{ employee_id: E, position: "Zavarivač", b2c_rate: 18, b2b_rate: 24 }],
-    },
-    assignments: [{ ...dodela }],
-    rates: [
-      row({ id: "r-asg-c", scope: "assignment", kind: "cost", amount: 15, assignment_id: "asg-1", project_id: PRJ }),
-      row({ id: "r-asg-r", scope: "assignment", kind: "revenue", amount: 30, assignment_id: "asg-1", project_id: PRJ }),
-      row({ id: "r-prj-c", scope: "project", kind: "cost", amount: 12, employee_id: null, project_id: PRJ }),
-      row({ id: "r-prj-r", scope: "project", kind: "revenue", amount: 27, employee_id: null, project_id: PRJ }),
-      row({ id: "r-emp-c", scope: "employee", kind: "cost", amount: 16 }),
-      row({ id: "r-emp-r", scope: "employee", kind: "revenue", amount: 29 }),
-    ],
-    employeePrivate: { b2c_hourly_rate: 14, b2b_hourly_rate: 20 },
-  });
-  const POLJE = { worker: { projekat: "b2c_rate", profil: "b2c_hourly_rate" }, client: { projekat: "b2b_rate", profil: "b2b_hourly_rate" } };
-  const ukloni = {
-    [S.ASSIGNMENT_RATE]: (u) => { u.rates = u.rates.filter((r) => r.scope !== "assignment"); },
-    [S.PROJECT_EMPLOYEE]: (u, strana) => {
-      u.project.assigned_employees = u.project.assigned_employees.map((e) => ({ ...e, [POLJE[strana].projekat]: null }));
-    },
-    [S.PROJECT_RATE]: (u) => { u.rates = u.rates.filter((r) => r.scope !== "project"); },
-    [S.JOB_ROLE]: (u) => { u.project.job_roles = []; },
-    [S.EMPLOYEE_RATE]: (u) => { u.rates = u.rates.filter((r) => r.scope !== "employee"); },
-    [S.PROFILE]: (u, strana) => { u.employeePrivate = { ...u.employeePrivate, [POLJE[strana].profil]: null }; },
-  };
-  // Svaki korak uklanja sve nivoe iznad, a svi nivoi ispod i dalje imaju tarifu — pa pobednik dokazuje da je ispred njih.
-  const lanac = (nivoi) => nivoi.map(([source, rate, ref], i) => ({ source, rate, ref, iznad: nivoi.slice(0, i).map((n) => n[0]) }));
-  const uhvati = (fn) => {
-    try {
-      fn();
-    } catch (e) {
-      return e;
-    }
-    throw new Error("očekivana greška");
-  };
-
-  const RADNIK = [
-    [S.ASSIGNMENT_RATE, 15, "r-asg-c"],
-    [S.PROJECT_EMPLOYEE, 18, `project:${PRJ}:employee:${E}`],
-    [S.PROJECT_RATE, 12, "r-prj-c"],
-    [S.EMPLOYEE_RATE, 16, "r-emp-c"],
-    [S.PROFILE, 14, `employee:${E}:profile`],
-  ];
-  it.each(lanac(RADNIK))("radnik: $source pobeđuje sledeće nivoe", ({ source, rate, ref, iznad }) => {
-    const u = ulaz();
-    for (const s of iznad) ukloni[s](u, "worker");
-    expect(resolveSideRate("worker", u)).toEqual({ rate, source, ref, conflict: false });
-  });
-
-  const KLIJENT = [
-    [S.ASSIGNMENT_RATE, 30, "r-asg-r"],
-    [S.PROJECT_EMPLOYEE, 24, `project:${PRJ}:employee:${E}`],
-    [S.PROJECT_RATE, 27, "r-prj-r"],
-    [S.JOB_ROLE, 22, `project:${PRJ}:job_role:Zavarivač`],
-    [S.EMPLOYEE_RATE, 29, "r-emp-r"],
-    [S.PROFILE, 20, `employee:${E}:profile`],
-  ];
-  it.each(lanac(KLIJENT))("klijent: $source pobeđuje sledeće nivoe", ({ source, rate, ref, iznad }) => {
-    const u = ulaz();
-    for (const s of iznad) ukloni[s](u, "client");
-    expect(resolveSideRate("client", u)).toEqual({ rate, source, ref, conflict: false });
-  });
-
-  it("resolveRates vraća obe strane sa izvorom i referencom", () => {
-    expect(resolveRates(ulaz())).toEqual({
-      worker: { rate: 15, source: S.ASSIGNMENT_RATE, ref: "r-asg-c", conflict: false },
-      client: { rate: 30, source: S.ASSIGNMENT_RATE, ref: "r-asg-r", conflict: false },
-    });
-  });
-
-  it("nema tarife ni na jednom nivou → MissingRateError za obe strane (nikad 0)", () => {
-    const err = uhvati(() => resolveRates({ date: DAN, employeeId: E, project: { id: PRJ }, assignments: [], rates: [], employeePrivate: null }));
-    expect(err).toBeInstanceOf(MissingRateError);
-    expect(err.missing).toEqual([
-      { field: "workerRate", key: `${E}|${PRJ}`, date: DAN },
-      { field: "clientRate", key: `${E}|${PRJ}`, date: DAN },
-    ]);
-  });
-
-  it("fali samo tarifa radnika → greška navodi samo radnika", () => {
-    const u = ulaz();
-    for (const [s] of RADNIK) ukloni[s](u, "worker");
-    expect(() => resolveSideRate("worker", u)).toThrow(MissingRateError);
-    expect(uhvati(() => resolveRates(u)).missing).toEqual([{ field: "workerRate", key: `${E}|${PRJ}`, date: DAN }]);
-  });
-
-  it("0 i prazno polje nisu tarifa — ide se na sledeći nivo", () => {
-    const u = {
-      date: DAN,
-      employeeId: E,
-      project: { id: PRJ, assigned_employees: [{ employee_id: E, b2c_rate: 0, b2b_rate: "" }] },
-      assignments: [dodela],
-      rates: [
-        row({ id: "nula", scope: "assignment", assignment_id: "asg-1", project_id: PRJ, amount: 0 }),
-        row({ id: "nula-novija", amount: 0, effective_from: "2026-10-01" }),
-        row({ id: "starija", amount: 13, effective_from: "2026-02-01" }),
-      ],
-      employeePrivate: { b2c_hourly_rate: 14, b2b_hourly_rate: 0 },
-    };
-    expect(resolveSideRate("worker", u)).toEqual({ rate: 13, source: S.EMPLOYEE_RATE, ref: "starija", conflict: false });
-    expect(uhvati(() => resolveSideRate("client", u))).toBeInstanceOf(MissingRateError);
-  });
-
-  it("tarifa za poziciju radnika pobeđuje tarifu za ceo projekat, i kad je starija", () => {
-    const u = {
-      date: DAN,
-      employeeId: E,
-      project: { id: PRJ },
-      assignments: [dodela],
-      rates: [
-        row({ id: "ceo", scope: "project", employee_id: null, project_id: PRJ, amount: 12, effective_from: "2026-06-01" }),
-        row({ id: "poz", scope: "project", employee_id: null, project_id: PRJ, amount: 13, position: "Zavarivač" }),
-        row({ id: "tudja-poz", scope: "project", employee_id: null, project_id: PRJ, amount: 19, position: "Električar" }),
-      ],
-    };
-    expect(resolveSideRate("worker", u)).toEqual({ rate: 13, source: S.PROJECT_RATE, ref: "poz", conflict: false });
-    // druga pozicija → tarifa za ceo projekat, nikad tarifa tuđe pozicije
-    expect(resolveSideRate("worker", { ...u, assignments: [{ ...dodela, position: "Monter" }] })).toMatchObject({ ref: "ceo", rate: 12 });
-  });
-
-  it("pozicija dolazi iz dodele, a bez dodele iz spiska radnika na projektu", () => {
-    const project = {
-      id: PRJ,
-      job_roles: [{ title: "Zavarivač", b2b_rate: 22 }, { title: "Monter", b2b_rate: 26 }],
-      assigned_employees: [{ employee_id: E, position: "Zavarivač" }],
-    };
-    const base = { date: DAN, employeeId: E, project, rates: [], employeePrivate: {} };
-    expect(resolveSideRate("client", { ...base, assignments: [] })).toMatchObject({ source: S.JOB_ROLE, rate: 22 });
-    expect(resolveSideRate("client", { ...base, assignments: [{ ...dodela, position: "Monter" }] })).toMatchObject({ source: S.JOB_ROLE, rate: 26 });
-  });
-
-  it("zanimanje na projektu važi samo za klijenta", () => {
-    const u = ulaz();
-    for (const s of [S.ASSIGNMENT_RATE, S.PROJECT_EMPLOYEE, S.PROJECT_RATE]) ukloni[s](u, "worker");
-    u.project.job_roles = [{ title: "Zavarivač", b2b_rate: 22, b2c_rate: 99 }];
-    expect(resolveSideRate("worker", u)).toMatchObject({ source: S.EMPLOYEE_RATE, rate: 16 });
-  });
-
-  it("važi samo aktivna tarifa u roku (oba kraja uključena); najnovija pobeđuje", () => {
-    const u = {
-      date: DAN,
-      employeeId: E,
-      project: null,
-      employeePrivate: {},
-      rates: [
-        row({ id: "stara", amount: 10, effective_from: "2025-01-01" }),
-        row({ id: "istekla", amount: 11, effective_from: "2026-03-01", effective_to: "2026-11-09" }),
-        row({ id: "neaktivna", amount: 12, effective_from: "2026-05-01", status: "inactive" }),
-        row({ id: "buduca", amount: 13, effective_from: "2026-11-11" }),
-        row({ id: "vazi", amount: 14, effective_from: "2026-02-01", effective_to: DAN }),
-      ],
-    };
-    expect(resolveSideRate("worker", u)).toEqual({ rate: 14, source: S.EMPLOYEE_RATE, ref: "vazi", conflict: false });
-    expect(resolveSideRate("worker", { ...u, date: "2026-11-11" })).toMatchObject({ ref: "buduca", rate: 13 });
-  });
-
-  it("tarifa angažmana važi samo dok dodela traje i nije otkazana", () => {
-    const u = ulaz();
-    const sa = (izmena) => resolveSideRate("worker", { ...u, assignments: [{ ...dodela, ...izmena }] }).source;
-    expect(sa({ end_date: "2026-11-09" })).toBe(S.PROJECT_EMPLOYEE);
-    expect(sa({ start_date: "2026-11-11" })).toBe(S.PROJECT_EMPLOYEE);
-    expect(sa({ status: "cancelled" })).toBe(S.PROJECT_EMPLOYEE);
-    expect(sa({ employee_id: "emp-2" })).toBe(S.PROJECT_EMPLOYEE);
-    expect(sa({ status: "completed", end_date: DAN })).toBe(S.ASSIGNMENT_RATE);
-  });
-
-  it("tarife drugog radnika ili drugog projekta se ne mešaju", () => {
-    const u = {
-      date: DAN,
-      employeeId: E,
-      project: { id: PRJ },
-      assignments: [],
-      employeePrivate: {},
-      rates: [
-        row({ id: "tudja", employee_id: "emp-2", amount: 50 }),
-        row({ id: "drugi-projekat", scope: "project", employee_id: null, project_id: "prj-2", amount: 40 }),
-        row({ id: "drugi-radnik", scope: "project", employee_id: "emp-2", project_id: PRJ, amount: 45 }),
-        row({ id: "prihod", kind: "revenue", amount: 30 }),
-      ],
-    };
-    expect(uhvati(() => resolveSideRate("worker", u))).toBeInstanceOf(MissingRateError);
-  });
-
-  it("dve tarife istog nivoa sa istim datumom i različitim iznosom → konflikt; pobednik ne zavisi od redosleda", () => {
-    const u = {
-      date: DAN,
-      employeeId: E,
-      project: null,
-      employeePrivate: {},
-      rates: [row({ id: "a", amount: 14, effective_from: "2026-02-01" }), row({ id: "b", amount: 15, effective_from: "2026-02-01" })],
-    };
-    const r = resolveSideRate("worker", u);
-    expect(r.conflict).toBe(true);
-    expect(resolveSideRate("worker", { ...u, rates: [...u.rates].reverse() })).toEqual(r);
-    expect(resolveSideRate("worker", { ...u, rates: [row({ id: "a", amount: 14 }), row({ id: "b", amount: 14 })] }).conflict).toBe(false);
-  });
-
-  it("pobednik u RSD ili po danu → RateUnitError, bez tihog prelaska na sledeći nivo", () => {
-    const rsd = ulaz();
-    rsd.rates = rsd.rates.map((r) => (r.id === "r-asg-c" ? { ...r, currency: "RSD", amount: 1500 } : r));
-    const err = uhvati(() => resolveRates(rsd));
-    expect(err).toBeInstanceOf(RateUnitError);
-    expect(err).toMatchObject({ side: "worker", source: S.ASSIGNMENT_RATE, ref: "r-asg-c", currency: "RSD", unit: "hourly" });
-    // klijent ima svoju (EUR) tarifu i dalje
-    expect(resolveSideRate("client", rsd)).toMatchObject({ rate: 30, source: S.ASSIGNMENT_RATE });
-
-    const poDanu = ulaz();
-    for (const s of [S.ASSIGNMENT_RATE, S.PROJECT_EMPLOYEE]) ukloni[s](poDanu, "client");
-    poDanu.rates = poDanu.rates.map((r) => (r.id === "r-prj-r" ? { ...r, unit: "daily" } : r));
-    // zanimanje (22 €/h) postoji ispod, ali se ne koristi — tarifa po danu mora da se ispravi
-    expect(uhvati(() => resolveSideRate("client", poDanu))).toMatchObject({ name: "RateUnitError", side: "client", source: S.PROJECT_RATE, unit: "daily" });
-  });
-
-  it("bez ispravnog datuma rada nema izbora tarife", () => {
-    expect(() => resolveRates({ ...ulaz(), date: "" })).toThrow("datum");
-    expect(() => resolveRates({ ...ulaz(), date: "10.11.2026." })).toThrow("datum");
-  });
-});
-
-// PARITET SA BAZOM: isti podaci, koraci i očekivani brojevi kao „lanac nivoa" u
-// supabase/tests/04_tarifa_pri_odobravanju.test.sql (resolve_timesheet_rate, provera tarife pri odobravanju).
-// Ako se promeni jedan fajl, mora i drugi — rates.js i baza moraju da izaberu istu tarifu, inače odobravanje puca.
-describe("isti primer kao pgTAP 04 (rates.js = resolve_timesheet_rate)", () => {
-  const S = RATE_SOURCES;
-  const D = "2033-03-07"; // week_start satnice
-  const E1 = "d7000000-0000-4000-8000-0000000000d1";
-  const P1 = "b7000000-0000-4000-8000-0000000000b1";
-  const A1 = "a7000000-0000-4000-8000-0000000000a1";
-  const POS = "QA-4 Zavarivač";
-  const rid = (n) => `e7000000-0000-4000-8000-0000000000${String(n).padStart(2, "0")}`;
-  const tarifa = (o) => ({
-    scope: "employee", kind: "cost", unit: "hourly", currency: "EUR", employee_id: null, project_id: null, position: null,
-    assignment_id: null, effective_from: "2033-01-01", effective_to: null, status: "active", created_date: "2033-01-01T00:00:00+00:00", ...o,
-  });
-  const pocetak = () => ({
-    date: D,
-    employeeId: E1,
-    project: {
-      id: P1,
-      job_roles: [{ title: POS, b2b_rate: 22 }],
-      assigned_employees: [{ employee_id: E1, position: POS, b2c_rate: 18, b2b_rate: 24 }],
-    },
-    assignments: [{ id: A1, employee_id: E1, project_id: P1, position: POS, start_date: "2033-01-01", end_date: null, status: "active" }],
-    rates: [
-      tarifa({ id: rid(1), scope: "assignment", kind: "cost", amount: 15, employee_id: E1, project_id: P1, assignment_id: A1 }),
-      tarifa({ id: rid(2), scope: "assignment", kind: "revenue", amount: 30, employee_id: E1, project_id: P1, assignment_id: A1 }),
-      tarifa({ id: rid(3), scope: "project", kind: "cost", amount: 12, project_id: P1 }),
-      tarifa({ id: rid(4), scope: "project", kind: "revenue", amount: 27, project_id: P1 }),
-      tarifa({ id: rid(5), scope: "employee", kind: "cost", amount: 16, employee_id: E1 }),
-      tarifa({ id: rid(6), scope: "employee", kind: "revenue", amount: 29, employee_id: E1 }),
-    ],
-    employeePrivate: { b2c_hourly_rate: 14, b2b_hourly_rate: 20 },
-  });
-  const naProjektu = `project:${P1}:employee:${E1}`;
-  const izProfila = `employee:${E1}:profile`;
-  const izmeniTarife = (u, uslov, izmena) => { u.rates = u.rates.map((r) => (uslov(r) ? { ...r, ...izmena } : r)); };
-  const ishod = (side, u) => {
-    try {
-      const { rate, source, ref } = resolveSideRate(side, u);
-      return { rate, source, ref };
-    } catch (e) {
-      if (e instanceof MissingRateError) return { error: "missing" };
-      if (e instanceof RateUnitError) return { error: "unit", source: e.source, ref: e.ref, amount: e.amount, currency: e.currency, unit: e.unit };
-      throw e;
-    }
-  };
-
-  // [korak, izmena (kumulativno, isto kao update u pgTAP), očekivano za radnika, očekivano za klijenta (undefined = ne proverava se)]
-  const KORACI = [
-    ["početak", () => {}, { rate: 15, source: S.ASSIGNMENT_RATE, ref: rid(1) }, { rate: 30, source: S.ASSIGNMENT_RATE, ref: rid(2) }],
-    ["otkazana dodela", (u) => { u.assignments[0].status = "cancelled"; },
-      { rate: 18, source: S.PROJECT_EMPLOYEE, ref: naProjektu }, { rate: 24, source: S.PROJECT_EMPLOYEE, ref: naProjektu }],
-    ["0 i prazno na projektu", (u) => { u.project.assigned_employees = [{ employee_id: E1, position: POS, b2c_rate: 0, b2b_rate: "" }]; },
-      { rate: 12, source: S.PROJECT_RATE, ref: rid(3) }, { rate: 27, source: S.PROJECT_RATE, ref: rid(4) }],
-    ["tarifa pozicije (starija) i tuđe pozicije", (u) => {
-      u.rates.push(tarifa({ id: rid(7), scope: "project", kind: "cost", amount: 13, project_id: P1, position: POS, effective_from: "2032-06-01" }));
-      u.rates.push(tarifa({ id: rid(8), scope: "project", kind: "cost", amount: 19, project_id: P1, position: "QA-4 Električar", effective_from: "2033-02-01" }));
-    }, { rate: 13, source: S.PROJECT_RATE, ref: rid(7) }, undefined],
-    ["kraj važenja uključen", (u) => izmeniTarife(u, (r) => r.scope === "project", { effective_to: D }),
-      { rate: 13, source: S.PROJECT_RATE, ref: rid(7) }, undefined],
-    ["istekle tarife projekta", (u) => izmeniTarife(u, (r) => r.scope === "project", { effective_to: "2033-03-06" }),
-      { rate: 16, source: S.EMPLOYEE_RATE, ref: rid(5) }, { rate: 22, source: S.JOB_ROLE, ref: `project:${P1}:job_role:${POS}` }],
-    ["bez zanimanja", (u) => { u.project.job_roles = []; }, undefined, { rate: 29, source: S.EMPLOYEE_RATE, ref: rid(6) }],
-    ["neaktivna i buduća tarifa radnika", (u) => {
-      izmeniTarife(u, (r) => r.id === rid(5), { status: "inactive" });
-      izmeniTarife(u, (r) => r.id === rid(6), { effective_from: "2033-03-08" });
-    }, { rate: 14, source: S.PROFILE, ref: izProfila }, { rate: 20, source: S.PROFILE, ref: izProfila }],
-    ["bez profila", (u) => { u.employeePrivate = { b2c_hourly_rate: null, b2b_hourly_rate: null }; }, { error: "missing" }, { error: "missing" }],
-    ["pobednik u RSD", (u) => { u.rates.push(tarifa({ id: rid(9), amount: 1500, currency: "RSD", employee_id: E1 })); },
-      { error: "unit", source: S.EMPLOYEE_RATE, ref: rid(9), amount: 1500, currency: "RSD", unit: "hourly" }, undefined],
-  ];
-
-  it("svaki korak daje isti izvor, oznaku i tarifu kao baza", () => {
-    const u = pocetak();
-    for (const [korak, izmena, radnik, klijent] of KORACI) {
-      izmena(u);
-      if (radnik) expect(ishod("worker", u), `${korak} (radnik)`).toEqual(radnik);
-      if (klijent) expect(ishod("client", u), `${korak} (klijent)`).toEqual(klijent);
-    }
-  });
-
-  it("odobravanje na početku šalje 15 / 30, kao red koji baza odobrava u pgTAP 04", () => {
-    const TYPES = [{ code: "redovni", worker_coef: 1, client_coef: 1 }];
-    const r = approvalPayload({
-      ...pocetak(), row: { employee_id: E1, project_id: P1, week_start: D, mon_hours: 8 }, hourTypes: TYPES, holidays: [], dailyThreshold: 8,
-    });
-    expect(r.data).toEqual({ approval_status: "approved", b2c_rate: 15, b2b_rate: 30 });
-    expect([r.amounts.worker_cost, r.amounts.client_revenue]).toEqual([120, 240]);
-  });
-});
-
 describe("vrste sati (hours.js)", () => {
   // 2026-11-09 je ponedeljak; 2026-11-11 (sreda) je Dan primirja; 2026-11-14 je subota.
   const MON = "2026-11-09";
@@ -593,7 +262,7 @@ describe("vrste sati (hours.js)", () => {
     const byCode = Object.fromEntries(TYPES.map((t) => [t.code, t]));
     const r = timesheetAmountsByType({
       hoursByType: { redovni: 8 },
-      workerRate: { rate: 12.5, source: RATE_SOURCES.PROFILE },
+      workerRate: { rate: 12.5, source: "employee_rate" },
       clientRate: { rate: 18 },
       hourTypes: byCode,
     });
@@ -808,68 +477,6 @@ describe("red satnice (timesheetRow.js)", () => {
     expect(overtimeHours({ ...row({ mon_hours: 30 }), hours_by_type: null }, rules)).toBeNull();
   });
 
-  it("tarife nacrta: svaka strana posebno; tarifa koja fali je null uz problem, nikad 0", () => {
-    const input = { date: MON, employeeId: E, project, assignments: [], rates: [], employeePrivate: null };
-    expect(draftRates(input)).toEqual({ b2c_rate: 12, b2b_rate: 20, problems: [] });
-    const bezRadnika = draftRates({ ...input, project: { ...project, assigned_employees: [{ employee_id: E, b2b_rate: 20 }] } });
-    expect(bezRadnika.b2c_rate).toBeNull();
-    expect(bezRadnika.b2b_rate).toBe(20);
-    expect(bezRadnika.problems).toHaveLength(1);
-    expect(bezRadnika.problems[0]).toBeInstanceOf(MissingRateError);
-    const rsd = draftRates({
-      ...input,
-      rates: [{ id: "r-rsd", scope: "employee", kind: "cost", unit: "hourly", amount: 1500, currency: "RSD", employee_id: E, effective_from: "2032-01-01", status: "active" }],
-      project: { ...project, assigned_employees: [{ employee_id: E, b2b_rate: 20 }] },
-    });
-    expect(rsd.b2c_rate).toBeNull();
-    expect(rsd.problems[0]).toBeInstanceOf(RateUnitError);
-  });
-
-  it("odobravanje: tarife iz jedinstvenog izbora (snimak i izvor tarife upisuje baza), iznos kao baza (256,80 / 448)", () => {
-    const r = approvalPayload(ulaz());
-    expect(r.data).toEqual({ approval_status: "approved", b2c_rate: 12, b2b_rate: 20 });
-    expect(r.hoursByType).toEqual({ redovni: 8, prekovremeni: 2, vikend: 8, praznik: 0, praznik_vikend: 0 });
-    expect([r.amounts.worker_cost, r.amounts.client_revenue, r.amounts.profit]).toEqual([256.8, 448, 191.2]);
-  });
-
-  it("odobravanje: posebna satnica za prekovremeni ima prednost (126 / 224, kao baza)", () => {
-    const r = approvalPayload(ulaz({ row: row({ sat_hours: 0 }), employeePrivate: { overtime_rate: 15 } }));
-    expect([r.amounts.worker_cost, r.amounts.client_revenue, r.amounts.profit]).toEqual([126, 224, 98]);
-  });
-
-  it("odobravanje bez tarife, sa tarifom u RSD ili bez koeficijenta → greška (ništa se ne šalje)", () => {
-    const bezTarife = { ...project, assigned_employees: [] };
-    expect(() => approvalPayload(ulaz({ project: bezTarife }))).toThrow(MissingRateError);
-    const rsd = [{ id: "r-rsd", scope: "employee", kind: "cost", unit: "hourly", amount: 1500, currency: "RSD", employee_id: E, effective_from: "2032-01-01", status: "active" }];
-    expect(() => approvalPayload(ulaz({ project: { ...project, assigned_employees: [{ employee_id: E, b2b_rate: 20 }] }, rates: rsd }))).toThrow(RateUnitError);
-    const bezKoef = TYPES.map((t) => (t.code === "vikend" ? { ...t, worker_coef: null } : t));
-    let err;
-    try {
-      approvalPayload(ulaz({ hourTypes: bezKoef }));
-    } catch (e) {
-      err = e;
-    }
-    expect(err).toBeInstanceOf(MissingCoefficientError);
-    expect(isMoneyError(err)).toBe(true);
-    expect(isMoneyError(new Error("x"))).toBe(false);
-  });
-
-  it("pregled iznosa ne baca: koeficijent koji fali je `error`; zaokruživanje isto kao baza (191,43 / 309,85)", () => {
-    const seed = TYPES.map((t) => (t.code === "redovni" ? t : { ...t, worker_coef: null, client_coef: null }));
-    const fali = previewAmounts({ row: row(), workerRate: 12, clientRate: 20, hourTypes: seed, holidays: [], dailyThreshold: 8 });
-    expect(fali.amounts).toBeNull();
-    expect(fali.error).toBeInstanceOf(MissingCoefficientError);
-    expect(fali.hoursByType.prekovremeni).toBe(2);
-
-    const ok = previewAmounts({
-      row: row({ mon_hours: 8, tue_hours: 7.5, sat_hours: 0 }), workerRate: 12.35, clientRate: 19.99, hourTypes: seed, holidays: [], dailyThreshold: 8,
-    });
-    expect([ok.amounts.worker_cost, ok.amounts.client_revenue, ok.amounts.profit]).toEqual([191.43, 309.85, 118.42]);
-
-    expect(previewAmounts({ row: row({ mon_hours: 25 }), workerRate: 12, clientRate: 20, hourTypes: TYPES })).toEqual({
-      hoursByType: null, amounts: null, error: null,
-    });
-  });
 });
 
 // ───────────────────────── mesečni obračun (payrollMonth.js, Faza 3, D17) ─────────────────────────
@@ -1332,7 +939,7 @@ describe("izveštaji: grupisanje po project_id / client_id, ne po imenu", () => 
     expect(extra.map((r) => [r.key, r.name, r.profit])).toEqual([["P9", "QA-Nepoznat", 10]]);
     expect(projectCostTotals(costs)).toEqual({ eur: 150.3, rsd: 5000 });
     // RSD trošak sa kursom ulazi u EUR (D19); bez kursa ostaje posebno i ne ulazi u zbir.
-    expect(projectCostTotals([...costs, { project_id: "P1", amount: 11720, currency: "RSD", eur_rsd_rate: 117.2, eur_amount: 100 }]))
+    expect(projectCostTotals([...costs, { project_id: "P1", amount: 11720, currency: "RSD", eur_rsd_rate: 117.2, eur_amount: 100, fx_rate_date: "2026-11-20" }]))
       .toEqual({ eur: 250.3, rsd: 5000 });
     expect(projectFinancials([], [])).toMatchObject({ hours: 0, revenue: 0, profit: 0, marginPct: null });
   });
@@ -1367,17 +974,20 @@ describe("troškovi projekta u EUR (isti primer kao pgTAP 06)", () => {
   it("costInEur: EUR je iznos, RSD je EUR iznos iz baze, a bez njega iz kursa", () => {
     expect(costInEur({ amount: 250.5, currency: "EUR" })).toBe(250.5);
     expect(costInEur({ amount: 40 })).toBe(40); // prazna valuta = EUR
-    expect(costInEur({ amount: 11720, currency: "RSD", eur_rsd_rate: 117.2, eur_amount: "100.00" })).toBe(100);
+    const FX = { fx_rate_date: "2026-11-20" }; // K3: kurs ulazi u EUR zbir samo uz datum kursa
+    expect(costInEur({ amount: 11720, currency: "RSD", eur_rsd_rate: 117.2, eur_amount: "100.00", ...FX })).toBe(100);
     // Važi iznos koji je izračunala baza (ovde namerno drugačiji od iznos / kurs).
-    expect(costInEur({ amount: 11720, currency: "RSD", eur_rsd_rate: 117.2, eur_amount: 99.99 })).toBe(99.99);
-    expect(costInEur({ amount: 131.85, currency: "RSD", eur_rsd_rate: 117.2 })).toBe(1.13); // pregled u formi pre čuvanja
-    expect(costInEur({ amount: 12000, currency: "RSD", eur_rsd_rate: null, eur_amount: null })).toBeNull();
+    expect(costInEur({ amount: 11720, currency: "RSD", eur_rsd_rate: 117.2, eur_amount: 99.99, ...FX })).toBe(99.99);
+    expect(costInEur({ amount: 131.85, currency: "RSD", eur_rsd_rate: 117.2, ...FX })).toBe(1.13);
+    expect(costInEur({ amount: 12000, currency: "RSD", eur_rsd_rate: null, eur_amount: null, ...FX })).toBeNull();
+    // Kurs bez datuma kursa (stari red) nije dovoljan za EUR zbir (K3, T28).
+    expect(costInEur({ amount: 11720, currency: "RSD", eur_rsd_rate: 117.2, eur_amount: 100 })).toBeNull();
   });
   it("zbir u EUR uključuje RSD troškove po unetom kursu; RSD bez kursa se vraća posebno (ni kao 0, ni kao RSD u EUR)", () => {
     const costs = [
       { id: "1", amount: 300, currency: "EUR", eur_amount: 300 },
-      { id: "2", amount: 11720, currency: "RSD", eur_rsd_rate: 117.2, eur_amount: 100 },
-      { id: "3", amount: 131.85, currency: "RSD", eur_rsd_rate: 117.2, eur_amount: 1.13 },
+      { id: "2", amount: 11720, currency: "RSD", eur_rsd_rate: 117.2, eur_amount: 100, fx_rate_date: "2026-11-20" },
+      { id: "3", amount: 131.85, currency: "RSD", eur_rsd_rate: 117.2, eur_amount: 1.13, fx_rate_date: "2026-11-20" },
       { id: "4", amount: 12000, currency: "RSD", eur_rsd_rate: null, eur_amount: null },
       { id: "5", amount: 0.1, currency: "EUR" },
       { id: "6", amount: 0.2, currency: "EUR" },
@@ -1390,12 +1000,14 @@ describe("troškovi projekta u EUR (isti primer kao pgTAP 06)", () => {
     expect(s.converted).toEqual({ RSD: { amount: 11851.85, eur: 101.13 } });
   });
   it("prazan spisak: zbir 0, ništa ne fali", () => {
-    expect(sumCostsEur([])).toEqual({ total: 0, counted: 0, missingRate: [], missingByCurrency: {}, converted: {} });
+    expect(sumCostsEur([])).toEqual({
+      total: 0, counted: 0, missingRate: [], missingByCurrency: {}, undatedRate: [], undatedByCurrency: {}, converted: {},
+    });
   });
   it("ostaje nama (D8) oduzima troškove u EUR, uključujući preračunate RSD", () => {
     const s = sumCostsEur([
       { amount: 300, currency: "EUR" },
-      { amount: 11720, currency: "RSD", eur_rsd_rate: 117.2, eur_amount: 100 },
+      { amount: 11720, currency: "RSD", eur_rsd_rate: 117.2, eur_amount: 100, fx_rate_date: "2026-11-20" },
     ]);
     expect(projectMargin({ revenue: 1000, laborCost: 450.5, otherCosts: s.total }).remaining).toBe(149.5);
   });

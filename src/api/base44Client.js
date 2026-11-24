@@ -14,16 +14,27 @@ const ENTITY_TABLES = {
   Client: "clients",
   Project: "projects",
   ProjectAssignment: "project_assignments",
+  ProjectRole: "project_roles",
   Rate: "rates",
+  ExchangeRate: "exchange_rates",
+  MigrationReport: "migration_report",
   Timesheet: "timesheets",
+  TimesheetEntry: "timesheet_entries",
   PayrollRecord: "payroll_records",
   ProjectCost: "project_costs",
   CostCategory: "cost_categories",
+  AuditLog: "audit_log",
   DepartmentConfig: "department_configs",
   Document: "documents",
+  DocumentType: "document_types",
+  RequiredDocument: "required_documents",
+  OnboardingPackage: "onboarding_packages",
+  OnboardingPackageDownload: "onboarding_package_downloads",
   LeaveRequest: "leave_requests",
   AttendanceRecord: "attendance_records",
   Schedule: "schedules",
+  Shift: "shifts",
+  WorkforceRequirement: "workforce_requirements",
   Task: "tasks",
   Notification: "notifications",
   EmailTemplate: "email_templates",
@@ -41,12 +52,25 @@ const ENTITY_TABLES = {
 };
 
 const SYSTEM_FIELDS = new Set(["id", "created_date", "updated_date", "created_by"]);
+// Kolone koje baza ne daje kroz column grant (T26, migracija 20261125040000): iznosi i tarife satnice čitaju se iz
+// view-a `timesheet_money` (maska po pravu rates.view_b2b / rates.view_b2c) i spajaju u red. Bez prava → undefined.
+export const SENSITIVE_COLUMNS = Object.freeze({
+  timesheets: ["b2c_rate", "b2b_rate", "worker_cost", "client_revenue", "profit", "rate_snapshot", "estimate_days"],
+  // Zarada i satnice iz profila radnika: HR čita lične podatke, ali ne i novac (view employee_private_money).
+  employee_private: ["salary", "b2c_hourly_rate", "b2b_hourly_rate", "overtime_rate", "weekend_rate", "holiday_rate"],
+});
+const MONEY_VIEW = {
+  timesheets: { view: "timesheet_money", key: "timesheet_id", permissions: ["rates.view_b2b", "rates.view_b2c"] },
+  employees: { view: "employee_private_money", key: "employee_id", permissions: ["payroll.view", "rates.view_b2b", "rates.view_b2c"] },
+};
+const MONEY_CHUNK = 500;
+const isSensitive = (table, column) => (SENSITIVE_COLUMNS[table] || []).includes(column);
 const PRIVATE_EMPLOYEE_FIELDS = new Set(
   (TABLE_COLUMNS.employee_private || []).filter((c) => c !== "employee_id" && c !== "updated_date")
 );
 
 // Polja koja čuvaju fajl. U bazi je trajna referenca `storage://files/<putanja>`, a stranica dobija potpisan link.
-const FILE_FIELDS = { documents: ["file_url"], timesheets: ["attachment_url"], employees: ["profile_photo"], company_settings: ["logo_url"] };
+const FILE_FIELDS = { documents: ["file_url"], timesheets: ["attachment_url"], employees: ["profile_photo"], company_settings: ["logo_url"], project_costs: ["receipt_url"] };
 const BUCKET = "files";
 const STORAGE_PREFIX = `storage://${BUCKET}/`;
 export const SIGNED_URL_SECONDS = 60 * 60;
@@ -54,7 +78,7 @@ export const SIGNED_URL_SECONDS = 60 * 60;
 // spiskovi čitaju u delovima — ranije su izveštaji preko 500/1000 satnica tiho gubili redove (QA 14.11.2026).
 export const PAGE_SIZE = 1000;
 // Tabele čiji primarni ključ nije kolona `id` (get/update/delete/create idu preko njega).
-export const PRIMARY_KEY = { hour_types: "code", holidays: "date", work_rules: "id", company_settings: "id", month_locks: "month", employee_private: "employee_id" };
+export const PRIMARY_KEY = { hour_types: "code", document_types: "code", holidays: "date", work_rules: "id", company_settings: "id", month_locks: "month", employee_private: "employee_id" };
 // Kolona po kojoj je redosled stabilan između delova: primarni ključ; payslip_projects nema jednu kolonu ključa.
 const STABLE_ORDER = { ...PRIMARY_KEY, payslip_projects: "payslip_id" };
 
@@ -63,17 +87,31 @@ const warn = (...args) => {
   if (isDev) console.warn("[podaci]", ...args);
 };
 
-// ───────────────────────── uloga (keš po sesiji) ─────────────────────────
-let adminPromise = null;
-function isAdmin() {
-  if (!adminPromise) {
+// ───────────────────────── prava (keš po sesiji) ─────────────────────────
+// Lične podatke radnika (employee_private) menja ko ima employees.private.edit (migracija 20261125020000).
+let privateEditPromise = null;
+function canEditPrivate() {
+  if (!privateEditPromise) {
     const sb = requireSupabase();
-    adminPromise = sb.rpc("is_admin").then(({ data, error }) => !error && data === true);
+    privateEditPromise = sb.rpc("has_permission", { p_code: "employees.private.edit" }).then(({ data, error }) => !error && data === true);
     sb.auth.onAuthStateChange(() => {
-      adminPromise = null;
+      privateEditPromise = null;
     });
   }
-  return adminPromise;
+  return privateEditPromise;
+}
+
+// Prava prijavljenog korisnika (my_permissions, T-B) — keš po sesiji, kao uloga.
+let permissionsPromise = null;
+function myPermissions() {
+  if (!permissionsPromise) {
+    const sb = requireSupabase();
+    permissionsPromise = sb.rpc("my_permissions").then(({ data, error }) => (!error && Array.isArray(data) ? data : []));
+    sb.auth.onAuthStateChange(() => {
+      permissionsPromise = null;
+    });
+  }
+  return permissionsPromise;
 }
 
 // ───────────────────────── pomoćne funkcije ─────────────────────────
@@ -84,8 +122,8 @@ function parseSort(sort, table) {
   if (!sort || typeof sort !== "string") return null;
   const desc = sort.startsWith("-");
   const column = desc ? sort.slice(1) : sort;
-  if (!(TABLE_COLUMNS[table] || []).includes(column)) {
-    warn(`Sortiranje po nepostojećem polju "${column}" u ${table} je preskočeno`);
+  if (!(TABLE_COLUMNS[table] || []).includes(column) || isSensitive(table, column)) {
+    warn(`Sortiranje po nepostojećem (ili zaštićenom) polju "${column}" u ${table} je preskočeno`);
     return null;
   }
   return { column, ascending: !desc };
@@ -102,8 +140,9 @@ function parseOptions(sortOrOptions, limit) {
 function applyQuery(q, query, table) {
   const columns = TABLE_COLUMNS[table] || [];
   for (const [field, value] of Object.entries(query || {})) {
-    if (!columns.includes(field)) {
+    if (!columns.includes(field) || isSensitive(table, field)) {
       // Base44 vraća prazno za nepostojeće polje; isto radimo i ovde umesto da tiho vratimo sve redove.
+      // Zaštićena kolona (T26) se ne filtrira — baza je ne daje za čitanje.
       warn(`Filter po nepostojećem polju "${field}" u ${table}`);
       return { q, empty: true };
     }
@@ -152,6 +191,7 @@ function preparePayload(table, data) {
   for (const [key, raw] of Object.entries(data || {})) {
     if (SYSTEM_FIELDS.has(key)) continue;
     if (table === "employees" && PRIVATE_EMPLOYEE_FIELDS.has(key)) continue; // ide u employee_private
+    if (isSensitive(table, key)) continue; // iznose i tarife računa baza (guard_timesheet), ekran ih ne šalje
     if (!columns.includes(key)) {
       dropped.push(key);
       continue;
@@ -185,6 +225,8 @@ async function signFileFields(table, rows) {
     for (const f of fields) {
       if (typeof copy[f] === "string" && copy[f].startsWith(STORAGE_PREFIX)) {
         copy[f] = signed.get(copy[f].slice(STORAGE_PREFIX.length)) || null;
+        // Fajl postoji u zapisu, ali storage ga nije izdao (npr. osetljiv dokument bez documents.view_sensitive, T19).
+        if (!copy[f]) copy.file_unavailable = true;
       }
     }
     return copy;
@@ -214,11 +256,38 @@ async function DiscardUpload({ file_url } = {}) {
 }
 
 // ───────────────────────── generički entitet ─────────────────────────
+// Iznosi iz view-a sa maskom (timesheet_money) spojeni u redove — samo kad korisnik ima bar jedno pravo na novac.
+async function mergeMoney(table, rows) {
+  const money = MONEY_VIEW[table];
+  if (!money || !rows.length) return rows;
+  const perms = await myPermissions();
+  if (!money.permissions.some((p) => perms.includes(p))) return rows;
+  const ids = rows.map((r) => r.id).filter(Boolean);
+  const byId = new Map();
+  for (let i = 0; i < ids.length; i += MONEY_CHUNK) {
+    const { data, error } = await requireSupabase().from(money.view).select("*").in(money.key, ids.slice(i, i + MONEY_CHUNK));
+    if (error) throw toError(error, `${table}.money`);
+    (data || []).forEach((m) => byId.set(m[money.key], m));
+  }
+  return rows.map((row) => {
+    const m = byId.get(row.id);
+    if (!m) return row;
+    const { [money.key]: _key, ...fields } = m;
+    return { ...row, ...fields };
+  });
+}
+
 function makeEntity(name, table) {
-  const selectCols = table === "employees" ? "*, employee_private(*)" : "*";
+  // Tabela sa zaštićenim kolonama se čita eksplicitnom listom (select * bi pao na column grant-u).
+  const selectCols = table === "employees"
+    ? `*, employee_private(${(TABLE_COLUMNS.employee_private || []).filter((c) => !isSensitive("employee_private", c)).join(",")})`
+    : SENSITIVE_COLUMNS[table]
+      ? (TABLE_COLUMNS[table] || []).filter((c) => !isSensitive(table, c)).join(",")
+      : "*";
 
   const finish = async (rows) => {
     let out = rows || [];
+    out = await mergeMoney(table, out);
     if (table === "employees") {
       out = out.map(({ employee_private: priv, ...row }) => {
         if (!priv) return row;
@@ -275,10 +344,10 @@ function makeEntity(name, table) {
       if (PRIVATE_EMPLOYEE_FIELDS.has(k) && v !== undefined) priv[k] = cleanValue(k, v);
     }
     if (!Object.keys(priv).length) return;
-    if (!(await isAdmin())) {
+    if (!(await canEditPrivate())) {
       // Glavni zapis je već sačuvan, pa ovo nije greška nego upozorenje (inače bi ponovno čuvanje napravilo duplikat).
       if (Object.values(priv).some((v) => v !== null)) toast.warning(msg("privateSkipped"), { duration: 10000 });
-      warn("Operater ne može da menja lične/platne podatke radnika — preskočeno");
+      warn("Bez prava employees.private.edit lični/platni podaci radnika se ne menjaju — preskočeno");
       return;
     }
     const { error } = await requireSupabase()

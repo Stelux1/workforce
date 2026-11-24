@@ -1,6 +1,8 @@
 // Greške iz baze i Storage-a pretvara u rečenice koje korisnik razume (EN/RS prema izabranom jeziku).
 // Poruke koje baza sama diže (npr. „Mesec 10.2031 je zaključan") su već na srpskom i prolaze nepromenjene.
 
+import { permissionLabel } from "@/lib/permissions";
+
 const M = {
   permission: {
     en: "You don't have permission to make this change.",
@@ -54,9 +56,24 @@ const M = {
   },
   coefficient: { en: "The coefficient must be greater than 0.", rs: "Koeficijent mora biti veći od 0.", sk: "Koeficient musí byť väčší ako 0." },
   notAllowedValue: { en: "The selected value is not allowed.", rs: "Izabrana vrednost nije dozvoljena.", sk: "Vybraná hodnota nie je povolená." },
+  rateOverlap: {
+    en: "This rate overlaps an existing rate for the same assignment / job role. To change the price use “Change from date”.",
+    rs: "Tarifa se preklapa sa postojećom tarifom iste dodele / Job Role. Za promenu cene koristite „Promeni od datuma”.",
+    sk: "Sadzba sa prekrýva s existujúcou sadzbou toho istého pridelenia / roly. Na zmenu ceny použite „Zmeniť od dátumu”.",
+  },
+  inUseRole: {
+    en: "This job role is used by assignments or rates, so it can't be deleted. Deactivate it instead.",
+    rs: "Job Role koriste dodele ili tarife, pa ne može da se obriše. Umesto toga ga deaktivirajte.",
+    sk: "Pracovnú rolu používajú pridelenia alebo sadzby, preto ju nemožno odstrániť. Radšej ju deaktivujte.",
+  },
   overlap: {
     en: "This engagement overlaps an existing engagement of the same employee.",
     rs: "Ovaj angažman se preklapa sa postojećim angažmanom istog radnika.", sk: "Tento pracovný vzťah sa prekrýva s existujúcim pracovným vzťahom toho istého zamestnanca.",
+  },
+  overlapInterval: {
+    en: "This work interval overlaps another interval of the same employee (possibly on another project).",
+    rs: "Ovaj interval rada se preklapa sa drugim intervalom istog radnika (možda na drugom projektu).",
+    sk: "Tento pracovný interval sa prekrýva s iným intervalom toho istého zamestnanca (možno na inom projekte).",
   },
   inUse: {
     en: "This can't be deleted because other records use it.",
@@ -70,6 +87,22 @@ const M = {
   inUseProjectCosts: {
     en: "The project has project costs. Delete the costs first.",
     rs: "Projekat ima troškove. Prvo obrišite troškove projekta.", sk: "Projekt má náklady projektu. Najprv odstráňte náklady.",
+  },
+  costOneParty: {
+    en: "A cost can be linked to a worker or to a vendor, not to both.",
+    rs: "Trošak može da bude vezan za radnika ili za dobavljača, ne za oba.", sk: "Náklad môže byť viazaný na pracovníka alebo dodávateľa, nie na oboch.",
+  },
+  inUseCostCategory: {
+    en: "This cost category has project costs, so it can't be deleted. Move or delete those costs first.",
+    rs: "Kategorija ima troškove projekata, pa ne može da se obriše. Prvo prebacite ili obrišite te troškove.", sk: "Kategória má náklady projektov, preto ju nemožno odstrániť. Najprv presuňte alebo odstráňte tieto náklady.",
+  },
+  inUseEmployeeCosts: {
+    en: "The employee is linked to project costs, so they can't be deleted. Set the status to Terminated instead.",
+    rs: "Radnik je vezan za troškove projekata, pa ne može da se obriše. Umesto toga postavite status Otpušten.", sk: "Zamestnanec je viazaný na náklady projektov, preto ho nemožno odstrániť. Nastavte radšej stav Ukončený.",
+  },
+  inUseVendorCosts: {
+    en: "The vendor is linked to project costs, so it can't be deleted. Set it to Inactive instead.",
+    rs: "Dobavljač je vezan za troškove projekata, pa ne može da se obriše. Umesto toga ga postavite na Neaktivan.", sk: "Dodávateľ je viazaný na náklady projektov, preto ho nemožno odstrániť. Nastavte ho radšej ako Neaktívny.",
   },
   inUseEmployeeTimesheets: {
     en: "The employee has timesheets, so they can't be deleted. Set the status to Terminated instead.",
@@ -140,8 +173,11 @@ const M = {
     rs: "Slanje mejlova još nije podešeno (nema mejl servisa).", sk: "Odosielanie e-mailov zatiaľ nie je nastavené (chýba e-mailová služba).",
   },
   privateSkipped: {
-    en: "Saved, but bank details, salary and rates were NOT saved — only an admin can change them.",
-    rs: "Sačuvano, ali bankovni podaci, plata i tarife NISU sačuvani — to može da menja samo admin.", sk: "Uložené, ale bankové údaje, mzda a sadzby NEBOLI uložené — môže ich meniť iba administrátor.",
+    en: "Saved, but personal and bank details were NOT saved — you don't have the permission to change them.",
+    rs: "Sačuvano, ali lični i bankovni podaci NISU sačuvani — nemate pravo da ih menjate.", sk: "Uložené, ale osobné a bankové údaje NEBOLI uložené — nemáte oprávnenie ich meniť.",
+  },
+  missingPermission: {
+    en: "You don't have the permission for this action", rs: "Nemate pravo za ovu radnju", sk: "Na túto akciu nemáte oprávnenie",
   },
   unknown: { en: "Something went wrong while saving.", rs: "Došlo je do greške pri radu sa bazom.", sk: "Pri ukladaní sa niečo pokazilo." },
 };
@@ -186,6 +222,7 @@ function checkMessage(constraint) {
   if (constraint === "timesheets_week_start_check") return "weekStart";
   if (constraint === "employee_private_jmbg_check") return "jmbg";
   if (constraint === "employment_history_vendor") return "vendorRequired";
+  if (constraint === "project_costs_one_party") return "costOneParty";
   if (constraint === "employee_private_work_fraction_check") return "workFraction";
   if (/_coef_check$/.test(constraint)) return "coefficient";
   if (/_(amount|rate|hourly_rate|eur_rsd_rate)_check$/.test(constraint)) return "negative";
@@ -195,6 +232,9 @@ function checkMessage(constraint) {
 const IN_USE_BY_CONSTRAINT = {
   timesheets_project_id_fkey: "inUseProjectTimesheets",
   project_costs_project_id_fkey: "inUseProjectCosts",
+  project_costs_cost_category_id_fkey: "inUseCostCategory",
+  project_costs_employee_id_fkey: "inUseEmployeeCosts",
+  project_costs_vendor_id_fkey: "inUseVendorCosts",
   payslip_projects_project_id_fkey: "inUseProjectTimesheets",
   timesheets_employee_id_fkey: "inUseEmployeeTimesheets",
   payroll_records_employee_id_fkey: "inUseEmployeePayroll",
@@ -202,6 +242,8 @@ const IN_USE_BY_CONSTRAINT = {
   project_assignments_employee_id_fkey: "inUseEmployeeAssignments",
   rates_assignment_id_fkey: "inUseAssignmentRates",
   rates_project_id_fkey: "inUseProjectRates",
+  rates_project_role_id_fkey: "inUseRole",
+  project_assignments_project_role_id_fkey: "inUseRole",
   projects_client_id_fkey: "inUseClientProjects",
   employment_history_vendor_id_fkey: "inUseVendorEngagements",
 };
@@ -212,6 +254,7 @@ const RATE_SIDE_EN = { radnika: "worker", klijenta: "client" };
 const RATE_MISSING_SIDE_EN = { radnika: "the worker", klijenta: "the client", "radnika ni klijenta": "the worker or the client" };
 const RATE_SOURCE_EN = {
   "tarifa angažmana": "assignment rate",
+  "tarifa Job Role": "job role rate",
   "satnica radnika na projektu": "worker's rate on the project",
   "tarifa projekta/pozicije": "project/position rate",
   "zanimanje na projektu": "job role on the project",
@@ -248,6 +291,12 @@ const DB_MESSAGES_EN = [
   [/^Mesec ima (\d+) neodobrenih satnica$/, "The month has $1 unapproved timesheets."],
   [/^Samo admin može da (zaključa|otključa) mesec$/, "Only an admin can lock or unlock a month."],
   [/^Mora da ostane bar jedan aktivan admin$/, "At least one active admin must remain."],
+  // Uloge i prava (migracije 20261125010000 i 20261125020000).
+  [/^Ulogu admin i nalog admina menja samo admin$/, "Only an admin can give or remove the admin role or change an admin's account."],
+  [/^Svoju ulogu, status i opseg projekata ne možete da menjate$/, "You can't change your own role, status or project access."],
+  [/^Svoja prava i projekte ne možete da menjate$/, "You can't change your own permissions or projects."],
+  [/^Admin ima sva prava; pojedinačna prava mu se ne menjaju$/, "An admin has all permissions; individual permissions can't be changed."],
+  [/^Audit log se ne menja i ne briše$/, "The audit log can't be changed or deleted."],
   [/^Obračun može da se napravi samo za zaključan mesec$/, "A payroll can only be created for a locked month."],
   // Mesečni obračun (migracija 20261114200000): spisak problema ostaje na srpskom, kao u bazi.
   [/^Bez kursa EUR\/RSD nema obračuna — unesite kurs za mesec$/, "No payroll without an EUR/RSD exchange rate — enter the rate for the month."],
@@ -268,6 +317,16 @@ const DB_MESSAGES_EN = [
   // Trošak projekta van EUR mora imati kurs (guard_project_cost, migracija 20261114220000).
   [/^Trošak u (\S+) mora imati kurs veći od 0 \(koliko \S+ vredi 1 EUR\)$/,
     "A cost in $1 needs an exchange rate greater than 0 (how many $1 is 1 EUR)."],
+  // Project Costs C1 (guard_project_cost v2, migracija 20261125050000).
+  [/^Trošak u (\S+) mora imati datum kursa$/, "A cost in $1 needs an exchange rate date."],
+  [/^Datum troška je obavezan$/, "The cost date is required."],
+  [/^Iznos troška je obavezan$/, "The cost amount is required."],
+  [/^Valuta troška je obavezna$/, "The cost currency is required."],
+  [/^Kategorija troška je obavezna$/, "The cost category is required."],
+  [/^Kategorija troška ne postoji$/, "The cost category does not exist."],
+  [/^Podkategorija je obavezna za kategoriju (.+)$/, "A subcategory is required for category $1."],
+  [/^Podkategorija „(.+)" ne postoji u kategoriji (.+)$/, "Subcategory \"$1\" does not exist in category $2."],
+  [/^Trošak rada ide kroz Timesheets\/Payroll$/, "Labour cost goes through Timesheets/Payroll, not Project Costs."],
   // Tarife na projektu i u dodelama menja samo admin (guard_project_rates / guard_assignment_rates, migracija 20261114240000).
   [/^Zanimanje sa tarifom na projektu dodaje, menja i briše samo admin$/,
     "Only an admin can add, change or delete a job role that has a rate on the project."],
@@ -279,7 +338,44 @@ const DB_MESSAGES_EN = [
     "Position \"$1\" has a rate on this project — only an admin can assign employees to it."],
   [/^Dodele radnika kome je admin odredio tarifu na ovom projektu menja i briše samo admin$/,
     "Only an admin can change or delete the assignments of an employee whose rate on this project was set by an admin."],
+  // Angažmani i Rate History (migracija 20261125030000).
+  [/^Radnici i Job Roles se menjaju kroz angažmane i Job Roles$/, "Workers and job roles are changed through assignments and job roles."],
+  [/^Radnik već ima dodelu na ovom projektu od (\S+) do (\S+) — dodele istog radnika na istom projektu ne smeju da se preklapaju$/,
+    (_, from, to) => `The employee already has an assignment on this project from ${from} to ${to === "neodređeno" ? "open-ended" : to} — assignments of the same employee on the same project must not overlap.`],
+  [/^Job Role ne pripada projektu dodele$/, "The job role doesn't belong to the assignment's project."],
+  [/^Job Role je obavezan$/, "A job role is required."],
+  [/^Smena ne pripada projektu dodele$/, "The shift doesn't belong to the assignment's project."],
+  [/^Dodela ima unete sate \(od (\S+)\) i ne briše se — završite je \(End\) ili napravite novu$/,
+    "The assignment has recorded hours (from $1) and can't be deleted — end it instead."],
+  [/^Radnik i projekat dodele sa unetim satima ili tarifom se ne menjaju — završite je i napravite novu dodelu$/,
+    "The employee and project of an assignment with hours or rates can't change — end it and create a new assignment."],
+  [/^Dodela ima unete sate (\S+) — period ne može da se skrati tako da ti sati ostanu bez dodele$/,
+    "The assignment has hours on $1 — the period can't be shortened so that those hours are left without an assignment."],
+  [/^Dodela ima tarifu angažmana — period, status i Job Role menjajte kroz Edit \/ End Assignment$/,
+    "The assignment has its own rate — change the period, status or job role through Edit / End Assignment."],
+  [/^Poslednji dan rada na dodeli je (\S+) — kraj ne može biti pre njega$/, "The last day worked on the assignment is $1 — the end can't be before it."],
+  [/^Kraj dodele ne može biti pre početka \((\S+)\)$/, "The assignment can't end before it starts ($1)."],
+  [/^Dodela ima unete sate i ne poništava se — završite je \(End\)$/, "The assignment has recorded hours, so it can't be cancelled — end it instead."],
+  [/^Tarifa dodele je u odobrenoj satnici — dodela se ne poništava, završite je \(End\)$/,
+    "The assignment's rate is used in an approved timesheet — end the assignment instead of cancelling it."],
+  [/^Otkazana dodela se ne (menja|završava)$/, "A cancelled assignment can't be changed."],
+  [/^Datum transfera mora biti posle početka stare dodele \((\S+)\)$/, "The transfer date must be after the start of the old assignment ($1)."],
+  [/^Razlog je obavezan \(najmanje 5 znakova\)$/, "A reason is required (at least 5 characters)."],
+  [/^Iznos tarife mora biti veći od 0$/, "The rate amount must be greater than 0."],
+  [/^Iznos, valuta, jedinica, nivo i početak važenja tarife se ne menjaju — novu cenu unesite kao „Promeni od datuma"$/,
+    "A rate's amount, currency, unit, level and start date can't be changed — enter the new price with “Change from date”."],
+  [/^Tarifa je primenjena u satnicama i ne briše se — postavite je na Neaktivna$/,
+    "The rate is used in timesheets and can't be deleted — set it to Inactive instead."],
+  [/^Datum promene mora biti u periodu važenja tarife \(od (\S+) do (\S+)\)$/, "The change date must be within the rate's validity ($1 – $2)."],
+  [/^Menja se samo aktivna tarifa$/, "Only an active rate can be changed."],
+  [/^Pozicija „(.+)" nije Job Role ovog projekta — prvo dodajte Job Role$/, "Position \"$1\" is not a job role of this project — add the job role first."],
+  [/^Job Role ne pripada projektu tarife$/, "The job role doesn't belong to the rate's project."],
+  [/^Tarifa (angažmana|projekta|radnika) mora biti vezana za (dodelu|projekat|radnika)$/, "The rate must be linked to an assignment, project or employee."],
+  [/^Nemate pristup ovom projektu$/, "You don't have access to this project."],
 ];
+// „Nemate pravo „payroll.manage"" (ili sa običnim navodnicima).
+const PERMISSION_RE = /^Nemate pravo [„"]([a-z_.]+)["“"]$/;
+
 function dbMessage(raw, lang) {
   if (lang === "rs") return raw; // poruke iz baze su na srpskom; slovački prikaz koristi engleski prevod
   for (const [re, en] of DB_MESSAGES_EN) if (re.test(raw)) return raw.replace(re, en);
@@ -306,6 +402,9 @@ export function describeError(error, lang = currentLang()) {
 
   // Postgres
   if (code === "42501") {
+    // Provera prava iz baze (require_permission / RPC): poruka nosi kod prava → naziv prava na jeziku korisnika.
+    const perm = PERMISSION_RE.exec(raw);
+    if (perm) return { key: "missingPermission", text: `${msg("missingPermission", lang)}: ${permissionLabel(perm[1], lang)}.` };
     // Naše poruke iz baze („Satnicu može da odobri samo admin") su jasnije od opšte.
     if (/row-level security|permission denied/i.test(raw) || !raw) return say("permission");
     return { key: "db", text: dbMessage(raw, lang) };
@@ -313,7 +412,8 @@ export function describeError(error, lang = currentLang()) {
   if (code === "23505") {
     if (constraint === "holidays_pkey") return say("duplicateHoliday");
     if (constraint === "employees_employee_id_key") return say("duplicateEmployeeId");
-    if (constraint === "timesheets_one_per_week" || constraint === "timesheets_one_per_week_manual") return say("duplicateTimesheet");
+    if (constraint === "timesheets_one_per_week" || constraint === "timesheets_one_per_week_manual"
+      || constraint === "timesheets_one_per_assignment_week") return say("duplicateTimesheet");
     if (constraint === "projects_name_client_key") return say("duplicateProject");
     if (constraint === "payroll_runs_month_key") return say("duplicatePayrollMonth");
     return say("duplicate");
@@ -322,7 +422,12 @@ export function describeError(error, lang = currentLang()) {
     if (/violates check constraint/i.test(raw)) return say(checkMessage(constraint));
     return { key: "db", text: dbMessage(raw, lang) }; // poruka iz naših pravila u bazi
   }
-  if (code === "23P01") return say("overlap");
+  if (code === "23P01") {
+    if (constraint === "rates_no_overlap") return say("rateOverlap");
+    if (constraint === "timesheet_entries_no_overlap") return say("overlapInterval");
+    if (raw && !/violates exclusion constraint/i.test(raw)) return { key: "db", text: dbMessage(raw, lang) };
+    return say("overlap");
+  }
   if (code === "23503") return say(/update or delete on table/i.test(raw) ? inUseKey(constraint) : "missingLink");
   if (code === "23502") {
     const column = /column "([^"]+)"/.exec(raw)?.[1];

@@ -9,7 +9,7 @@ insert into auth.users (id, email, instance_id, aud, role) values
   ('11111111-1111-4111-8111-111111111111', 'test-admin@radnici.local', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated'),
   ('22222222-2222-4222-8222-222222222222', 'test-operater@radnici.local', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated');
 update public.profiles set role = 'admin', active = true where id = '11111111-1111-4111-8111-111111111111';
-update public.profiles set role = 'operater', active = true where id = '22222222-2222-4222-8222-222222222222';
+update public.profiles set role = 'hr', active = true where id = '22222222-2222-4222-8222-222222222222';
 -- Pravila razvrstavanja kao u šemi (prag 8h, redovni = 1), nezavisno od onoga što je admin upisao u lokalnu bazu.
 update public.work_rules set daily_regular_hours = 8;
 update public.hour_types set worker_coef = 1, client_coef = 1 where code = 'redovni';
@@ -17,9 +17,13 @@ update public.hour_types set worker_coef = 1, client_coef = 1 where code = 'redo
 insert into public.clients (id, name) values ('c0000000-0000-4000-8000-0000000000c1', 'Test klijent pgTAP');
 insert into public.projects (id, name, client_name) values ('b0000000-0000-4000-8000-0000000000b1', 'Test projekat pgTAP', 'Test klijent pgTAP');
 insert into public.employees (id, first_name, last_name, employee_id) values ('d0000000-0000-4000-8000-0000000000d1', 'Pera', 'Perić', 'TEST-PGTAP-001');
--- Tarife 12 / 20 su važeće tarife (tarifa radnika iz Tarifa, satnica klijenta iz profila) — odobravanje ih proverava.
-insert into public.employee_private (employee_id, jmbg, iban, b2c_hourly_rate, b2b_hourly_rate) values ('d0000000-0000-4000-8000-0000000000d1', '0101990710008', 'RS35000000000000000000', 12, 20);
+-- Tarife 12 / 20 (Phase 7): tarife su samo u public.rates — B2C (cost) 12 odmah, B2B (revenue) 20 tek kad admin
+-- odobrava (da bi se videlo da satnica bez tarife klijenta ne može da se odobri). Profil više nije nivo tarife.
+insert into public.employee_private (employee_id, jmbg, iban) values ('d0000000-0000-4000-8000-0000000000d1', '0101990710008', 'RS35000000000000000000');
 insert into public.rates (scope, kind, amount, employee_id, effective_from) values ('employee', 'cost', 12, 'd0000000-0000-4000-8000-0000000000d1', '2026-01-01');
+-- Radnik na projektu = dodela (project_assignments); direktan upis u projects.assigned_employees je zabranjen.
+insert into public.project_assignments (id, employee_id, project_id, start_date, status)
+  values ('a0000000-0000-4000-8000-0000000000a9', 'd0000000-0000-4000-8000-0000000000d1', 'b0000000-0000-4000-8000-0000000000b1', '2031-01-01', 'active');
 
 select is((select client_id from public.projects where id = 'b0000000-0000-4000-8000-0000000000b1'),
   'c0000000-0000-4000-8000-0000000000c1'::uuid, 'projekat dobija client_id iz imena klijenta');
@@ -34,7 +38,8 @@ set local role authenticated;
 set local request.jwt.claims to '{"sub":"22222222-2222-4222-8222-222222222222","role":"authenticated"}';
 
 select is((select count(*) from public.employees where id = 'd0000000-0000-4000-8000-0000000000d1')::int, 1, 'operater vidi radnike');
-select is((select count(*) from public.employee_private)::int, 0, 'operater ne vidi JMBG, banku ni tarife radnika');
+-- Spec v1.4 §4 (D30 K1): HR (bivši operater) vidi i menja lične podatke radnika (employees.private.*).
+select is((select count(*) from public.employee_private where employee_id = 'd0000000-0000-4000-8000-0000000000d1')::int, 1, 'hr vidi lične podatke radnika (§4)');
 select is((select count(*) from public.rates)::int, 0, 'operater ne vidi tarife');
 select lives_ok($$insert into public.timesheets (id, employee_id, project, week_start, mon_hours, tue_hours, total_hours)
   values ('f0000000-0000-4000-8000-0000000000f1', 'd0000000-0000-4000-8000-0000000000d1', 'Test projekat pgTAP', '2031-10-06', 8, 8, 99)$$,
@@ -49,16 +54,18 @@ select throws_ok($$insert into public.timesheets (employee_id, project_id, week_
   values ('d0000000-0000-4000-8000-0000000000d1', 'b0000000-0000-4000-8000-0000000000b1', '2031-10-13', 8, 'approved', 12, 20)$$,
   '42501', null, 'operater ne može da upiše odobrenu satnicu');
 update public.profiles set role = 'admin' where id = '22222222-2222-4222-8222-222222222222';
-select is((select role from public.profiles where id = '22222222-2222-4222-8222-222222222222'), 'operater',
+select is((select role from public.profiles where id = '22222222-2222-4222-8222-222222222222'), 'hr',
   'operater ne može sam sebi da da admin ulogu');
 
 -- ───── admin ─────
 set local request.jwt.claims to '{"sub":"11111111-1111-4111-8111-111111111111","role":"authenticated"}';
 
 select is((select count(*) from public.employee_private where employee_id = 'd0000000-0000-4000-8000-0000000000d1')::int, 1, 'admin vidi JMBG i banku');
+-- Poruka v4: tarife bira baza po datumu rada; bez B2B tarife odobravanje navodi koja tarifa fali.
 select throws_like($$update public.timesheets set approval_status = 'approved' where id = 'f0000000-0000-4000-8000-0000000000f1'$$,
-  '%nema tarifu%', 'satnica bez tarife ne može da se odobri (nikad 0)');
-select lives_ok($$update public.timesheets set approval_status = 'approved', b2c_rate = 12, b2b_rate = 20
+  '%ne može da se odobri%nema tarife klijenta (B2B)%', 'satnica bez tarife ne može da se odobri (nikad 0)');
+insert into public.rates (scope, kind, amount, project_id, effective_from) values ('project', 'revenue', 20, 'b0000000-0000-4000-8000-0000000000b1', '2026-01-01');
+select lives_ok($$update public.timesheets set approval_status = 'approved'
   where id = 'f0000000-0000-4000-8000-0000000000f1'$$, 'admin odobrava satnicu sa tarifom');
 select is((select approved_by from public.timesheets where id = 'f0000000-0000-4000-8000-0000000000f1'),
   '11111111-1111-4111-8111-111111111111'::uuid, 'baza beleži ko je odobrio');
@@ -131,7 +138,7 @@ select is((select count(*) from public.timesheets where project_id = 'b0000000-0
 
 -- poslednji admin
 update public.profiles set active = false where role = 'admin' and id <> '11111111-1111-4111-8111-111111111111';
-select throws_ok($$update public.profiles set role = 'operater' where id = '11111111-1111-4111-8111-111111111111'$$,
+select throws_ok($$update public.profiles set role = 'hr' where id = '11111111-1111-4111-8111-111111111111'$$,
   '23514', null, 'poslednji aktivan admin ne može da se ukloni');
 
 select * from finish();

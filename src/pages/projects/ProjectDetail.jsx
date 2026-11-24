@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, MapPin, Calendar, Edit, Trash2, BarChart2 } from "lucide-react";
+import { ArrowLeft, MapPin, Calendar, Edit, Trash2, BarChart2, LayoutGrid, Users, FileCheck2, Receipt } from "lucide-react";
 import { format } from "date-fns";
 import { useT } from "@/lib/translations";
 import { useLang } from "@/lib/LanguageContext";
@@ -13,6 +13,9 @@ import ProjectFormModal from "@/components/projects/ProjectFormModal";
 import ProjectEmployees from "@/components/projects/ProjectEmployees";
 import ProjectRoles from "@/components/projects/ProjectRoles";
 import ProjectFinancialReport from "@/components/projects/ProjectFinancialReport";
+import ProjectOnboarding from "@/components/projects/ProjectOnboarding";
+import ProjectCosts from "@/components/projects/ProjectCosts";
+import { useAuth } from "@/lib/AuthContext";
 import { projectAddress, projectQueryKeys } from "@/lib/projectSite";
 
 import {
@@ -20,6 +23,22 @@ import {
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
   AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+
+// Kartice projekta (spec §2.2): Overview | Workers | Onboarding | Costs | Workforce Plan | Financial Report.
+// Kartica se prikazuje samo kad njen modul postoji i korisnik ima pravo (`permission`; bez njega vide svi koji vide
+// projekat). Sve kartice čitaju iste zapise kao centralne stranice (jedna evidencija, §2.3). Nova kartica = jedan red.
+const PROJECT_TABS = [
+  { key: "overview", label: { en: "Overview", rs: "Pregled", sk: "Prehľad" }, icon: LayoutGrid,
+    render: ({ project, refresh }) => <ProjectRoles project={project} onUpdated={refresh} /> },
+  { key: "workers", label: { en: "Workers", rs: "Radnici", sk: "Pracovníci" }, icon: Users,
+    render: ({ project, refresh }) => <ProjectEmployees project={project} onUpdated={refresh} /> },
+  { key: "onboarding", label: { en: "Onboarding", rs: "Onboarding", sk: "Onboarding" }, icon: FileCheck2,
+    render: ({ project }) => <ProjectOnboarding project={project} /> },
+  { key: "costs", label: { en: "Costs", rs: "Troškovi", sk: "Náklady" }, icon: Receipt, permission: "costs.view",
+    render: ({ project }) => <ProjectCosts projectId={project.id} projectName={project.name} /> },
+  { key: "financials", label: { en: "Financial Report", rs: "Finansijski izveštaj", sk: "Finančný prehľad" }, icon: BarChart2,
+    permission: "reports.financial", render: ({ project }) => <ProjectFinancialReport project={project} /> },
+];
 
 const STATUS_COLORS = {
   active: "bg-green-100 text-green-700 border-green-200",
@@ -33,6 +52,7 @@ export default function ProjectDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { can } = useAuth();
   // Izmena radnika/zanimanja/podataka projekta osvežava i listu projekata (Satnica, Projekti) — bug 16/17.
   const refreshProject = () => projectQueryKeys(id).forEach((queryKey) => queryClient.invalidateQueries({ queryKey }));
   const [showEdit, setShowEdit] = useState(false);
@@ -82,6 +102,9 @@ export default function ProjectDetail() {
       </div>
     );
   }
+
+  const tabs = PROJECT_TABS.filter((tab) => !tab.permission || can?.(tab.permission));
+  const currentTab = tabs.find((tab) => tab.key === activeTab) || tabs[0];
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
@@ -176,40 +199,26 @@ export default function ProjectDetail() {
       )}
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b mb-6">
-        {[
-          { key: "overview", label: lang === "rs" ? "Pregled" : lang === "sk" ? "Prehľad" : "Overview" },
-          { key: "financials", label: lang === "rs" ? "Finansijski izveštaj" : lang === "sk" ? "Finančný prehľad" : "Financial Report", icon: BarChart2 },
-        ].map((tab) => (
+      <div className="flex gap-1 border-b mb-6 overflow-x-auto" role="tablist">
+        {tabs.map((tab) => (
           <button
             key={tab.key}
+            role="tab"
+            aria-selected={currentTab.key === tab.key}
             onClick={() => setActiveTab(tab.key)}
-            className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px ${
-              activeTab === tab.key
+            className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px whitespace-nowrap ${
+              currentTab.key === tab.key
                 ? "border-primary text-primary"
                 : "border-transparent text-muted-foreground hover:text-foreground"
             }`}
           >
             {tab.icon && <tab.icon className="w-4 h-4" />}
-            {tab.label}
+            {tab.label[lang] || tab.label.en}
           </button>
         ))}
       </div>
 
-      {activeTab === "overview" && (
-        <>
-          {/* Job Roles / Tariffs */}
-          <div className="mb-6">
-            <ProjectRoles project={project} onUpdated={refreshProject} />
-          </div>
-          {/* Employees section */}
-          <ProjectEmployees project={project} onUpdated={refreshProject} />
-        </>
-      )}
-
-      {activeTab === "financials" && (
-        <ProjectFinancialReport project={project} />
-      )}
+      {currentTab.render({ project, refresh: refreshProject })}
 
       {showEdit && (
         <ProjectFormModal

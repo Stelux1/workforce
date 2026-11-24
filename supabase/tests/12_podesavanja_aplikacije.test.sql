@@ -8,7 +8,7 @@ insert into auth.users (id, email, instance_id, aud, role) values
   ('78111111-1111-4111-8111-111111111111', 'qa12-admin@radnici.local', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated'),
   ('78222222-2222-4222-8222-222222222222', 'qa12-operater@radnici.local', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated');
 update public.profiles set role = 'admin', active = true where id = '78111111-1111-4111-8111-111111111111';
-update public.profiles set role = 'operater', active = true where id = '78222222-2222-4222-8222-222222222222';
+update public.profiles set role = 'hr', active = true where id = '78222222-2222-4222-8222-222222222222';
 
 select is((select count(*)::int from public.app_settings), 1, 'postoji tačno jedan red');
 select is((select language || '/' || currency from public.app_settings), 'en/EUR', 'podrazumevano en i EUR');

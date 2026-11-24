@@ -1,216 +1,259 @@
-import { useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+// Project → Overview: Job Roles projekta (project_roles) i njihove projektne tarife (rates scope 'project' +
+// project_role_id; B2B po pravilu, B2C podrazumevani za ulogu) — spec §2.2, §5, docs/TEAMORA-DATA-MODEL.md §2.3/§2.5.
+// Job Role menja projects.manage; tarife vidi rates.view_b2b / rates.view_b2c, a menja rates.manage (baza: RLS,
+// guard_rate_history). Preimenovanje uloge osvežava snimke naziva na dodelama i tarifama (T25).
+import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import ConfirmDeleteDialog from "@/components/shared/ConfirmDeleteDialog";
+import { Briefcase, ChevronDown, ChevronRight, Pencil, Plus, Power } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { Briefcase, Plus, X, Pencil, Check, Lock } from "lucide-react";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
-} from "@/components/ui/dialog";
-
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useL } from "@/lib/translations";
+import { useLang } from "@/lib/LanguageContext";
 import { useAuth } from "@/lib/AuthContext";
+import { currentRate } from "@/lib/payroll/rates";
+import { negativeLabourMargin } from "@/lib/projectSite";
+import NegativeMarginNote from "@/components/projects/NegativeMarginNote";
+import RateDialog from "@/components/rates/RateDialog";
+import RateTable from "@/components/rates/RateTable";
 
-const emptyRole = { title: "", b2b_rate: "" };
-// Zanimanje sa tarifom (b2b/b2c > 0) menja samo admin (baza: guard_project_rates); isto pravilo kao rate_value u bazi.
-const roleHasRate = (role) => [role?.b2b_rate, role?.b2c_rate].some((v) => v !== "" && v !== null && Number(v) > 0);
+const today = () => new Date().toISOString().slice(0, 10);
+const money = (r) => (r ? `${Number(r.amount).toFixed(2)} ${r.currency}/h` : "—");
 
 export default function ProjectRoles({ project, onUpdated }) {
   const L = useL();
-  const { isAdmin } = useAuth();
-  const [showAdd, setShowAdd] = useState(false);
-  const [editIndex, setEditIndex] = useState(null);
-  const [form, setForm] = useState(emptyRole);
-  const [deleteIndex, setDeleteIndex] = useState(null);
+  const { lang } = useLang();
+  const { can } = useAuth();
+  const queryClient = useQueryClient();
+  const canEditRoles = Boolean(can?.("projects.manage"));
+  const canRates = Boolean(can?.("rates.manage"));
+  const seeB2B = canRates || Boolean(can?.("rates.view_b2b"));
+  const seeB2C = canRates || Boolean(can?.("rates.view_b2c"));
 
+  const [roleDialog, setRoleDialog] = useState(null); // { role | null }
+  const [title, setTitle] = useState("");
+  const [position, setPosition] = useState("");
+  const [rateDialog, setRateDialog] = useState(null);
+  const [openRole, setOpenRole] = useState(null);
+
+  const rolesQ = useQuery({
+    queryKey: ["project-roles", project.id],
+    queryFn: () => base44.entities.ProjectRole.filter({ project_id: project.id }, "sort"),
+  });
+  const ratesQ = useQuery({
+    queryKey: ["rates", "project", project.id],
+    queryFn: () => base44.entities.Rate.filter({ project_id: project.id, scope: "project" }, "-effective_from"),
+    enabled: seeB2B || seeB2C,
+  });
   const { data: departments = [] } = useQuery({
     queryKey: ["department-configs"],
     queryFn: () => base44.entities.DepartmentConfig.list("name", 200),
+    enabled: canEditRoles,
   });
-
-  const availablePositions = departments.flatMap(d => 
-    (d.positions || []).map(pos => {
-      if (typeof pos === 'string') return pos;
-      return pos.name;
-    })
+  const positions = useMemo(
+    () => [...new Set(departments.flatMap((d) => (d.positions || []).map((p) => (typeof p === "string" ? p : p?.name)).filter(Boolean)))],
+    [departments]
   );
 
-  const roles = project.job_roles || [];
+  const roles = rolesQ.data || [];
+  const rates = ratesQ.data || [];
+  const roleRates = (roleId, kind) => rates.filter((r) => r.project_role_id === roleId && (!kind || r.kind === kind));
+  const projectWide = rates.filter((r) => !r.project_role_id && !String(r.position || "").trim() && r.status === "active");
 
-  const updateMutation = useMutation({
-    mutationFn: (newRoles) =>
-      base44.entities.Project.update(project.id, { job_roles: newRoles }),
-    onSuccess: () => {
-      onUpdated();
-      setShowAdd(false);
-      setEditIndex(null);
-      setForm(emptyRole);
+  const refresh = () => {
+    queryClient.invalidateQueries({ queryKey: ["project-roles"] });
+    queryClient.invalidateQueries({ queryKey: ["project-assignments"] });
+    queryClient.invalidateQueries({ queryKey: ["rates"] });
+    onUpdated?.();
+  };
+
+  const saveRole = useMutation({
+    mutationFn: () => {
+      const data = { title: title.trim(), department_position: position || null };
+      return roleDialog.role
+        ? base44.entities.ProjectRole.update(roleDialog.role.id, data)
+        : base44.entities.ProjectRole.create({ ...data, project_id: project.id, sort: roles.length });
     },
+    onSuccess: () => {
+      refresh();
+      toast.success(L("Job role saved", "Job Role sačuvan", "Pracovná rola uložená"));
+      setRoleDialog(null);
+    },
+    onError: (e) => toast.error(e.message),
+  });
+  const toggleRole = useMutation({
+    mutationFn: (role) => base44.entities.ProjectRole.update(role.id, { status: role.status === "active" ? "inactive" : "active" }),
+    onSuccess: refresh,
+    onError: (e) => toast.error(e.message),
   });
 
-  const openAdd = () => {
-    setForm(emptyRole);
-    setEditIndex(null);
-    setShowAdd(true);
+  const openRoleDialog = (role) => {
+    setTitle(role?.title || "");
+    setPosition(role?.department_position || "");
+    setRoleDialog({ role: role || null });
   };
+  const duplicate = roles.some((r) => r.id !== roleDialog?.role?.id && r.title.trim().toLowerCase() === title.trim().toLowerCase());
 
-  const openEdit = (idx) => {
-    setForm({ ...roles[idx], b2b_rate: roles[idx].b2b_rate ?? "" });
-    setEditIndex(idx);
-    setShowAdd(true);
-  };
-
-  const handleSave = () => {
-    if (!form.title) return;
-    if (!isAdmin) {
-      // Operater dodaje i menja samo naziv zanimanja bez tarife; tarifu upisuje admin.
-      if (roles.some((r, i) => i !== editIndex && r.title === form.title)) {
-        toast.error(L("This job role already exists on the project.", "Ovo zanimanje već postoji na projektu.", "Táto pracovná rola už na projekte existuje."));
-        return;
-      }
-      const entry = { ...(editIndex !== null ? roles[editIndex] : {}), title: form.title };
-      updateMutation.mutate(editIndex !== null ? roles.map((r, i) => (i === editIndex ? entry : r)) : [...roles, entry]);
-      return;
-    }
-    const b2b = parseFloat(form.b2b_rate);
-    if (!(b2b > 0)) {
-      toast.error(L("B2B rate must be greater than 0.", "B2B tarifa mora biti veća od 0.", "Sadzba B2B musí byť väčšia ako 0."));
-      return;
-    }
-    if (roles.some((r, i) => i !== editIndex && r.title === form.title)) {
-      toast.error(L("This job role already exists on the project.", "Ovo zanimanje već postoji na projektu.", "Táto pracovná rola už na projekte existuje."));
-      return;
-    }
-    // Izmena zadržava ostala polja pozicije (ranije je brisala B2C, QA §9.3 #6).
-    const entry = { ...(editIndex !== null ? roles[editIndex] : {}), title: form.title, b2b_rate: b2b };
-    if (editIndex !== null) {
-      const updated = roles.map((r, i) => (i === editIndex ? entry : r));
-      updateMutation.mutate(updated);
-    } else {
-      updateMutation.mutate([...roles, entry]);
-    }
-  };
-
-  const handleDelete = (idx) => {
-    updateMutation.mutate(roles.filter((_, i) => i !== idx));
+  const setRoleRate = (role, kind) => {
+    const current = currentRate(rates, (r) => r.project_role_id === role.id && r.kind === kind, today());
+    setRateDialog(current
+      ? { mode: "change", rate: current }
+      : { mode: "create", defaults: { scope: "role", kind, project_id: project.id, project_role_id: role.id, lockTarget: true, lockKind: true } });
   };
 
   return (
-    <div className="bg-card border rounded-xl p-5">
-      <div className="flex items-center justify-between mb-4">
+    <div className="bg-card border rounded-xl p-5 shadow-card">
+      <div className="flex items-center justify-between mb-4 gap-2">
         <div className="flex items-center gap-2">
           <Briefcase className="w-4 h-4 text-primary" />
-          <h2 className="font-semibold">{isAdmin ? L("Job roles and rates", "Zanimanja i tarife", "Pracovné roly a sadzby") : L("Job roles", "Zanimanja", "Pracovné roly")}</h2>
-          <Badge variant="secondary">{roles.length}</Badge>
+          <h2 className="font-semibold">{seeB2B ? L("Job roles and rates", "Job Roles i tarife", "Pracovné roly a sadzby") : L("Job roles", "Job Roles", "Pracovné roly")}</h2>
+          <Badge variant="secondary">{roles.filter((r) => r.status === "active").length}</Badge>
         </div>
-        <Button size="sm" onClick={openAdd}>
-          <Plus className="w-4 h-4" />
-          {L("Add job role", "Dodaj zanimanje", "Pridať pracovnú rolu")}
-        </Button>
+        {canEditRoles && (
+          <Button size="sm" onClick={() => openRoleDialog(null)}>
+            <Plus className="w-4 h-4" />
+            {L("Add job role", "Dodaj Job Role", "Pridať pracovnú rolu")}
+          </Button>
+        )}
       </div>
 
-      {roles.length === 0 ? (
+      {rolesQ.isLoading ? (
+        <div className="space-y-2">{[0, 1].map((i) => <div key={i} className="h-12 rounded-lg bg-muted animate-pulse" />)}</div>
+      ) : rolesQ.isError ? (
+        <p className="text-sm text-destructive">{rolesQ.error?.message}</p>
+      ) : roles.length === 0 ? (
         <div className="text-center py-6 text-muted-foreground text-sm">
           <Briefcase className="w-8 h-8 mx-auto mb-2 opacity-30" />
-          <p>{L("No job roles defined", "Nema definisanih zanimanja", "Nie sú definované žiadne pracovné roly")}</p>
+          <p>{L("No job roles yet. Workers are assigned to a job role, and B2B rates are set per role.",
+            "Još nema Job Roles. Radnici se dodeljuju na Job Role, a B2B tarife se određuju po ulozi.",
+            "Zatiaľ žiadne pracovné roly. Pracovníci sa prideľujú na rolu a sadzby B2B sa určujú podľa roly.")}</p>
         </div>
       ) : (
         <div className="space-y-2">
-          <div className="grid grid-cols-3 gap-2 px-3 text-xs text-muted-foreground font-medium">
-            <span>{L("Job role", "Zanimanje", "Pracovná rola")}</span>
-            <span>{isAdmin ? L("B2B rate (client)", "B2B tarifa (klijent)", "Sadzba B2B (klient)") : ""}</span>
-            <span></span>
-          </div>
-          {roles.map((role, idx) => (
-            <div key={idx} className="grid grid-cols-3 gap-2 items-center p-3 rounded-lg bg-muted/40 border text-sm">
-              <span className="font-medium">{role.title}</span>
-              <span className="text-muted-foreground">{isAdmin ? (role.b2b_rate ? `€${role.b2b_rate}/h` : "—") : ""}</span>
-              {!isAdmin && roleHasRate(role) ? (
-                <span
-                  className="flex items-center justify-end px-2 text-muted-foreground"
-                  title={L("This job role has a rate — only an admin can change or delete it.", "Zanimanje ima tarifu — menja ga i briše samo admin.", "Táto pracovná rola má sadzbu — meniť alebo odstrániť ju môže iba administrátor.")}
-                >
-                  <Lock className="w-3.5 h-3.5" aria-hidden="true" />
-                  <span className="sr-only">{L("Only an admin can change this job role", "Ovo zanimanje menja samo admin", "Túto pracovnú rolu môže meniť iba administrátor")}</span>
-                </span>
-              ) : (
-              <div className="flex items-center gap-1 justify-end">
-                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(idx)}>
-                  <Pencil className="w-3.5 h-3.5" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                  onClick={() => setDeleteIndex(idx)}
-                >
-                  <X className="w-3.5 h-3.5" />
-                </Button>
+          {roles.map((role) => {
+            const b2b = currentRate(rates, (r) => r.project_role_id === role.id && r.kind === "revenue", today());
+            const b2c = currentRate(rates, (r) => r.project_role_id === role.id && r.kind === "cost", today());
+            const expanded = openRole === role.id;
+            const inactive = role.status !== "active";
+            return (
+              <div key={role.id} className={`rounded-lg border bg-muted/40 ${inactive ? "opacity-60" : ""}`}>
+                <div className="flex flex-wrap items-center gap-3 p-3 text-sm">
+                  {(seeB2B || seeB2C) ? (
+                    <button type="button" onClick={() => setOpenRole(expanded ? null : role.id)} className="text-muted-foreground"
+                      aria-expanded={expanded} aria-label={L("Rate history", "Istorija tarifa", "História sadzieb")}>
+                      {expanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                    </button>
+                  ) : null}
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium">{role.title}{inactive ? ` · ${L("inactive", "neaktivan", "neaktívna")}` : ""}</p>
+                    {role.department_position && role.department_position !== role.title && (
+                      <p className="text-xs text-muted-foreground">{role.department_position}</p>
+                    )}
+                  </div>
+                  {seeB2B && (
+                    <div className="text-right">
+                      <p className="text-xs text-muted-foreground">B2B</p>
+                      <p className={`font-semibold tabular-nums ${b2b ? "" : "text-warning"}`}>{b2b ? money(b2b) : L("missing", "nema", "chýba")}</p>
+                    </div>
+                  )}
+                  {seeB2C && (
+                    <div className="text-right">
+                      <p className="text-xs text-muted-foreground">{L("B2C default", "B2C podrazumevano", "B2C predvolené")}</p>
+                      <p className="font-semibold tabular-nums">{money(b2c)}</p>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-1">
+                    {canRates && !inactive && (
+                      <>
+                        <Button variant="outline" size="sm" className="h-7" onClick={() => setRoleRate(role, "revenue")}>
+                          {b2b ? L("Change B2B", "Promeni B2B", "Zmeniť B2B") : L("Set B2B", "Unesi B2B", "Zadať B2B")}
+                        </Button>
+                        <Button variant="ghost" size="sm" className="h-7" onClick={() => setRoleRate(role, "cost")}>
+                          {b2c ? L("Change B2C", "Promeni B2C", "Zmeniť B2C") : L("Set B2C", "Unesi B2C", "Zadať B2C")}
+                        </Button>
+                      </>
+                    )}
+                    {canEditRoles && (
+                      <>
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openRoleDialog(role)} aria-label={L("Rename", "Preimenuj", "Premenovať")}>
+                          <Pencil className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => toggleRole.mutate(role)}
+                          aria-label={inactive ? L("Activate", "Aktiviraj", "Aktivovať") : L("Deactivate", "Deaktiviraj", "Deaktivovať")}
+                          title={inactive ? L("Activate", "Aktiviraj", "Aktivovať") : L("Deactivate — existing assignments keep the role", "Deaktiviraj — postojeće dodele zadržavaju ulogu", "Deaktivovať — existujúce pridelenia si rolu ponechajú")}>
+                          <Power className="w-3.5 h-3.5" />
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </div>
+                {seeB2B && seeB2C && b2b && b2c && b2b.currency === b2c.currency && negativeLabourMargin(Number(b2c.amount), Number(b2b.amount)) && (
+                  <div className="px-3 pb-3"><NegativeMarginNote L={L} compact /></div>
+                )}
+                {expanded && (
+                  <div className="border-t bg-card">
+                    {roleRates(role.id).length === 0 ? (
+                      <p className="p-3 text-xs text-muted-foreground">{L("No rates for this role yet.", "Za ovu ulogu još nema tarifa.", "Pre túto rolu zatiaľ nie sú sadzby.")}</p>
+                    ) : (
+                      <RateTable rates={roleRates(role.id)} canManage={canRates} lang={lang}
+                        onChange={(rate) => setRateDialog({ mode: "change", rate })}
+                        onEdit={(rate) => setRateDialog({ mode: "edit", rate })}
+                        onDelete={(id) => base44.entities.Rate.delete(id).then(refresh, (e) => toast.error(e.message))} />
+                    )}
+                  </div>
+                )}
               </div>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
-      <Dialog open={showAdd} onOpenChange={(o) => { if (!o) { setShowAdd(false); setEditIndex(null); } }}>
+      {seeB2B && projectWide.length > 0 && (
+        <p className="mt-3 text-xs text-muted-foreground">
+          {L("This project also has a whole-project rate (older entry); it applies only where a job role has no rate.",
+            "Projekat ima i tarifu za ceo projekat (stari unos); važi samo gde Job Role nema tarifu.",
+            "Projekt má aj sadzbu celého projektu (starý záznam); platí iba tam, kde rola nemá sadzbu.")}
+        </p>
+      )}
+
+      <Dialog open={Boolean(roleDialog)} onOpenChange={(o) => !o && setRoleDialog(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>{editIndex !== null ? L("Edit job role", "Uredi zanimanje", "Upraviť pracovnú rolu") : L("Add job role", "Dodaj zanimanje", "Pridať pracovnú rolu")}</DialogTitle>
+            <DialogTitle>{roleDialog?.role ? L("Edit job role", "Izmena Job Role", "Upraviť pracovnú rolu") : L("Add job role", "Dodaj Job Role", "Pridať pracovnú rolu")}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div>
-              <Label>{L("Job role name *", "Naziv zanimanja *", "Názov pracovnej roly *")}</Label>
-              <select
-                className="w-full mt-1 h-9 rounded-md border border-input px-3 py-1 text-sm"
-                value={form.title}
-                onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))}
-              >
-                <option value="">{L("Select job role", "Odaberi zanimanje", "Vyberte pracovnú rolu")}</option>
-                {availablePositions.map((pos, idx) => (
-                  <option key={idx} value={pos}>
-                    {pos}
-                  </option>
-                ))}
-              </select>
-            </div>
-            {isAdmin ? (
-            <div>
-              <Label>{L("B2B rate (€/h) *", "B2B tarifa (€/h) *", "Sadzba B2B (€/h) *")}</Label>
-              <Input
-                className="mt-1"
-                type="number"
-                min="0"
-                step="0.5"
-                value={form.b2b_rate}
-                onChange={(e) => setForm((p) => ({ ...p, b2b_rate: e.target.value }))}
-                placeholder="0.00"
-              />
-              <p className="text-xs text-muted-foreground mt-1">{L("Rate charged to the client", "Tarifa prema klijentu", "Sadzba účtovaná klientovi")}</p>
-            </div>
-            ) : (
-              <p className="text-xs text-muted-foreground">{L("The rate for the job role is entered by an admin.", "Tarifu zanimanja upisuje admin.", "Sadzbu pracovnej roly zadáva administrátor.")}</p>
+          <div className="space-y-4 py-1">
+            {positions.length > 0 && (
+              <div className="space-y-1.5">
+                <Label>{L("Position (Departments & Positions)", "Pozicija (Odeljenja i pozicije)", "Pozícia (Oddelenia a pozície)")}</Label>
+                <select className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm" value={position}
+                  onChange={(e) => { setPosition(e.target.value); if (!title || title === position) setTitle(e.target.value); }}>
+                  <option value="">{L("— none —", "— bez —", "— žiadna —")}</option>
+                  {positions.map((p) => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </div>
             )}
+            <div className="space-y-1.5">
+              <Label>{L("Job role name *", "Naziv Job Role *", "Názov pracovnej roly *")}</Label>
+              <Input value={title} onChange={(e) => setTitle(e.target.value)} />
+              {duplicate && <p className="text-xs text-destructive">{L("This job role already exists on the project.", "Ovaj Job Role već postoji na projektu.", "Táto pracovná rola už na projekte existuje.")}</p>}
+              {roleDialog?.role && (
+                <p className="text-xs text-muted-foreground">{L("Renaming updates the name on assignments and rates; history stays linked.", "Preimenovanje menja naziv na dodelama i tarifama; istorija ostaje povezana.", "Premenovanie zmení názov na prideleniach a sadzbách; história ostáva prepojená.")}</p>
+              )}
+            </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setShowAdd(false); setEditIndex(null); }}>{L("Cancel", "Odustani", "Zrušiť")}</Button>
-            <Button onClick={handleSave} disabled={!form.title || (isAdmin && !form.b2b_rate) || updateMutation.isPending}>
-              <Check className="w-4 h-4 mr-1" />
-              {editIndex !== null ? L("Save", "Sačuvaj", "Uložiť") : L("Add", "Dodaj", "Pridať")}
-            </Button>
+            <Button variant="outline" onClick={() => setRoleDialog(null)}>{L("Cancel", "Odustani", "Zrušiť")}</Button>
+            <Button onClick={() => saveRole.mutate()} disabled={!title.trim() || duplicate || saveRole.isPending}>{L("Save", "Sačuvaj", "Uložiť")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <ConfirmDeleteDialog
-        open={deleteIndex !== null}
-        onClose={() => setDeleteIndex(null)}
-        onConfirm={() => handleDelete(deleteIndex)}
-        message={L(`Remove job role "${roles[deleteIndex]?.title || ""}" from the project? Employees already added keep their rate.`, `Obrisati zanimanje „${roles[deleteIndex]?.title || ""}" sa projekta? Radnici koji su već dodati zadržavaju svoju tarifu.`, `Odstrániť pracovnú rolu „${roles[deleteIndex]?.title || ""}“ z projektu? Už pridaní zamestnanci si ponechajú svoju sadzbu.`)}
-      />
+
+      <RateDialog open={Boolean(rateDialog)} onOpenChange={(o) => { if (!o) { setRateDialog(null); refresh(); } }}
+        mode={rateDialog?.mode} rate={rateDialog?.rate} defaults={rateDialog?.defaults} projects={[project]} />
     </div>
   );
 }

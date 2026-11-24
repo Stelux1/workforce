@@ -19,10 +19,9 @@
 
 import { round2, sum2 } from "./money.js";
 import { computeWorkerMonth, ENGAGEMENT, MissingRateError, RATE_BASIS } from "./monthly.js";
-import { classifyWeek, HOUR_TYPE_ORDER, HOUR_TYPES } from "./hours.js";
+import { HOUR_TYPE_ORDER } from "./hours.js";
 import { paramsInEur } from "./params.js";
-import { DAY_FIELDS } from "./timesheetRow.js";
-import { validRate } from "./timesheet.js";
+import { DAY_PROBLEM, timesheetDayLines } from "./timesheetDays.js";
 
 const TYPE_ORDER = HOUR_TYPE_ORDER;
 const TYPE_LABEL = Object.freeze({
@@ -113,12 +112,8 @@ export const formatDay = (iso) => {
 
 // ───────────────────────── problemi ─────────────────────────
 export const PROBLEM = Object.freeze({
-  NO_SNAPSHOT: "no_snapshot",
-  SNAPSHOT_MISMATCH: "snapshot_mismatch",
-  MISSING_RATE: "missing_rate",
-  MISSING_COEF: "missing_coef",
-  NO_PROJECT: "no_project",
-  BAD_HOURS: "bad_hours",
+  ...DAY_PROBLEM, // no_snapshot, snapshot_mismatch, missing_rate, missing_coef, no_project, bad_hours, no_estimate
+  RATE_NOT_EUR: "rate_not_eur", // srpski obračun prima samo EUR tarife (D7, K3)
   NO_ENGAGEMENT: "no_engagement",
   ENGAGEMENT_CHANGES: "engagement_changes",
   CALC_ERROR: "calc_error",
@@ -146,6 +141,8 @@ const PROBLEM_TEXT = {
     [PROBLEM.MISSING_COEF]: (p) =>
       `u snimku nedostaje koeficijent ${p.missing.map((m) => `${SIDE_LABEL.rs[m.side]} (${TYPE_LABEL.rs[m.code] || m.code})`).join(", ")} — vratite satnicu u nacrt i odobrite ponovo`,
     [PROBLEM.NO_PROJECT]: () => "satnica nije vezana za projekat sa liste",
+    [PROBLEM.RATE_NOT_EUR]: (p) =>
+      `tarifa je u valuti ${p.currencies.join(", ")} — mesečni obračun (neto/bruto) prima samo EUR tarife; obaveza za ove sate ide kroz Payables`,
     [PROBLEM.BAD_HOURS]: (p) => `neispravni sati (${p.detail})`,
     [PROBLEM.NO_ENGAGEMENT]: (p) =>
       `nema angažman (zaposlen ili preko podizvođača) za ${formatDay(p.date)} — upišite ga u profilu radnika (Angažman)`,
@@ -165,6 +162,8 @@ const PROBLEM_TEXT = {
     [PROBLEM.MISSING_COEF]: (p) =>
       `v zázname chýba koeficient ${p.missing.map((m) => `${SIDE_LABEL.sk[m.side]} (${TYPE_LABEL.sk[m.code] || m.code})`).join(", ")} — vráťte pracovný výkaz do konceptu a schváľte ho znova`,
     [PROBLEM.NO_PROJECT]: () => "pracovný výkaz nie je prepojený s projektom zo zoznamu",
+    [PROBLEM.RATE_NOT_EUR]: (p) =>
+      `sadzba je v mene ${p.currencies.join(", ")} — mesačné zúčtovanie (čistá/hrubá mzda) prijíma iba sadzby v EUR; záväzok za tieto hodiny ide cez Payables`,
     [PROBLEM.BAD_HOURS]: (p) => `neplatné hodiny (${p.detail})`,
     [PROBLEM.NO_ENGAGEMENT]: (p) =>
       `žiadny pracovný vzťah (zamestnanec alebo cez subdodávateľa) k dátumu ${formatDay(p.date)} — pridajte ho v profile zamestnanca (Pracovný vzťah)`,
@@ -184,6 +183,8 @@ const PROBLEM_TEXT = {
     [PROBLEM.MISSING_COEF]: (p) =>
       `the snapshot has no ${p.missing.map((m) => `${SIDE_LABEL.en[m.side]} coefficient (${TYPE_LABEL.en[m.code] || m.code})`).join(", ")} — set the timesheet back to draft and approve it again`,
     [PROBLEM.NO_PROJECT]: () => "the timesheet is not linked to a project from the list",
+    [PROBLEM.RATE_NOT_EUR]: (p) =>
+      `the rate is in ${p.currencies.join(", ")} — monthly payroll (net/gross) accepts EUR rates only; the payable for these hours goes through Payables`,
     [PROBLEM.BAD_HOURS]: (p) => `invalid hours (${p.detail})`,
     [PROBLEM.NO_ENGAGEMENT]: (p) =>
       `no engagement (employee or via subcontractor) on ${formatDay(p.date)} — add it in the employee profile (Engagement)`,
@@ -207,117 +208,23 @@ export function problemMessage(p, lang = "rs") {
 }
 
 // ───────────────────────── jedna satnica → linije meseca ─────────────────────────
-function coefOf(v) {
-  if (v === null || v === undefined || v === "") return null;
-  const n = Number(v);
-  return Number.isFinite(n) && n > 0 ? n : null; // prazan koeficijent NIJE 1,00 (D5)
-}
-
-/** Strana radnika iz linije snimka: posebna satnica iz profila zamenjuje tarifu × koeficijent (D5), pa je množilac 1. */
-function workerSide(line) {
-  if (line?.worker_source === "special") {
-    return { rate: validRate(line.special_rate ?? line.worker_rate), coef: 1 };
-  }
-  return { rate: validRate(line?.worker_rate), coef: coefOf(line?.worker_coef) };
-}
-
-const clientSide = (line) => ({ rate: validRate(line?.client_rate), coef: coefOf(line?.client_coef) });
-
 /**
- * Sati jedne odobrene satnice koji padaju u mesec, razvrstani po danu sa pragom i praznicima iz snimka, sa tarifama
- * i koeficijentima iz snimka.
+ * Sati jedne odobrene satnice koji padaju u mesec: dnevne linije iz timesheetDays.js (v1 snimak — razvrstano po pragu
+ * i praznicima iz snimka; v2 — gotove linije po datumu rada, K12), filtrirane na mesec.
+ * Srpski mesečni obračun prima samo EUR tarife (D7): linija u drugoj valuti je problem `rate_not_eur`.
  * @param {object} row   red timesheets (approval_status, week_start, mon_hours … sun_hours, project_id, rate_snapshot)
  * @param {string} month "YYYY-MM-01" (ili bilo koji datum u mesecu)
  * @returns {{ lines: Array<{ projectId, hourType, hours, workerRate, workerCoef, clientRate, clientCoef, date,
- *             timesheetId, weekStart }>, problems: Array<{ code, missing?, detail? }>, days: string[] }}
+ *             timesheetId, weekStart, … }>, problems: Array<{ code, missing?, detail?, currencies? }>, days: string[] }}
  *   `days` su datumi u mesecu sa satima > 0 (i kad satnica ima problem — za proveru angažmana).
  */
 export function timesheetMonthLines(row, month) {
   const start = monthStart(month);
-  const next = nextMonthStart(start);
-  const weekStart = day(row?.week_start);
-  const out = { lines: [], problems: [], days: [] };
-
-  const dayHours = DAY_FIELDS.map((f) => {
-    const n = Number.parseFloat(row?.[f]);
-    return Number.isFinite(n) ? round2(n) : 0;
-  });
-  const inMonth = dayHours
-    .map((hours, i) => ({ i, hours, date: weekStart ? addDays(weekStart, i) : "" }))
-    .filter((d) => d.hours > 0 && d.date >= start && d.date < next);
-  out.days = inMonth.map((d) => d.date);
-  if (!inMonth.length) return out;
-
-  if (!row.project_id) {
-    out.problems.push({ code: PROBLEM.NO_PROJECT });
-    return out;
+  const out = timesheetDayLines(row, { from: start, to: monthEnd(start) });
+  if (!out.problems.length && out.lines.length) {
+    const foreign = [...new Set(out.lines.flatMap((l) => [l.workerCurrency, l.clientCurrency]).filter((c) => c && c !== "EUR"))];
+    if (foreign.length) return { ...out, lines: [], problems: [{ code: PROBLEM.RATE_NOT_EUR, currencies: foreign }] };
   }
-
-  const snap = row.rate_snapshot;
-  const threshold = Number(snap?.daily_regular_hours);
-  if (!snap || typeof snap !== "object" || !Array.isArray(snap.lines) || !(threshold > 0)) {
-    out.problems.push({ code: PROBLEM.NO_SNAPSHOT });
-    return out;
-  }
-  const holidays = Array.isArray(snap.holidays) ? snap.holidays : [];
-  const byCode = new Map(snap.lines.filter(Boolean).map((l) => [l.code, l]));
-  // Snimak bez linije „praznik vikendom" je odobren po starom pravilu (praznik vikendom = praznik) ili nema takvih
-  // sati — u oba slučaja dan se deli kao praznik, pa odobrene satnice i obračuni ostaju isti (D10).
-  const holidayWeekend = byCode.has(HOUR_TYPES.HOLIDAY_WEEKEND);
-
-  // Cela nedelja po pravilima iz snimka mora da da iste sate po vrsti kao pri odobravanju; inače snimak nije
-  // snimak ovih sati i deljenje po danu ne bi bilo tačno.
-  let week;
-  try {
-    week = classifyWeek({ weekStart, dayHours, holidays, dailyThreshold: threshold, holidayWeekend });
-  } catch (e) {
-    out.problems.push({ code: PROBLEM.BAD_HOURS, detail: e.message });
-    return out;
-  }
-  const mismatch = TYPE_ORDER.some((code) => round2(week[code]) !== round2(Number(byCode.get(code)?.hours ?? 0)));
-  if (mismatch) {
-    out.problems.push({ code: PROBLEM.SNAPSHOT_MISMATCH });
-    return out;
-  }
-
-  const missingRates = [];
-  const missingCoefs = [];
-  const note = (list, code, side) => {
-    if (!list.some((m) => m.code === code && m.side === side)) list.push({ code, side });
-  };
-
-  for (const d of inMonth) {
-    const one = [0, 0, 0, 0, 0, 0, 0];
-    one[d.i] = d.hours;
-    const types = classifyWeek({ weekStart, dayHours: one, holidays, dailyThreshold: threshold, holidayWeekend });
-    for (const code of TYPE_ORDER) {
-      const hours = types[code];
-      if (!(hours > 0)) continue;
-      const line = byCode.get(code);
-      const w = workerSide(line);
-      const c = clientSide(line);
-      if (w.rate === null) note(missingRates, code, "worker");
-      if (w.coef === null) note(missingCoefs, code, "worker");
-      if (c.rate === null) note(missingRates, code, "client");
-      if (c.coef === null) note(missingCoefs, code, "client");
-      out.lines.push({
-        projectId: row.project_id,
-        hourType: code,
-        hours,
-        workerRate: w.rate,
-        workerCoef: w.coef,
-        clientRate: c.rate,
-        clientCoef: c.coef,
-        date: d.date,
-        timesheetId: row.id,
-        weekStart,
-      });
-    }
-  }
-
-  if (missingRates.length) out.problems.push({ code: PROBLEM.MISSING_RATE, missing: missingRates });
-  if (missingCoefs.length) out.problems.push({ code: PROBLEM.MISSING_COEF, missing: missingCoefs });
-  if (out.problems.length) out.lines = [];
   return out;
 }
 

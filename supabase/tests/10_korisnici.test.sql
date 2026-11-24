@@ -1,5 +1,6 @@
--- Testovi za Podešavanja → „Korisnici" (migracija 20261114260000_korisnici.sql, D3, D14):
---  * profile (uloga, aktivan) menja samo aktivan admin; operater ne menja nijedan nalog, korisnik ne aktivira sam sebe;
+-- Testovi za Podešavanja → „Korisnici" (migracije 20261114260000_korisnici.sql i 20261125020000_prava_rls.sql, D3, D14, D30 K1):
+--  * profile (uloga, aktivan) menja ko ima users.manage (podrazumevano samo admin); HR (bivši operater) ne menja
+--    nijedan nalog, korisnik ne aktivira sam sebe;
 --  * admin aktivira i deaktivira druge naloge i menja im ulogu;
 --  * poslednji aktivan admin ne može da se deaktivira, da izgubi ulogu ni da se obriše.
 -- Sopstveni nalozi sa oznakom QA-10; postojeći nalozi se menjaju samo u ovoj transakciji i sve se vraća (rollback).
@@ -22,9 +23,9 @@ select policies_are('public', 'profiles', array['profiles_select', 'profiles_upd
   'profili nemaju pravilo za upis ni brisanje preko API-ja (profil pravi samo handle_new_user kad se otvori nalog)');
 select is((select cmd from pg_policies where schemaname = 'public' and tablename = 'profiles' and policyname = 'profiles_update'),
   'UPDATE', 'profiles_update je samo za izmenu');
-select ok((select qual like '%is_admin()%' and with_check like '%is_admin()%' from pg_policies
+select ok((select qual like '%users.manage%' and with_check like '%users.manage%' from pg_policies
            where schemaname = 'public' and tablename = 'profiles' and policyname = 'profiles_update'),
-  'profil menja samo admin (i pre i posle izmene)');
+  'profil menja samo users.manage (i pre i posle izmene)');
 
 -- ═════════════════════════════ operater ne menja naloge ═════════════════════════════
 set local role authenticated;
@@ -34,15 +35,15 @@ select is((select count(*)::int from public.profiles), 1, 'operater vidi samo sv
 update public.profiles set active = true where id = 'a1044444-4444-4444-8444-444444444444';
 update public.profiles set role = 'admin' where id = 'a1033333-3333-4333-8333-333333333333';
 update public.profiles set active = false where id = 'a1011111-1111-4111-8111-111111111111';
-update public.profiles set role = 'operater' where id = 'a1022222-2222-4222-8222-222222222222';
+update public.profiles set role = 'hr' where id = 'a1022222-2222-4222-8222-222222222222';
 update public.profiles set full_name = 'Promenio operater' where id = 'a1011111-1111-4111-8111-111111111111';
 delete from public.profiles where id = 'a1044444-4444-4444-8444-444444444444';
 select throws_ok($$insert into public.profiles (id, email, role, active)
   values ('a1033333-3333-4333-8333-333333333333', 'lazni@radnici.local', 'admin', true)$$,
   '42501', null, 'operater ne upisuje profil');
 reset role;
-select is((select (role, active)::text from public.profiles where id = 'a1044444-4444-4444-8444-444444444444'), '(operater,f)', 'Accept: operater ne aktivira tuđi nalog');
-select is((select (role, active)::text from public.profiles where id = 'a1033333-3333-4333-8333-333333333333'), '(operater,t)', 'Accept: operater ne daje sebi ulogu admin');
+select is((select (role, active)::text from public.profiles where id = 'a1044444-4444-4444-8444-444444444444'), '(hr,f)', 'Accept: operater ne aktivira tuđi nalog');
+select is((select (role, active)::text from public.profiles where id = 'a1033333-3333-4333-8333-333333333333'), '(hr,t)', 'Accept: operater ne daje sebi ulogu admin');
 select is((select (role, active)::text from public.profiles where id = 'a1011111-1111-4111-8111-111111111111'), '(admin,t)', 'Accept: operater ne deaktivira admina');
 select is((select (role, active)::text from public.profiles where id = 'a1022222-2222-4222-8222-222222222222'), '(admin,t)', 'Accept: operater ne skida ulogu adminu');
 select is((select full_name from public.profiles where id = 'a1011111-1111-4111-8111-111111111111'), 'QA-10 Admin',
@@ -57,7 +58,7 @@ select is(public.is_staff(), false, 'neaktivan nalog nije osoblje');
 update public.profiles set active = true where id = auth.uid();
 update public.profiles set role = 'admin', active = true where id = auth.uid();
 reset role;
-select is((select (role, active)::text from public.profiles where id = 'a1044444-4444-4444-8444-444444444444'), '(operater,f)',
+select is((select (role, active)::text from public.profiles where id = 'a1044444-4444-4444-8444-444444444444'), '(hr,f)',
   'korisnik ne može sam sebe da aktivira ni da postane admin');
 
 -- ═════════════════════════════ admin menja druge naloge ═════════════════════════════
@@ -65,15 +66,15 @@ set local role authenticated;
 set local request.jwt.claims to '{"sub":"a1011111-1111-4111-8111-111111111111","role":"authenticated"}';
 select is((select count(*)::int from public.profiles where email like 'qa10-%'), 4, 'admin vidi sve naloge');
 update public.profiles set active = true where id = 'a1044444-4444-4444-8444-444444444444';
-select is((select (role, active)::text from public.profiles where id = 'a1044444-4444-4444-8444-444444444444'), '(operater,t)', 'admin aktivira nov nalog');
+select is((select (role, active)::text from public.profiles where id = 'a1044444-4444-4444-8444-444444444444'), '(hr,t)', 'admin aktivira nov nalog');
 update public.profiles set role = 'admin' where id = 'a1044444-4444-4444-8444-444444444444';
 select is((select (role, active)::text from public.profiles where id = 'a1044444-4444-4444-8444-444444444444'), '(admin,t)', 'admin daje ulogu admin');
-update public.profiles set role = 'operater' where id = 'a1044444-4444-4444-8444-444444444444';
-select is((select (role, active)::text from public.profiles where id = 'a1044444-4444-4444-8444-444444444444'), '(operater,t)', 'admin vraća ulogu operater');
+update public.profiles set role = 'hr' where id = 'a1044444-4444-4444-8444-444444444444';
+select is((select (role, active)::text from public.profiles where id = 'a1044444-4444-4444-8444-444444444444'), '(hr,t)', 'admin vraća ulogu hr');
 update public.profiles set active = false where id = 'a1033333-3333-4333-8333-333333333333';
-select is((select (role, active)::text from public.profiles where id = 'a1033333-3333-4333-8333-333333333333'), '(operater,f)', 'admin deaktivira operatera');
+select is((select (role, active)::text from public.profiles where id = 'a1033333-3333-4333-8333-333333333333'), '(hr,f)', 'admin deaktivira operatera');
 update public.profiles set active = true where id = 'a1033333-3333-4333-8333-333333333333';
-select is((select (role, active)::text from public.profiles where id = 'a1033333-3333-4333-8333-333333333333'), '(operater,t)', 'admin ponovo aktivira operatera');
+select is((select (role, active)::text from public.profiles where id = 'a1033333-3333-4333-8333-333333333333'), '(hr,t)', 'admin ponovo aktivira operatera');
 -- Drugi admin se deaktivira dok ostaje bar jedan aktivan admin.
 update public.profiles set active = false where id = 'a1022222-2222-4222-8222-222222222222';
 select is((select (role, active)::text from public.profiles where id = 'a1022222-2222-4222-8222-222222222222'), '(admin,f)', 'admin deaktivira drugog admina dok ostaje aktivan admin');
@@ -91,6 +92,8 @@ select is((select (role, active)::text from public.profiles where id = 'a1011111
 
 -- ═════════════════════════════ poslednji aktivan admin ═════════════════════════════
 -- Ostali aktivni admini (i postojeći lokalni) se deaktiviraju samo u ovoj transakciji; QA-10 Admin ostaje jedini.
+-- Priprema kao postgres bez prijavljenog korisnika (guard_profile_change preskače samo poziv bez auth.uid()).
+set local request.jwt.claims to '{}';
 update public.profiles set active = false where role = 'admin' and active and id <> 'a1011111-1111-4111-8111-111111111111';
 select is((select count(*)::int from public.profiles where role = 'admin' and active), 1, 'priprema: jedan aktivan admin');
 
@@ -98,9 +101,9 @@ set local role authenticated;
 set local request.jwt.claims to '{"sub":"a1011111-1111-4111-8111-111111111111","role":"authenticated"}';
 select throws_ok($$update public.profiles set active = false where id = 'a1011111-1111-4111-8111-111111111111'$$,
   '23514', 'Mora da ostane bar jedan aktivan admin', 'Accept: deaktivacija poslednjeg aktivnog admina je odbijena');
-select throws_ok($$update public.profiles set role = 'operater' where id = 'a1011111-1111-4111-8111-111111111111'$$,
+select throws_ok($$update public.profiles set role = 'hr' where id = 'a1011111-1111-4111-8111-111111111111'$$,
   '23514', 'Mora da ostane bar jedan aktivan admin', 'poslednji aktivan admin ne može sebi da skine ulogu');
-select throws_ok($$update public.profiles set role = 'operater', active = false where id = 'a1011111-1111-4111-8111-111111111111'$$,
+select throws_ok($$update public.profiles set role = 'hr', active = false where id = 'a1011111-1111-4111-8111-111111111111'$$,
   '23514', 'Mora da ostane bar jedan aktivan admin', 'ni uloga i status zajedno');
 reset role;
 select is((select (role, active)::text from public.profiles where id = 'a1011111-1111-4111-8111-111111111111'), '(admin,t)', 'poslednji aktivan admin je i dalje aktivan admin');
@@ -110,10 +113,10 @@ set local role authenticated;
 set local request.jwt.claims to '{"sub":"a1011111-1111-4111-8111-111111111111","role":"authenticated"}';
 update public.profiles set active = true where id = 'a1022222-2222-4222-8222-222222222222';
 select is((select (role, active)::text from public.profiles where id = 'a1022222-2222-4222-8222-222222222222'), '(admin,t)', 'admin ponovo aktivira drugog admina');
-select lives_ok($$update public.profiles set role = 'operater' where id = 'a1011111-1111-4111-8111-111111111111'$$,
+select lives_ok($$update public.profiles set role = 'hr' where id = 'a1011111-1111-4111-8111-111111111111'$$,
   'admin sebi skida ulogu dok ostaje drugi aktivan admin');
 reset role;
-select is((select (role, active)::text from public.profiles where id = 'a1011111-1111-4111-8111-111111111111'), '(operater,t)', 'bivši admin je operater');
+select is((select (role, active)::text from public.profiles where id = 'a1011111-1111-4111-8111-111111111111'), '(hr,t)', 'bivši admin je hr');
 
 set local role authenticated;
 set local request.jwt.claims to '{"sub":"a1022222-2222-4222-8222-222222222222","role":"authenticated"}';

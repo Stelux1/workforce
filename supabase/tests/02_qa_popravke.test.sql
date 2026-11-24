@@ -9,7 +9,7 @@ insert into auth.users (id, email, instance_id, aud, role) values
   ('31111111-1111-4111-8111-111111111111', 'qa2-admin@radnici.local', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated'),
   ('32222222-2222-4222-8222-222222222222', 'qa2-operater@radnici.local', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated');
 update public.profiles set role = 'admin', active = true where id = '31111111-1111-4111-8111-111111111111';
-update public.profiles set role = 'operater', active = true where id = '32222222-2222-4222-8222-222222222222';
+update public.profiles set role = 'hr', active = true where id = '32222222-2222-4222-8222-222222222222';
 -- Pravila razvrstavanja kao u šemi (prag 8h, redovni = 1), nezavisno od onoga što je admin upisao u lokalnu bazu.
 update public.work_rules set daily_regular_hours = 8;
 update public.hour_types set worker_coef = 1, client_coef = 1 where code = 'redovni';
@@ -21,8 +21,15 @@ insert into public.projects (id, name, client_name) values ('b3000000-0000-4000-
 insert into public.employees (id, first_name, last_name, employee_id) values
   ('d3000000-0000-4000-8000-0000000000d1', 'QA2', 'Radnik', 'QA2-001'),
   ('d3000000-0000-4000-8000-0000000000d2', 'QA2', 'Drugi', 'QA2-002');
--- Važeće tarife prvog radnika (profil 12 / 25) — odobravanje proverava da tarifa reda odgovara izboru tarife.
-insert into public.employee_private (employee_id, b2c_hourly_rate, b2b_hourly_rate) values ('d3000000-0000-4000-8000-0000000000d1', 12, 25);
+-- Phase 7: radnik na projektu = dodela; tarife su samo u public.rates (profil više nije nivo tarife).
+-- Prvi radnik: B2C 12 / B2B 25 po dodeli. Drugi radnik: samo B2B 20 — tarifa radnika mu fali.
+insert into public.project_assignments (id, employee_id, project_id, start_date, status) values
+  ('a3000000-0000-4000-8000-0000000000a1', 'd3000000-0000-4000-8000-0000000000d1', 'b3000000-0000-4000-8000-0000000000b1', '2031-01-01', 'active'),
+  ('a3000000-0000-4000-8000-0000000000a2', 'd3000000-0000-4000-8000-0000000000d2', 'b3000000-0000-4000-8000-0000000000b1', '2031-01-01', 'active');
+insert into public.rates (scope, kind, amount, unit, currency, assignment_id, effective_from) values
+  ('assignment', 'cost', 12, 'hourly', 'EUR', 'a3000000-0000-4000-8000-0000000000a1', '2031-01-01'),
+  ('assignment', 'revenue', 25, 'hourly', 'EUR', 'a3000000-0000-4000-8000-0000000000a1', '2031-01-01'),
+  ('assignment', 'revenue', 20, 'hourly', 'EUR', 'a3000000-0000-4000-8000-0000000000a2', '2031-01-01');
 
 -- ───── operater ─────
 set local role authenticated;
@@ -33,16 +40,21 @@ insert into public.timesheets (id, employee_id, project_id, week_start, mon_hour
 values ('f3000000-0000-4000-8000-0000000000f1', 'd3000000-0000-4000-8000-0000000000d1', 'b3000000-0000-4000-8000-0000000000b1',
   '2031-11-03', 8, 12, 25, 1, 9999, 9998, 77, 'submitted');
 
+-- T26: iznose ne čita ni jedan authenticated korisnik iz timesheets — proveravamo kao postgres.
+reset role;
 select is((select (worker_cost, client_revenue, profit, overtime_hours)::text from public.timesheets where id = 'f3000000-0000-4000-8000-0000000000f1'),
   '(96.00,200.00,104.00,0.00)', 'iznose satnice računa baza (sati × tarifa × koeficijent), upisani iznosi se ignorišu');
+set local role authenticated;
 
 select throws_ok($$update public.timesheets set approval_status = 'rejected' where id = 'f3000000-0000-4000-8000-0000000000f1'$$,
   '42501', null, 'operater ne može da odbije satnicu');
 
 -- 8h pon + 2h uto = 10h redovno (prekovremeni je od Faze 2 preko dnevnog praga, ne preko 40h nedeljno).
 update public.timesheets set tue_hours = 2 where id = 'f3000000-0000-4000-8000-0000000000f1';
+reset role;
 select is((select worker_cost from public.timesheets where id = 'f3000000-0000-4000-8000-0000000000f1'), 120.00::numeric,
   'izmena sati preračunava trošak');
+set local role authenticated;
 
 insert into public.timesheets (employee_id, project, week_start, mon_hours) values ('d3000000-0000-4000-8000-0000000000d1', 'QA2 ručni', '2031-11-03', 2);
 select throws_ok($$insert into public.timesheets (employee_id, project, week_start, tue_hours)
@@ -60,15 +72,19 @@ set local request.jwt.claims to '{"sub":"31111111-1111-4111-8111-111111111111","
 insert into public.timesheets (id, employee_id, project_id, week_start, wed_hours, b2c_rate, b2b_rate, approval_status)
 values ('f3000000-0000-4000-8000-0000000000f2', 'd3000000-0000-4000-8000-0000000000d2', 'b3000000-0000-4000-8000-0000000000b1',
   '2031-11-03', 8, 0, 20, 'submitted');
+-- Tarifa 0 više ne može ni da se unese (guard_rate_history: iznos > 0), a upisana b2c_rate = 0 se ignoriše;
+-- ista namera po novom pravilu: radnik bez B2C tarife → odobravanje odbijeno (nikad trošak 0).
 select throws_like($$update public.timesheets set approval_status = 'approved' where id = 'f3000000-0000-4000-8000-0000000000f2'$$,
-  '%nema tarifu%', 'satnica sa tarifom 0 ne može da se odobri');
+  '%ne može da se odobri%nema tarife radnika (B2C)%', 'satnica bez tarife radnika (upisana tarifa 0) ne može da se odobri');
 select lives_ok($$update public.timesheets set approval_status = 'rejected' where id = 'f3000000-0000-4000-8000-0000000000f2'$$,
   'admin može da odbije satnicu');
 select lives_ok($$update public.timesheets set approval_status = 'approved' where id = 'f3000000-0000-4000-8000-0000000000f1'$$,
   'admin odobrava satnicu sa tarifom');
 update public.timesheets set worker_cost = 1 where id = 'f3000000-0000-4000-8000-0000000000f1';
+reset role;
 select is((select worker_cost from public.timesheets where id = 'f3000000-0000-4000-8000-0000000000f1'), 120.00::numeric,
   'ni admin ne može da upiše iznos odobrene satnice mimo sati × tarifa × koeficijent');
+set local role authenticated;
 
 select lives_ok($$select public.lock_month('2031-12-01')$$, 'decembar 2031 se zaključava');
 select throws_like($$select public.lock_month('2031-12-15')$$, '%već zaključan%', 'ponovno zaključavanje daje jasnu poruku');
@@ -78,6 +94,9 @@ reset role;
 insert into public.tasks (id, title, assigned_to, assigned_to_name)
   values ('e3000000-0000-4000-8000-0000000000e1', 'QA2 zadatak', 'd3000000-0000-4000-8000-0000000000d2', 'QA2 Drugi');
 delete from public.timesheets where employee_id = 'd3000000-0000-4000-8000-0000000000d2';
+-- Dodela (i njena tarifa) čuva vezu na radnika (FK restrict) — u fiksturi se brišu pre radnika.
+delete from public.rates where assignment_id = 'a3000000-0000-4000-8000-0000000000a2';
+delete from public.project_assignments where id = 'a3000000-0000-4000-8000-0000000000a2';
 delete from public.employees where id = 'd3000000-0000-4000-8000-0000000000d2';
 select is((select (assigned_to, assigned_to_name)::text from public.tasks where id = 'e3000000-0000-4000-8000-0000000000e1'),
   '(,)', 'zadatak obrisanog radnika nema ni dodelu ni ime');

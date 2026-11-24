@@ -1,315 +1,141 @@
+// Tarife i dodele (/rates): Rate History i dodele nad jednom evidencijom (rates, project_assignments) — iste zapise
+// menja i kartica projekta (Overview: Job Role tarife, Workers: dodele). Redizajn u „Project Assignments" je W2-K.
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { Search } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Search } from "lucide-react";
-import { toast } from "sonner";
 import PageHeader from "@/components/shared/PageHeader";
 import EmptyState from "@/components/shared/EmptyState";
 import ConfirmDeleteDialog from "@/components/shared/ConfirmDeleteDialog";
-import RateDialog from "@/components/rates/RateDialog";
-import AssignmentDialog from "@/components/rates/AssignmentDialog";
+import RateDialog, { invalidateRateViews } from "@/components/rates/RateDialog";
+import AssignmentDialog, { EndAssignmentDialog } from "@/components/rates/AssignmentDialog";
 import RateTable from "@/components/rates/RateTable";
 import AssignmentTable from "@/components/rates/AssignmentTable";
 import RateResolver from "@/components/rates/RateResolver";
 import { useLang } from "@/lib/LanguageContext";
-import { resolveAffiliation } from "@/lib/rateEngine";
-
-const LABELS = {
-  en: {
-    title: "Rates & Assignments", subtitle: "Effective-dated cost and revenue rates, and who works on which project",
-    rates: "Rates", assignments: "Project Assignments", addRate: "Add Rate", addAssignment: "Add Assignment",
-    searchRates: "Search rates...", searchAssignments: "Search assignments...",
-    noRates: "No rates defined yet", noAssignments: "No project assignments yet",
-    rateSaved: "Rate saved", rateDeleted: "Rate deleted", assignmentSaved: "Assignment saved", assignmentDeleted: "Assignment removed",
-    errFrom: "Effective date is required", errAmount: "Amount is required", errNegative: "The amount can't be negative.", errDates: "The end date can't be before the start date.", errEmployee: "Choose an employee",
-    errProject: "Choose a project", errAssignment: "Choose an assignment",
-    errAssignmentFields: "Employee, project and start date are required",
-    confirmRate: "Delete this rate? Timesheets already calculated keep their applied rate.",
-    confirmAssignment: "Delete this project assignment? Historical timesheet rows stay unchanged.",
-    direct: "Direct employee",
-  },
-  rs: {
-    title: "Tarife i dodele", subtitle: "Tarife troška i prihoda sa rokovima važenja i raspored radnika po projektima",
-    rates: "Tarife", assignments: "Dodele na projekte", addRate: "Nova tarifa", addAssignment: "Nova dodela",
-    searchRates: "Pretraga tarifa...", searchAssignments: "Pretraga dodela...",
-    noRates: "Nema definisanih tarifa", noAssignments: "Nema dodela na projekte",
-    rateSaved: "Tarifa sačuvana", rateDeleted: "Tarifa obrisana", assignmentSaved: "Dodela sačuvana", assignmentDeleted: "Dodela uklonjena",
-    errFrom: "Datum važenja je obavezan", errAmount: "Iznos je obavezan", errNegative: "Iznos ne može biti negativan.", errDates: "Datum završetka ne može biti pre datuma početka.", errEmployee: "Izaberite zaposlenog",
-    errProject: "Izaberite projekat", errAssignment: "Izaberite dodelu",
-    errAssignmentFields: "Zaposleni, projekat i datum početka su obavezni",
-    confirmRate: "Obrisati tarifu? Već obračunati radni sati zadržavaju primenjenu tarifu.",
-    confirmAssignment: "Obrisati dodelu? Postojeći radni sati ostaju nepromenjeni.",
-    direct: "Direktan zaposleni",
-  },
-  sk: {
-    title: "Sadzby a pridelenia", subtitle: "Sadzby nákladov a tržieb s dátumom platnosti a kto pracuje na ktorom projekte",
-    rates: "Sadzby", assignments: "Pridelenia na projekty", addRate: "Pridať sadzbu", addAssignment: "Pridať pridelenie",
-    searchRates: "Hľadať sadzby...", searchAssignments: "Hľadať pridelenia...",
-    noRates: "Zatiaľ nie sú definované žiadne sadzby", noAssignments: "Zatiaľ nie sú žiadne pridelenia na projekty",
-    rateSaved: "Sadzba bola uložená", rateDeleted: "Sadzba bola odstránená", assignmentSaved: "Pridelenie bolo uložené", assignmentDeleted: "Pridelenie bolo odstránené",
-    errFrom: "Dátum platnosti je povinný", errAmount: "Suma je povinná", errNegative: "Suma nemôže byť záporná.", errDates: "Dátum ukončenia nemôže byť pred dátumom začiatku.", errEmployee: "Vyberte zamestnanca",
-    errProject: "Vyberte projekt", errAssignment: "Vyberte pridelenie",
-    errAssignmentFields: "Zamestnanec, projekt a dátum začiatku sú povinné",
-    confirmRate: "Odstrániť túto sadzbu? Už vypočítané pracovné výkazy si ponechávajú použitú sadzbu.",
-    confirmAssignment: "Odstrániť toto pridelenie na projekt? Historické riadky pracovných výkazov zostanú nezmenené.",
-    direct: "Priamy zamestnanec",
-  },
-};
-
-const nameOf = (e) => `${e?.last_name || ""} ${e?.first_name || ""}`.trim();
+import { useL } from "@/lib/translations";
+import { useAuth } from "@/lib/AuthContext";
 
 export default function RatesPage() {
   const { lang } = useLang();
-  const L = LABELS[lang] || LABELS.en;
+  const L = useL();
+  const { can } = useAuth();
   const queryClient = useQueryClient();
+  const canRates = Boolean(can?.("rates.manage"));
+  const canAssign = Boolean(can?.("assignments.manage"));
+  const canSeeRates = canRates || Boolean(can?.("rates.view_b2b")) || Boolean(can?.("rates.view_b2c"));
 
+  const [tab, setTab] = useState(canSeeRates ? "rates" : "assignments");
   const [search, setSearch] = useState("");
-  const [rateDialogOpen, setRateDialogOpen] = useState(false);
-  const [rateForm, setRateForm] = useState({});
-  const [assignDialogOpen, setAssignDialogOpen] = useState(false);
-  const [assignForm, setAssignForm] = useState({});
+  const [rateDialog, setRateDialog] = useState(null); // { mode, rate? }
+  const [assignDialog, setAssignDialog] = useState(null); // { assignment | null }
+  const [endDialog, setEndDialog] = useState(null); // { assignment, mode }
   const [deleteRateId, setDeleteRateId] = useState(null);
-  const [deleteAssignId, setDeleteAssignId] = useState(null);
 
-  const { data: employees = [] } = useQuery({
-    queryKey: ["employees"],
-    queryFn: () => base44.entities.Employee.list("last_name"),
-  });
-  const { data: projects = [] } = useQuery({
-    queryKey: ["projects"],
-    queryFn: () => base44.entities.Project.list("name", 300),
-  });
-  const { data: assignments = [], isLoading: loadingAssignments } = useQuery({
-    queryKey: ["project-assignments"],
-    queryFn: () => base44.entities.ProjectAssignment.list("-start_date", 500),
-  });
-  const { data: rates = [], isLoading: loadingRates } = useQuery({
-    queryKey: ["rates"],
-    queryFn: () => base44.entities.Rate.list("-effective_from", 500),
-  });
+  const { data: employees = [] } = useQuery({ queryKey: ["employees"], queryFn: () => base44.entities.Employee.list("last_name") });
+  const { data: projects = [] } = useQuery({ queryKey: ["projects"], queryFn: () => base44.entities.Project.list("name", 300) });
+  const assignmentsQ = useQuery({ queryKey: ["project-assignments"], queryFn: () => base44.entities.ProjectAssignment.list("-start_date") });
+  const ratesQ = useQuery({ queryKey: ["rates"], queryFn: () => base44.entities.Rate.list("-effective_from"), enabled: canSeeRates });
   const { data: history = [] } = useQuery({
     queryKey: ["employment-history-all"],
     queryFn: () => base44.entities.EmploymentHistory.list("-start_date", 500),
   });
-  const { data: vendors = [] } = useQuery({
-    queryKey: ["vendors"],
-    queryFn: () => base44.entities.Vendor.list("name", 300),
-  });
-
-  const saveRate = useMutation({
-    mutationFn: (payload) => (payload.id ? base44.entities.Rate.update(payload.id, payload) : base44.entities.Rate.create(payload)),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["rates"] });
-      toast.success(L.rateSaved);
-      setRateDialogOpen(false);
-      setRateForm({});
-    },
-  });
+  const assignments = assignmentsQ.data || [];
+  const rates = ratesQ.data || [];
 
   const deleteRate = useMutation({
     mutationFn: (id) => base44.entities.Rate.delete(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["rates"] });
-      toast.success(L.rateDeleted);
+      invalidateRateViews(queryClient);
+      toast.success(L("Rate deleted", "Tarifa obrisana", "Sadzba odstránená"));
     },
+    onError: (e) => toast.error(e.message),
   });
 
-  const saveAssignment = useMutation({
-    mutationFn: (payload) => (payload.id ? base44.entities.ProjectAssignment.update(payload.id, payload) : base44.entities.ProjectAssignment.create(payload)),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["project-assignments"] });
-      toast.success(L.assignmentSaved);
-      setAssignDialogOpen(false);
-      setAssignForm({});
-    },
-  });
+  const q = search.trim().toLowerCase();
+  const matches = (fields) => !q || fields.filter(Boolean).some((f) => String(f).toLowerCase().includes(q));
+  const filteredRates = useMemo(() => rates.filter((r) => matches([r.employee_name, r.project_name, r.position, r.change_reason])), [rates, q]); // eslint-disable-line react-hooks/exhaustive-deps
+  const filteredAssignments = useMemo(() => assignments.filter((a) => matches([a.employee_name, a.project_name, a.position, a.vendor_name])), [assignments, q]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const deleteAssignment = useMutation({
-    mutationFn: (id) => base44.entities.ProjectAssignment.delete(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["project-assignments"] });
-      toast.success(L.assignmentDeleted);
-    },
-  });
-
-  const handleRateSave = () => {
-    const f = rateForm;
-    if (!f.effective_from) return toast.error(L.errFrom);
-    if (f.amount === "" || f.amount === undefined || f.amount === null) return toast.error(L.errAmount);
-    // Ista pravila kao baza (rates.amount >= 0, rates_dates) — da forma ne pušta ono što baza odbije.
-    if (Number(f.amount) < 0) return toast.error(L.errNegative);
-    if (f.effective_to && f.effective_to < f.effective_from) return toast.error(L.errDates);
-    if (f.scope !== "project" && !f.employee_id) return toast.error(L.errEmployee);
-    if (f.scope !== "employee" && !f.project_id) return toast.error(L.errProject);
-    if (f.scope === "assignment" && !f.assignment_id) return toast.error(L.errAssignment);
-
-    const employee = employees.find((e) => e.id === f.employee_id);
-    const project = projects.find((p) => p.id === f.project_id);
-    const assignment = assignments.find((a) => a.id === f.assignment_id);
-
-    saveRate.mutate({
-      id: f.id,
-      scope: f.scope || "project",
-      kind: f.kind || "cost",
-      unit: f.unit || "hourly",
-      amount: Number(f.amount) || 0,
-      currency: f.currency || "EUR",
-      employee_id: f.scope === "project" ? "" : f.employee_id || "",
-      employee_name: f.scope === "project" ? "" : nameOf(employee),
-      project_id: f.scope === "employee" ? "" : f.project_id || "",
-      project_name: f.scope === "employee" ? "" : project?.name || "",
-      position: f.scope === "project" ? f.position || "" : assignment?.position || f.position || "",
-      assignment_id: f.scope === "assignment" ? f.assignment_id : "",
-      effective_from: f.effective_from,
-      effective_to: f.effective_to || "",
-      status: f.status || "active",
-      notes: f.notes || "",
-    });
-  };
-
-  const handleAssignmentSave = () => {
-    const f = assignForm;
-    if (!f.employee_id || !f.project_id || !f.start_date) return toast.error(L.errAssignmentFields);
-    if (f.end_date && f.end_date < f.start_date) return toast.error(L.errDates);
-
-    const employee = employees.find((e) => e.id === f.employee_id);
-    const project = projects.find((p) => p.id === f.project_id);
-    const affiliation = resolveAffiliation({ history, employeeId: f.employee_id, date: f.start_date });
-
-    saveAssignment.mutate({
-      id: f.id,
-      employee_id: f.employee_id,
-      employee_name: nameOf(employee),
-      project_id: f.project_id,
-      project_name: project?.name || "",
-      position: f.position || "",
-      start_date: f.start_date,
-      end_date: f.end_date || "",
-      status: f.status || "active",
-      affiliation_id: affiliation?.id || "",
-      vendor_id: affiliation?.vendor_id || "",
-      vendor_name: affiliation?.vendor_name || "",
-      engagement_type: affiliation?.engagement_type || "",
-      rate_reference: f.rate_reference || "",
-      notes: f.notes || "",
-    });
-  };
-
-  const filteredRates = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return rates;
-    return rates.filter((r) => [r.employee_name, r.project_name, r.position, r.kind, r.scope].filter(Boolean).some((f) => f.toLowerCase().includes(q)));
-  }, [rates, search]);
-
-  const filteredAssignments = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return assignments;
-    return assignments.filter((a) => [a.employee_name, a.project_name, a.position, a.vendor_name].filter(Boolean).some((f) => f.toLowerCase().includes(q)));
-  }, [assignments, search]);
-
-  const formAffiliation = assignForm.employee_id && assignForm.start_date
-    ? resolveAffiliation({ history, employeeId: assignForm.employee_id, date: assignForm.start_date })
-    : null;
-  const affiliationLabel = formAffiliation
-    ? `${formAffiliation.engagement_type === "subcontractor_worker" ? formAffiliation.vendor_name || "—" : L.direct}${
-        formAffiliation.start_date ? ` · ${formAffiliation.start_date}` : ""
-      }`
-    : "";
+  const newRate = () => setRateDialog({ mode: "create" });
+  const newAssignment = () => setAssignDialog({ assignment: null });
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title={L.title}
-        subtitle={L.subtitle}
-        actionLabel={rates.length || assignments.length ? L.addRate : undefined}
-        onAction={() => { setRateForm({ scope: "project", kind: "cost", unit: "hourly", currency: "EUR", status: "active", effective_from: new Date().toISOString().slice(0, 10) }); setRateDialogOpen(true); }}
+        title={L("Rates & Assignments", "Tarife i dodele", "Sadzby a pridelenia")}
+        subtitle={L("Rate history with effective dates and who works on which project — the same records as on each project",
+          "Istorija tarifa sa datumima važenja i raspored radnika po projektima — isti zapisi kao na kartici projekta",
+          "História sadzieb s dátumami platnosti a kto pracuje na ktorom projekte — rovnaké záznamy ako na projekte")}
+        actionLabel={tab === "rates" ? (canRates ? L("New rate", "Nova tarifa", "Nová sadzba") : undefined) : canAssign ? L("Add assignment", "Nova dodela", "Pridať pridelenie") : undefined}
+        onAction={tab === "rates" ? newRate : newAssignment}
       />
 
-      <RateResolver employees={employees} projects={projects} assignments={assignments} rates={rates} lang={lang} />
+      {canSeeRates && <RateResolver employees={employees} projects={projects} assignments={assignments} rates={rates} lang={lang} />}
 
       <div className="relative max-w-md">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input placeholder={L.searchRates} value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10" />
+        <Input placeholder={L("Search...", "Pretraga...", "Hľadať...")} value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10" />
       </div>
 
-      <Tabs defaultValue="rates">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <TabsList>
-            <TabsTrigger value="rates">{L.rates} ({rates.length})</TabsTrigger>
-            <TabsTrigger value="assignments">{L.assignments} ({assignments.length})</TabsTrigger>
-          </TabsList>
-          <div className="flex gap-2">
-            <button
-              className="text-sm font-medium text-primary hover:underline"
-              onClick={() => { setRateForm({ scope: "project", kind: "cost", unit: "hourly", currency: "EUR", status: "active", effective_from: new Date().toISOString().slice(0, 10) }); setRateDialogOpen(true); }}
-            >
-              + {L.addRate}
-            </button>
-            <button
-              className="text-sm font-medium text-primary hover:underline"
-              onClick={() => { setAssignForm({ status: "active", start_date: new Date().toISOString().slice(0, 10) }); setAssignDialogOpen(true); }}
-            >
-              + {L.addAssignment}
-            </button>
-          </div>
-        </div>
+      <Tabs value={tab} onValueChange={setTab}>
+        <TabsList>
+          {canSeeRates && <TabsTrigger value="rates">{L("Rate history", "Istorija tarifa", "História sadzieb")} ({rates.length})</TabsTrigger>}
+          <TabsTrigger value="assignments">{L("Assignments", "Dodele", "Pridelenia")} ({assignments.length})</TabsTrigger>
+        </TabsList>
 
-        <TabsContent value="rates" className="mt-3">
-          {loadingRates ? (
-            <Card className="h-32 animate-pulse" />
-          ) : filteredRates.length === 0 ? (
-            <EmptyState icon={Search} title={L.noRates} actionLabel={L.addRate} onAction={() => { setRateForm({ scope: "project", kind: "cost", unit: "hourly", currency: "EUR", status: "active", effective_from: new Date().toISOString().slice(0, 10) }); setRateDialogOpen(true); }} />
-          ) : (
-            <Card className="overflow-hidden">
-              <RateTable rates={filteredRates} onEdit={(r) => { setRateForm(r); setRateDialogOpen(true); }} onDelete={setDeleteRateId} lang={lang} />
-            </Card>
-          )}
-        </TabsContent>
+        {canSeeRates && (
+          <TabsContent value="rates" className="mt-3">
+            {ratesQ.isLoading ? (
+              <Card className="h-32 animate-pulse" />
+            ) : ratesQ.isError ? (
+              <Card className="p-4 text-sm text-destructive">{ratesQ.error?.message}</Card>
+            ) : filteredRates.length === 0 ? (
+              <EmptyState icon={Search} title={L("No rates yet", "Nema tarifa", "Zatiaľ žiadne sadzby")}
+                actionLabel={canRates ? L("New rate", "Nova tarifa", "Nová sadzba") : undefined} onAction={canRates ? newRate : undefined} />
+            ) : (
+              <Card className="overflow-hidden">
+                <RateTable rates={filteredRates} canManage={canRates} lang={lang}
+                  onChange={(rate) => setRateDialog({ mode: "change", rate })}
+                  onEdit={(rate) => setRateDialog({ mode: "edit", rate })}
+                  onDelete={setDeleteRateId} />
+              </Card>
+            )}
+          </TabsContent>
+        )}
 
         <TabsContent value="assignments" className="mt-3">
-          {loadingAssignments ? (
+          {assignmentsQ.isLoading ? (
             <Card className="h-32 animate-pulse" />
+          ) : assignmentsQ.isError ? (
+            <Card className="p-4 text-sm text-destructive">{assignmentsQ.error?.message}</Card>
           ) : filteredAssignments.length === 0 ? (
-            <EmptyState icon={Search} title={L.noAssignments} actionLabel={L.addAssignment} onAction={() => { setAssignForm({ status: "active", start_date: new Date().toISOString().slice(0, 10) }); setAssignDialogOpen(true); }} />
+            <EmptyState icon={Search} title={L("No project assignments yet", "Nema dodela na projekte", "Zatiaľ žiadne pridelenia")}
+              actionLabel={canAssign ? L("Add assignment", "Nova dodela", "Pridať pridelenie") : undefined} onAction={canAssign ? newAssignment : undefined} />
           ) : (
             <Card className="overflow-hidden">
-              <AssignmentTable assignments={filteredAssignments} onEdit={(a) => { setAssignForm(a); setAssignDialogOpen(true); }} onDelete={setDeleteAssignId} lang={lang} />
+              <AssignmentTable assignments={filteredAssignments} canManage={canAssign} lang={lang}
+                onEdit={(assignment) => setAssignDialog({ assignment })}
+                onEnd={(assignment) => setEndDialog({ assignment, mode: "end" })}
+                onCancel={(assignment) => setEndDialog({ assignment, mode: "cancel" })} />
             </Card>
           )}
         </TabsContent>
       </Tabs>
 
-      <RateDialog
-        open={rateDialogOpen}
-        onOpenChange={setRateDialogOpen}
-        form={rateForm}
-        setForm={setRateForm}
-        onSave={handleRateSave}
-        saving={saveRate.isPending}
-        employees={employees}
-        projects={projects}
-        assignments={assignments}
-        lang={lang}
-      />
-
-      <AssignmentDialog
-        open={assignDialogOpen}
-        onOpenChange={setAssignDialogOpen}
-        form={assignForm}
-        setForm={setAssignForm}
-        onSave={handleAssignmentSave}
-        saving={saveAssignment.isPending}
-        employees={employees}
-        projects={projects}
-        affiliationLabel={affiliationLabel}
-        lang={lang}
-      />
-
-      <ConfirmDeleteDialog open={!!deleteRateId} onClose={() => setDeleteRateId(null)} onConfirm={() => deleteRate.mutate(deleteRateId)} message={L.confirmRate} />
-      <ConfirmDeleteDialog open={!!deleteAssignId} onClose={() => setDeleteAssignId(null)} onConfirm={() => deleteAssignment.mutate(deleteAssignId)} message={L.confirmAssignment} />
+      <RateDialog open={Boolean(rateDialog)} onOpenChange={(o) => !o && setRateDialog(null)} mode={rateDialog?.mode} rate={rateDialog?.rate}
+        projects={projects} assignments={assignments} />
+      <AssignmentDialog open={Boolean(assignDialog)} onOpenChange={(o) => !o && setAssignDialog(null)} assignment={assignDialog?.assignment}
+        projects={projects} employees={employees} history={history} />
+      <EndAssignmentDialog open={Boolean(endDialog)} onOpenChange={(o) => !o && setEndDialog(null)} assignment={endDialog?.assignment} mode={endDialog?.mode} />
+      <ConfirmDeleteDialog open={!!deleteRateId} onClose={() => setDeleteRateId(null)} onConfirm={() => deleteRate.mutate(deleteRateId)}
+        message={L("Delete this rate? A rate already used in a timesheet can't be deleted — set it to Inactive instead.",
+          "Obrisati tarifu? Tarifa koja je već korišćena u satnici se ne briše — postavite je na Neaktivna.",
+          "Odstrániť sadzbu? Sadzbu použitú vo výkaze nemožno odstrániť — nastavte ju ako Neaktívnu.")} />
     </div>
   );
 }
