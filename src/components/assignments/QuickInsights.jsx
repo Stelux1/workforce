@@ -15,6 +15,7 @@ import { useL } from "@/lib/translations";
 import { useLang } from "@/lib/LanguageContext";
 import { intlLocale } from "@/lib/dateFormat";
 import { formatDate, shortDatePattern } from "@/lib/dateFormat";
+import { insightFilterPatch } from "@/lib/assignments";
 import { STATUS_META, useAssignmentStatusLabels } from "./status";
 
 const WHOLE_DAY = "__day";
@@ -157,12 +158,12 @@ export default function QuickInsights({ breakdown, projects, endingSoonCount, av
           <section>
             <h3 className="mb-3 text-sm font-semibold">{L("Assignments by Status", "Angažmani po statusu", "Pridelenia podľa stavu")}</h3>
             <StatusDonut breakdown={breakdown} activeStatus={filters.status}
-              onPick={(status) => onFilter(filters.status === status ? { status: "" } : { status, mode: "all" })} />
+              onPick={(status) => onFilter(insightFilterPatch("status", status, filters))} />
           </section>
 
           <section className="border-t pt-4">
             <ProjectBars items={projects} activeProject={filters.project}
-              onPick={(projectId) => onFilter({ project: filters.project === projectId ? "" : projectId })} />
+              onPick={(projectId) => onFilter(insightFilterPatch("project", projectId, filters))} />
           </section>
 
           <section className="space-y-3">
@@ -189,7 +190,7 @@ export default function QuickInsights({ breakdown, projects, endingSoonCount, av
 
             <InsightRow icon={CalendarClock} tone="warning" title={L("Assignments Ending Soon", "Angažmani koji uskoro ističu", "Pridelenia čoskoro končiace")}
               value={endingSoonCount} hint={L("Active, ending within 30 days", "Aktivni, ističu u narednih 30 dana", "Aktívne, končia do 30 dní")}
-              onClick={() => onFilter({ status: "ending_soon", mode: "all" })}
+              onClick={() => onFilter(insightFilterPatch("ending_soon", null, filters))}
               ariaLabel={L("Show assignments ending within 30 days", "Prikaži angažmane koji ističu u 30 dana", "Zobraziť pridelenia končiace do 30 dní")} />
 
             <InsightRow icon={AlertTriangle} tone={shortages.count > 0 ? "danger" : "primary"} title={L("Workforce Shortages", "Manjak radne snage", "Nedostatok pracovnej sily")}

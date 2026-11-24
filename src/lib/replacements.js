@@ -7,7 +7,9 @@
 // • rankCandidates({need, ...}) — kandidati za zamenu po redosledu kriterijuma §14.2 i kategorije
 //   full_match | partial_availability | transfer_required | not_eligible (T22), uz uticaj na izvorni projekat (T23).
 // • simulateReplacement / replacementImpact — isto što radi `assign_replacement` u bazi, nad redovima u memoriji: posle
-//   zamene, koliko fali na izvornim projektima (upozorenje pre potvrde) i koliko na ciljnom.
+//   zamene, koliko fali na izvornim projektima (upozorenje pre potvrde) i koliko na ciljnom. Izvorni manjak na projektu
+//   koji korisnik ne vidi (redovi nisu učitani) daje baza (`replacement_source_impact`, migracija 20261125170000):
+//   `replacementImpact({..., serverSource})` tada uzima njen odgovor (`normalizeSourceImpact`), uz nazive iz baze.
 //
 // Dostupnost i pokrivenost računa isključivo src/lib/workforce.js (isti izračun kao SQL `workforce_coverage`), a
 // onboarding readiness src/lib/onboarding.js (isti algoritam kao SQL `onboarding_manifest`). Ništa se ne upisuje:
@@ -179,7 +181,7 @@ export function simulateReplacement({ employeeId, need, from, to, assignments = 
  * zamene. `sourceShortage` prazno = odlazak radnika ne pravi manjak; inače UI traži izričitu potvrdu, a baza bez
  * potvrde (`p_ack_source_shortage`) odbija.
  */
-export function replacementImpact({ employeeId, need, from, to, requirements = [], assignments = [], schedules = [], leaves = [], shifts = [], reuseAssignmentId = null }) {
+export function replacementImpact({ employeeId, need, from, to, requirements = [], assignments = [], schedules = [], leaves = [], shifts = [], reuseAssignmentId = null, serverSource = null }) {
   const lo = addDaysIso(from, -1);
   const hi = addDaysIso(to, 1);
   const before = coverage({ requirements, assignments, schedules, leaves, shifts, from: lo, to: hi });
@@ -197,13 +199,49 @@ export function replacementImpact({ employeeId, need, from, to, requirements = [
         required: r.required, availableBefore: b.available, available: r.available, deficitBefore: b.deficit, deficit: r.deficit });
     }
   }
+  // Baza (`replacement_source_impact`) meri izvorni manjak na SVIM projektima radnika, i na onima koje korisnik ne vidi
+  // (njihovi redovi ovde nisu učitani). Kad je njen odgovor tu, on je izvor istine za izvorni manjak.
+  const server = serverSource ? normalizeSourceImpact(serverSource) : null;
   return {
-    sourceShortage,
-    sourceMissing: sourceShortage.reduce((s, r) => s + (r.deficit - r.deficitBefore), 0),
+    sourceShortage: server ? server.rows : sourceShortage,
+    sourceMissing: server ? server.missing : sourceShortage.reduce((s, r) => s + (r.deficit - r.deficitBefore), 0),
+    hiddenProjects: server ? server.hiddenProjects : [],
+    sourceFromServer: !!server,
     target,
     targetDeficitAfter: target.reduce((m, r) => Math.max(m, r.deficit), 0),
     released: sim.released,
   };
+}
+
+/**
+ * Odgovor baze o izvornom manjku (`replacement_source_impact`, ili DETAIL greške `assign_replacement` sa HINT-om
+ * 'source_shortage') → isti oblik kao `replacementImpact().sourceShortage`. Nosi nazive projekta / Job Role / smene iz
+ * baze (projekat koji korisnik ne vidi nije u njegovim lookup-ima) i `hidden` za takav projekat. Samo brojevi i
+ * nazivi — bez tarifa i ličnih podataka. Prihvata objekat ili JSON tekst; nevažeći ulaz → null.
+ */
+export function normalizeSourceImpact(input) {
+  let v = input;
+  if (typeof v === "string") {
+    try { v = JSON.parse(v); } catch { return null; }
+  }
+  if (!v || typeof v !== "object" || !Array.isArray(v.rows)) return null;
+  const num = (x) => (x == null || x === "" ? null : Number(x));
+  const rows = v.rows.map((r) => ({
+    projectId: r.project_id, projectRoleId: r.project_role_id, shiftId: r.shift_id, date: iso(r.date),
+    required: num(r.required), availableBefore: num(r.available_before), available: num(r.available),
+    deficitBefore: num(r.deficit_before) ?? 0, deficit: num(r.deficit) ?? 0,
+    projectName: r.project_name ?? null, roleTitle: r.role_title ?? null, shiftName: r.shift_name ?? null,
+    hidden: r.visible === false,
+  }));
+  const missing = v.missing != null ? Number(v.missing) : rows.reduce((s, r) => s + (r.deficit - r.deficitBefore), 0);
+  const hiddenProjects = (Array.isArray(v.hidden_projects) ? v.hidden_projects : [])
+    .map((h) => ({ projectId: h.project_id, projectName: h.project_name ?? null }));
+  return { missing, rows, hiddenProjects };
+}
+
+/** Da li odgovor/greška baze traži izričitu potvrdu premeštaja (manjak ili raspored na projektu koji korisnik ne vidi). */
+export function sourceNeedsAck(impact) {
+  return !!impact && ((impact.sourceShortage?.length || 0) > 0 || (impact.hiddenProjects?.length || 0) > 0);
 }
 
 // ───────────────────────────── §14.2: kandidati ─────────────────────────────

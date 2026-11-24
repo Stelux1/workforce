@@ -73,6 +73,7 @@ select is((select l -> 'worker' ->> 'from' || '/' || (l -> 'client' ->> 'from')
            where t.timesheet_id = 'f1400000-0000-4000-8000-0000000000f2' and l ->> 'code' = 'praznik_vikend'),
   'praznik/praznik', 'izvor je praznik za obe strane');
 
+-- T08 Holiday: različiti koeficijenti radnika i klijenta daju dva tačna iznosa, svaka strana po svom koeficijentu.
 -- 3) strane se biraju posebno: radniku veći praznik (2,1 > 1,3), klijentu veći vikend (2,4 > 1,8).
 update public.hour_types set worker_coef = 2.1, client_coef = 1.8 where code = 'praznik';
 update public.hour_types set worker_coef = 1.3, client_coef = 2.4 where code = 'vikend';

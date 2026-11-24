@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { format } from "date-fns";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { Card } from "@/components/ui/card";
@@ -11,6 +12,9 @@ import EmptyState from "@/components/shared/EmptyState";
 import ConfirmDeleteDialog from "@/components/shared/ConfirmDeleteDialog";
 import VendorDialog from "@/components/vendors/VendorDialog";
 import ImportVendorsDialog from "@/components/vendors/ImportVendorsDialog";
+import VendorDetail from "@/components/vendors/VendorDetail";
+import { currentContract, workerCountMap } from "@/lib/vendorOverview";
+import { formatIsoDate } from "@/lib/dateFormat";
 import { useLang } from "@/lib/LanguageContext";
 import { useT } from "@/lib/translations";
 
@@ -19,7 +23,7 @@ const LABELS = {
     title: "Vendors", subtitle: "Subcontractor companies supplying workers",
     add: "Add Vendor", search: "Search vendors...", empty: "No vendors yet",
     vendor: "Vendor", country: "Country", contact: "Contact", currency: "Currency",
-    workers: "Active Workers", terms: "Terms", status: "Status", active: "Active", inactive: "Inactive",
+    workers: "Active Workers", contract: "Contract", openEnded: "open-ended", noContract: "No valid contract", open: "Open details", terms: "Terms", status: "Status", active: "Active", inactive: "Inactive",
     saved: "Vendor saved", deleted: "Vendor deleted",
     confirm: "Delete this vendor? A vendor with engagements can't be deleted — set it to Inactive instead.",
     nameRequired: "Vendor name is required",
@@ -28,7 +32,7 @@ const LABELS = {
     title: "Dobavljači", subtitle: "Podugovaračke firme koje obezbeđuju radnike",
     add: "Dodaj dobavljača", search: "Pretraga dobavljača...", empty: "Nema dobavljača",
     vendor: "Dobavljač", country: "Država", contact: "Kontakt", currency: "Valuta",
-    workers: "Aktivni radnici", terms: "Rok plaćanja", status: "Status", active: "Aktivan", inactive: "Neaktivan",
+    workers: "Aktivni radnici", contract: "Ugovor", openEnded: "bez roka", noContract: "Nema važećeg ugovora", open: "Otvori detalje", terms: "Rok plaćanja", status: "Status", active: "Aktivan", inactive: "Neaktivan",
     saved: "Dobavljač sačuvan", deleted: "Dobavljač obrisan",
     confirm: "Obrisati dobavljača? Dobavljač koji ima angažmane ne može da se obriše — tada ga postavite na Neaktivan.",
     nameRequired: "Naziv dobavljača je obavezan",
@@ -37,7 +41,7 @@ const LABELS = {
     title: "Dodávatelia", subtitle: "Subdodávateľské firmy dodávajúce pracovníkov",
     add: "Pridať dodávateľa", search: "Hľadať dodávateľov...", empty: "Zatiaľ žiadni dodávatelia",
     vendor: "Dodávateľ", country: "Krajina", contact: "Kontakt", currency: "Mena",
-    workers: "Aktívni pracovníci", terms: "Podmienky", status: "Stav", active: "Aktívny", inactive: "Neaktívny",
+    workers: "Aktívni pracovníci", contract: "Zmluva", openEnded: "neurčito", noContract: "Bez platnej zmluvy", open: "Otvoriť detail", terms: "Podmienky", status: "Stav", active: "Aktívny", inactive: "Neaktívny",
     saved: "Dodávateľ bol uložený", deleted: "Dodávateľ bol odstránený",
     confirm: "Odstrániť tohto dodávateľa? Dodávateľa s pracovnými vzťahmi nemožno odstrániť — nastavte ho radšej ako Neaktívny.",
     nameRequired: "Názov dodávateľa je povinný",
@@ -60,19 +64,28 @@ export default function Vendors() {
     queryFn: () => base44.entities.Vendor.list("name", 300),
   });
 
-  const { data: history = [] } = useQuery({
-    queryKey: ["employment-history-all"],
-    queryFn: () => base44.entities.EmploymentHistory.list("-start_date", 500),
+  // Aktivni radnici po vendoru: view vendor_worker_counts (angažmani koji važe danas, bez ograničenja broja redova).
+  const countsQ = useQuery({
+    queryKey: ["vendor-worker-counts"],
+    queryFn: () => base44.entities.VendorWorkerCount.list(),
   });
+  const workerCounts = useMemo(() => workerCountMap(countsQ.data), [countsQ.data]);
 
-  const workerCounts = useMemo(() => {
-    const map = new Map();
-    history.forEach((h) => {
-      if (!h.vendor_id || h.status !== "active") return;
-      map.set(h.vendor_id, (map.get(h.vendor_id) || 0) + 1);
-    });
-    return map;
-  }, [history]);
+  const { data: contracts = [] } = useQuery({
+    queryKey: ["vendor-contracts", "all"],
+    queryFn: () => base44.entities.VendorContract.list("-start_date"),
+  });
+  const today = format(new Date(), "yyyy-MM-dd");
+  const currentByVendor = useMemo(() => {
+    const byVendor = new Map();
+    for (const c of contracts) {
+      if (!byVendor.has(c.vendor_id)) byVendor.set(c.vendor_id, []);
+      byVendor.get(c.vendor_id).push(c);
+    }
+    return new Map([...byVendor.entries()].map(([id, list]) => [id, currentContract(list, today)]));
+  }, [contracts, today]);
+  const [detailId, setDetailId] = useState(null);
+  const detailVendor = vendors.find((v) => v.id === detailId) || null;
 
   const saveMutation = useMutation({
     mutationFn: (data) => (data.id ? base44.entities.Vendor.update(data.id, data) : base44.entities.Vendor.create(data)),
@@ -150,6 +163,7 @@ export default function Vendors() {
                   <th className="text-left px-4 py-3 font-medium hidden md:table-cell">{L.country}</th>
                   <th className="text-left px-4 py-3 font-medium hidden lg:table-cell">{L.contact}</th>
                   <th className="text-center px-4 py-3 font-medium hidden sm:table-cell">{L.workers}</th>
+                  <th className="text-left px-4 py-3 font-medium hidden xl:table-cell">{L.contract}</th>
                   <th className="text-center px-4 py-3 font-medium hidden md:table-cell">{L.currency}</th>
                   <th className="text-left px-4 py-3 font-medium">{L.status}</th>
                   <th className="px-4 py-3 w-20"></th>
@@ -157,14 +171,14 @@ export default function Vendors() {
               </thead>
               <tbody>
                 {filtered.map((vendor) => (
-                  <tr key={vendor.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
+                  <tr key={vendor.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors cursor-pointer" onClick={() => setDetailId(vendor.id)}>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
                           <Handshake className="w-4 h-4 text-primary" />
                         </div>
                         <div>
-                          <p className="font-semibold">{vendor.name}</p>
+                          <button type="button" className="font-semibold text-left hover:text-primary hover:underline" onClick={(e) => { e.stopPropagation(); setDetailId(vendor.id); }} aria-label={`${L.open}: ${vendor.name}`}>{vendor.name}</button>
                           <p className="text-xs text-muted-foreground">
                             {[vendor.vendor_id && `ID: ${vendor.vendor_id}`, vendor.vat_number && `VAT: ${vendor.vat_number}`].filter(Boolean).join(" · ")}
                           </p>
@@ -179,16 +193,28 @@ export default function Vendors() {
                       {vendor.email && <p className="text-xs text-muted-foreground">{vendor.email}</p>}
                     </td>
                     <td className="px-4 py-3 text-center hidden sm:table-cell font-medium">
-                      {workerCounts.get(vendor.id) || 0}
+                      {countsQ.isLoading ? "…" : countsQ.error ? "—" : workerCounts.get(vendor.id) || 0}
+                    </td>
+                    <td className="px-4 py-3 hidden xl:table-cell">
+                      {(() => {
+                        const c = currentByVendor.get(vendor.id);
+                        if (!c) return <span className="text-muted-foreground">{L.noContract}</span>;
+                        return (
+                          <>
+                            <p className="font-medium">{c.reference}</p>
+                            <p className="text-xs text-muted-foreground tabular-nums">{formatIsoDate(c.start_date, lang)} – {c.end_date ? formatIsoDate(c.end_date, lang) : L.openEnded}</p>
+                          </>
+                        );
+                      })()}
                     </td>
                     <td className="px-4 py-3 text-center hidden md:table-cell">{vendor.default_currency || "EUR"}</td>
                     <td className="px-4 py-3">
-                      <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${vendor.status === "inactive" ? "bg-muted text-muted-foreground" : "bg-emerald-100 text-emerald-700"}`}>
+                      <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${vendor.status === "inactive" ? "bg-muted text-muted-foreground" : "bg-success-soft text-success"}`}>
                         {vendor.status === "inactive" ? L.inactive : L.active}
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-1 justify-end">
+                      <div className="flex items-center gap-1 justify-end" onClick={(e) => e.stopPropagation()}>
                         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setForm(vendor); setDialogOpen(true); }}>
                           <Edit className="w-3.5 h-3.5" />
                         </Button>
@@ -212,6 +238,14 @@ export default function Vendors() {
         setForm={setForm}
         onSave={handleSave}
         saving={saveMutation.isPending}
+        lang={lang}
+      />
+
+      <VendorDetail
+        vendor={detailVendor}
+        open={!!detailVendor}
+        onOpenChange={(o) => { if (!o) setDetailId(null); }}
+        onEdit={() => { setForm(detailVendor); setDialogOpen(true); }}
         lang={lang}
       />
 

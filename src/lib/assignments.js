@@ -308,6 +308,33 @@ export function byProject(rows) {
 }
 
 /**
+ * Quick Insights (§4.3, T04): šta klik na karticu menja u filterima liste angažmana. Klik na isti segment/projekat
+ * ponovo skida filter; status i Ending Soon prelaze u režim „all" (inače bi Active sakrio Upcoming/Completed).
+ * @param {'status'|'project'|'ending_soon'} kind
+ * @param {string} value status ili id projekta (za ending_soon se ne koristi)
+ * @param {{status?, project?}} current trenutni filteri iz adrese
+ * @returns {object} zakrpa parametara adrese ("" = ukloni parametar)
+ */
+export function insightFilterPatch(kind, value, current = {}) {
+  if (kind === "status") return current.status === value ? { status: "" } : { status: value, mode: "all" };
+  if (kind === "project") return { project: current.project === value ? "" : value };
+  if (kind === "ending_soon") return { status: "ending_soon", mode: "all" };
+  return {};
+}
+
+/**
+ * Quick Insights → Workforce Planning (T04): Workers Available (`view=available`, dan, smena) i Workforce Shortages
+ * (`view=shortages`, period) nose i trenutni Project / Job Role filter. Ciljna stranica čita isto kroz readListParams.
+ */
+export function workforceInsightUrl(view, extra = {}, filters = {}) {
+  const q = new URLSearchParams({ view });
+  for (const [k, v] of Object.entries(extra || {})) if (v) q.set(k, String(v));
+  if (filters.project) q.set("project", filters.project);
+  if (filters.role) q.set("role", filters.role);
+  return `/workforce?${q.toString()}`;
+}
+
+/**
  * „Assignments Ending Soon": trenutno važeći angažmani koji ističu u narednih `days` dana (status Ending Soon) —
  * klik vodi na isti filter statusa. Razlikuje se od kalendarske metrike Expiring This Month.
  */

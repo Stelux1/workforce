@@ -103,6 +103,8 @@ select lives_ok($$update public.timesheets set approval_status = 'approved',
                       "lines": "lažno", "daily_regular_hours": 1}'
   where id = 'f6000000-0000-4000-8000-0000000000f1'$$, 'admin odobrava kad postoje tarife i koeficijenti');
 reset role;
+-- T08 Regular/Overtime/Weekend sa različitim worker/client koeficijentima: baza računa dva tačna iznosa (radnik i klijent)
+--     i upisuje ih u snimak po vrsti; Holiday i praznik vikendom proverava 14_praznik_vikendom; JS pravilo: payroll.test.js „T08 …".
 select is((select (worker_cost, client_revenue, profit, overtime_hours)::text from public.timesheets where id = 'f6000000-0000-4000-8000-0000000000f1'),
   '(256.80,448.00,191.20,2.00)', 'odobren iznos: 8×12 + 2×12×1,5 + 8×12×1,3 = 256,80; 8×20 + 2×20×1,6 + 8×20×1,4 = 448');
 -- Snimak v2: izvor i oznaka tarife su po danu (days[*].worker/client), na vrhu je samo tarifa reda i „mixed".

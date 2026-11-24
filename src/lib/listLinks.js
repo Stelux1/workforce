@@ -11,10 +11,11 @@
 //   date       YYYY-MM-DD  jedan dan (Workforce „available": slobodni radnici tog dana)
 //   role       ključ Job Role (`project_roles.title_key`, mala slova) — Workforce i Project Assignments
 //   shift      id smene (Workforce „available")
+//   vendor     id vendora (Payables: obaveze tog podizvođača — Vendors §11)
 //
 // Parametar koji nije postavljen se izostavlja; nepoznati parametri se ignorišu.
 
-export const LIST_PARAMS = Object.freeze(["from", "to", "project", "client", "status", "pstatus", "view", "date", "role", "shift"]);
+export const LIST_PARAMS = Object.freeze(["from", "to", "project", "client", "status", "pstatus", "view", "date", "role", "shift", "vendor"]);
 
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
 const ID = /^[\w-]{1,64}$/;
@@ -32,6 +33,7 @@ const clean = {
   // title_key je slobodan tekst (npr. „zavarivač"): bez kontrolnih znakova i < >, najviše 80 znakova.
   role: (v) => { const t = v.trim(); return t.length <= 80 && ![...t].some((c) => c < " " || c === "<" || c === ">") ? t : ""; },
   shift: (v) => (ID.test(v) ? v : ""),
+  vendor: (v) => (ID.test(v) ? v : ""),
 };
 
 /** Adresa liste sa parametrima; prazne vrednosti i "all" se izostavljaju. */

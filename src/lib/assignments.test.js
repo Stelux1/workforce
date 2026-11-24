@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   assignmentKpis, assignmentStatus, byProject, decorateAssignments, endingSoon, exportRows, filterAssignments, percentages,
-  sortAssignments, statusBreakdown, todayInZone, workersByProject,
+  insightFilterPatch, sortAssignments, statusBreakdown, todayInZone, workersByProject, workforceInsightUrl,
 } from "./assignments.js";
+import { readListParams } from "./listLinks.js";
 import { ROLE_DEFAULTS, ALL_PERMISSIONS } from "./permissions.js";
 
 describe("assignmentStatus (isto kao SQL assignment_display_status)", () => {
@@ -262,3 +263,58 @@ describe("T27 — isti broj kao Main Dashboard za period", () => {
   });
 });
 
+
+describe("Quick Insights → filtrirane liste (T04)", () => {
+  const T = "2033-03-20";
+  const rows = [
+    { id: "a1", project_id: "p1", projectName: "Alfa", start_date: "2033-01-01", end_date: null },
+    { id: "a2", project_id: "p1", projectName: "Alfa", start_date: "2033-01-01", end_date: "2033-04-01" },
+    { id: "a3", project_id: "p1", projectName: "Alfa", start_date: "2033-04-01", end_date: null },
+    { id: "a4", project_id: "p2", projectName: "Beta", start_date: "2032-01-01", end_date: "2033-02-01" },
+    { id: "a5", project_id: "p2", projectName: "Beta", start_date: "2033-03-01", end_date: null },
+  ];
+  // Kao ProjectAssignmentsPage: zakrpa ide u adresu, filteri se čitaju iz nje i primenjuju na isti skup.
+  const apply = (filters, patch) => {
+    const next = { ...filters };
+    for (const [k, v] of Object.entries(patch)) if (v === "") delete next[k]; else next[k] = v;
+    return next;
+  };
+  const list = (f) => filterAssignments(rows, { projectId: f.project, status: f.status, mode: f.mode || "all", today: T }).map((a) => a.id);
+
+  it("T04 Assignments by Project: klik na traku otvara angažmane tog projekta, drugi klik skida filter", () => {
+    const bars = byProject(rows);
+    expect(bars.map((b) => [b.projectId, b.count])).toEqual([["p1", 3], ["p2", 2]]);
+    const f1 = apply({ mode: "all" }, insightFilterPatch("project", bars[0].projectId, {}));
+    expect(f1.project).toBe("p1");
+    expect(list(f1)).toEqual(["a1", "a2", "a3"]);
+    expect(list(f1)).toHaveLength(bars[0].count);
+    const f2 = apply(f1, insightFilterPatch("project", "p1", f1));
+    expect(f2.project).toBeUndefined();
+    expect(list(f2)).toHaveLength(rows.length);
+  });
+
+  it("T04 Quick Insights: status i Ending Soon vode na realnu filtriranu listu sa istim brojem kao kartica", () => {
+    const breakdown = statusBreakdown(rows, { today: T });
+    for (const item of breakdown.items) {
+      const f = apply({ mode: "active" }, insightFilterPatch("status", item.status, {}));
+      expect(f.mode).toBe("all");
+      expect(list(f)).toHaveLength(item.count);
+    }
+    expect(insightFilterPatch("status", "completed", { status: "completed" })).toEqual({ status: "" });
+    const soon = endingSoon(rows, 30, { today: T });
+    const f = apply({ mode: "active" }, insightFilterPatch("ending_soon", null, {}));
+    expect(list(f)).toEqual(soon.map((a) => a.id));
+  });
+
+  it("T04 Workers Available i Workforce Shortages otvaraju Workforce Planning sa istim projektom, ulogom, danom i smenom", () => {
+    const filters = { project: "p1", role: "zavarivač" };
+    const available = workforceInsightUrl("available", { date: "2033-03-20", shift: "s-1" }, filters);
+    const qa = readListParams(new URLSearchParams(available.split("?")[1]));
+    expect(available.startsWith("/workforce?")).toBe(true);
+    expect(qa).toMatchObject({ view: "available", date: "2033-03-20", shift: "s-1", project: "p1", role: "zavarivač" });
+    const shortages = workforceInsightUrl("shortages", { from: "2033-03-20", to: "2033-04-19" }, {});
+    expect(readListParams(new URLSearchParams(shortages.split("?")[1]))).toMatchObject({ view: "shortages", from: "2033-03-20", to: "2033-04-19", project: "", role: "" });
+    // ceo dan: bez smene u adresi
+    expect(workforceInsightUrl("available", { date: "2033-03-20", shift: "" }, {})).toBe("/workforce?view=available&date=2033-03-20");
+  });
+});

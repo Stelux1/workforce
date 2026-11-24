@@ -40,7 +40,7 @@ const todayIso = () => format(new Date(), "yyyy-MM-dd");
 const isIso = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ""));
 
 // Filteri iz adrese (Dashboard, izveštaji, obaveštenja — src/lib/listLinks.js): status=unpaid|partially_paid|paid|
-// draft|cancelled|open ili overdue (dospelost), project=<id>. Period from/to čita usePeriodParams.
+// draft|cancelled|open ili overdue (dospelost), project=<id>, vendor=<id> (Vendors §11). Period from/to čita usePeriodParams.
 const STATUS_PARAMS = new Set(["draft", "unpaid", "partially_paid", "paid", "cancelled", "open"]);
 function filtersFromUrl(params) {
   const lp = readListParams(params);
@@ -49,6 +49,7 @@ function filtersFromUrl(params) {
     status: STATUS_PARAMS.has(lp.status) ? lp.status : lp.status === "overdue" ? "open" : "all",
     due: lp.status === "overdue" ? "overdue" : "all",
     projectId: lp.project || "all",
+    vendorId: lp.vendor || "all",
   };
 }
 

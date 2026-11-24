@@ -819,6 +819,25 @@ export const TABLE_COLUMNS = {
     "created_by",
     "created_date"
   ],
+  "vendor_contracts": [
+    "id",
+    "vendor_id",
+    "reference",
+    "start_date",
+    "end_date",
+    "payment_terms_days",
+    "currency",
+    "notes",
+    "status",
+    "created_date",
+    "updated_date",
+    "created_by"
+  ],
+  "vendor_worker_counts": [
+    "vendor_id",
+    "active_workers",
+    "total_workers"
+  ],
   "vendors": [
     "id",
     "vendor_id",

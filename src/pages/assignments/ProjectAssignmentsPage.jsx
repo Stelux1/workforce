@@ -21,7 +21,7 @@ import { formatIsoDate } from "@/lib/dateFormat";
 import { pageTitle } from "@/lib/pageTitles";
 import {
   DEFAULT_TIME_ZONE, SORT_KEYS, addDays, assignmentKpis, byProject, decorateAssignments, endingSoon, filterAssignments,
-  sortAssignments, statusBreakdown, todayInZone,
+  sortAssignments, statusBreakdown, todayInZone, workforceInsightUrl,
 } from "@/lib/assignments";
 import { availableWorkers, coverage, shortageProjects } from "@/lib/workforce";
 import AssignmentKpis from "@/components/assignments/AssignmentKpis";
@@ -169,12 +169,7 @@ export default function ProjectAssignmentsPage() {
   }, [schedulesQ.isLoading, schedulesQ.isError, schedulesQ.data, leavesQ.isLoading, leavesQ.isError, leavesQ.data, requirementsQ.isLoading,
     requirementsQ.isError, requirementsQ.data, assignmentsQ.isLoading, projectsInScope, filters.role, rolesById, rawAssignments, shifts, shortFrom, shortTo]);
 
-  const workforceLink = (view, extra) => {
-    const q = new URLSearchParams({ view, ...extra });
-    if (filters.project) q.set("project", filters.project);
-    if (filters.role) q.set("role", filters.role);
-    return `/workforce?${q.toString()}`;
-  };
+  const workforceLink = (view, extra) => workforceInsightUrl(view, extra, filters);
   const shiftObj = shifts.find((s) => s.id === availShift);
 
   // ── filter opcije ──

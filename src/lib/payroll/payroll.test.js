@@ -258,6 +258,26 @@ describe("vrste sati (hours.js)", () => {
     expect(r.profit).toBe(234.8);
   });
 
+  it("T08 Regular/Overtime/Weekend/Holiday sa različitim worker/client koeficijentima daju dva tačna iznosa", () => {
+    // pon 10 h (prag 8 → 8 redovno + 2 prekovremeno), sre 11.11. praznik 8 h, sub 6 h vikend; radnik 10 €/h, klijent 20 €/h.
+    const hoursByType = classifyWeek({
+      weekStart: MON, dayHours: week(10, 6, { wed_hours: 8 }), holidays: [{ date: "2026-11-11", name: "Dan primirja" }], dailyThreshold: 8,
+    });
+    expect(hoursByType).toEqual({ redovni: 8, prekovremeni: 2, vikend: 6, praznik: 8, praznik_vikend: 0 });
+    const r = timesheetAmountsByType({ hoursByType, workerRate: 10, clientRate: 20, hourTypes: TYPES });
+    // radnik (B2C):  8×10×1 = 80; 2×10×1,26 = 25,20; 6×10×1,3 = 78;  8×10×2,1 = 168 → 351,20
+    // klijent (B2B): 8×20×1 = 160; 2×20×1,5 = 60;    6×20×1,4 = 168; 8×20×2 = 320   → 708
+    expect(Object.fromEntries(r.lines.map((l) => [l.code, [l.worker_coef, l.worker_cost, l.client_coef, l.client_revenue]]))).toEqual({
+      redovni: [1, 80, 1, 160],
+      prekovremeni: [1.26, 25.2, 1.5, 60],
+      vikend: [1.3, 78, 1.4, 168],
+      praznik: [2.1, 168, 2, 320],
+    });
+    expect(r.worker_cost).toBe(351.2);
+    expect(r.client_revenue).toBe(708);
+    expect(r.profit).toBe(356.8);
+  });
+
   it("prima tarife iz resolveRates ({ rate }) i hour_types kao objekat po šifri", () => {
     const byCode = Object.fromEntries(TYPES.map((t) => [t.code, t]));
     const r = timesheetAmountsByType({

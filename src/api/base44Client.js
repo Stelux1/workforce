@@ -58,6 +58,9 @@ const ENTITY_TABLES = {
   BillingSummaryCost: "billing_summary_costs",
   BillingStatusHistory: "billing_status_history",
   ClientPayment: "client_payments",
+  // Vendors §11 (migracija 20261125180000): ugovorni periodi i povezani radnici (view)
+  VendorContract: "vendor_contracts",
+  VendorWorkerCount: "vendor_worker_counts",
 };
 
 const SYSTEM_FIELDS = new Set(["id", "created_date", "updated_date", "created_by"]);
@@ -92,7 +95,7 @@ export const SIGNED_URL_SECONDS = 60 * 60;
 // spiskovi čitaju u delovima — ranije su izveštaji preko 500/1000 satnica tiho gubili redove (QA 14.11.2026).
 export const PAGE_SIZE = 1000;
 // Tabele čiji primarni ključ nije kolona `id` (get/update/delete/create idu preko njega).
-export const PRIMARY_KEY = { hour_types: "code", document_types: "code", holidays: "date", work_rules: "id", company_settings: "id", month_locks: "month", employee_private: "employee_id" };
+export const PRIMARY_KEY = { hour_types: "code", document_types: "code", holidays: "date", work_rules: "id", company_settings: "id", month_locks: "month", employee_private: "employee_id", vendor_worker_counts: "vendor_id" };
 // Kolona po kojoj je redosled stabilan između delova: primarni ključ; payslip_projects nema jednu kolonu ključa.
 const STABLE_ORDER = { ...PRIMARY_KEY, payslip_projects: "payslip_id" };
 

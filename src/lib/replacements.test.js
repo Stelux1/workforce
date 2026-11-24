@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { coverage } from "./workforce";
 import {
-  leaveShortage, locationMatch, rankCandidates, replacementImpact, replacementNeeds, shortageTotals, simulateReplacement,
-  snapshotRows, suggestedRange,
+  leaveShortage, locationMatch, normalizeSourceImpact, rankCandidates, replacementImpact, replacementNeeds, shortageTotals,
+  simulateReplacement, snapshotRows, sourceNeedsAck, suggestedRange,
 } from "./replacements";
 
 // Isti primer kao supabase/tests/30_odsustva_zamene.test.sql (paritet JS/SQL).
@@ -200,6 +200,49 @@ describe("replacementImpact / simulateReplacement (isto kao assign_replacement)"
       ["P2", "P", "2033-03-16", "assigned"],
       ["P1", "J", "2033-03-16", "replacement"],
     ]);
+  });
+
+  // Isti primer kao supabase/tests/36_zamena_izvorni_projekat.test.sql: PM ne vidi izvorni projekat (P2), pa u
+  // pregledaču nema njegovih redova — lokalni izračun ne vidi manjak; odgovor baze (svi projekti) je izvor istine.
+  const serverP2 = {
+    missing: 2,
+    rows: [
+      { project_id: "P2", project_role_id: "R2", shift_id: "J", date: "2033-03-15", required: 1, available_before: 1, available: 0,
+        deficit_before: 0, deficit: 1, project_name: "Most", role_title: "Zavarivač", shift_name: "Jutro 06:00–14:00", visible: false },
+      { project_id: "P2", project_role_id: "R2", shift_id: "J", date: "2033-03-16", required: 1, available_before: 1, available: 0,
+        deficit_before: 0, deficit: 1, project_name: "Most", role_title: "Zavarivač", shift_name: "Jutro 06:00–14:00", visible: false },
+    ],
+    hidden_projects: [{ project_id: "P2", project_name: "Most" }],
+  };
+
+  it("T23: projekat koji korisnik ne vidi — manjak i nazivi dolaze iz baze, potvrda se traži", () => {
+    const approvedLeaves = leaves.map((l) => (l.id === "L1" ? { ...l, status: "approved" } : l));
+    const visible = (r) => r.project_id !== "P2";
+    const local = replacementImpact({ employeeId: "e4", need, from: need.from, to: need.to, requirements: requirements.filter(visible),
+      assignments: assignments.filter(visible), schedules, leaves: approvedLeaves, shifts });
+    expect(local.sourceMissing).toBe(0); // bez baze upozorenje bi izostalo
+    expect(sourceNeedsAck(local)).toBe(false);
+    const merged = replacementImpact({ employeeId: "e4", need, from: need.from, to: need.to, requirements: requirements.filter(visible),
+      assignments: assignments.filter(visible), schedules, leaves: approvedLeaves, shifts, serverSource: serverP2 });
+    expect(merged.sourceFromServer).toBe(true);
+    expect(merged.sourceMissing).toBe(2);
+    expect(merged.sourceShortage.map((r) => [r.projectName, r.roleTitle, r.date, r.required, r.available, r.deficit, r.hidden])).toEqual([
+      ["Most", "Zavarivač", "2033-03-15", 1, 0, 1, true],
+      ["Most", "Zavarivač", "2033-03-16", 1, 0, 1, true],
+    ]);
+    expect(merged.hiddenProjects).toEqual([{ projectId: "P2", projectName: "Most" }]);
+    expect(merged.targetDeficitAfter).toBe(0); // ciljna potreba i dalje iz lokalnog izračuna
+    expect(sourceNeedsAck(merged)).toBe(true);
+  });
+
+  it("normalizeSourceImpact: DETAIL greške (JSON tekst), prazan odgovor i nevažeći ulaz", () => {
+    expect(normalizeSourceImpact(JSON.stringify(serverP2)).missing).toBe(2);
+    const empty = normalizeSourceImpact({ missing: 0, rows: [], hidden_projects: [] });
+    expect(empty).toEqual({ missing: 0, rows: [], hiddenProjects: [] });
+    expect(sourceNeedsAck({ sourceShortage: [], hiddenProjects: [{ projectId: "X", projectName: "Skriveni" }] })).toBe(true);
+    expect(normalizeSourceImpact("nije json")).toBeNull();
+    expect(normalizeSourceImpact({ missing: 1 })).toBeNull();
+    expect(normalizeSourceImpact(null)).toBeNull();
   });
 
   it("standby red se oslobađa (released) pre zamene", () => {

@@ -532,3 +532,79 @@ Opseg: BACKLOG Faza 3 `[review]`. HEAD `0e50f7f` i ceo diff `011eba8..HEAD` za n
 - **P1 izveštaji po trošku satnice — POPRAVLJENO** u Fazi 4 (D20, commit a432b8f).
 - **Verdict posle popravki: ✅** — nema otvorenih P0. P2/P3 ostaju zabeleženi gore.
 
+
+---
+
+# Phase 7 — spec v1.4 (25.11.2026)
+
+Opseg: Teamora Master Development Specification v1.4 (D30) — svi zahtevi §1–§18 koji pre Phase 7 nisu bili „Implemented" i svih 29 test scenarija T01–T29. Stanje: HEAD `b4d3410` + necommitovane izmene (migracije `20261125170000`, `20261125180000`, pgTAP 36/37, VendorDetail, matrica, plan migracije, backlog). Detaljna lista sa dokazom po stavci: `PHASE7-CHECKLIST.md` (192 stavke). Kod nije menjan.
+
+## Sažetak
+- **192 / 192** stavki provereno i čekirano (prvi prolaz P7-2: 184/192; posle popravki P7-3: 192/192).
+- Verify: `npm run build` exit 0 · `npm test` **628/628** (45 fajlova) · `npm run test:db` **969/969** (33 fajla) · `npm run lint` 0.
+- Proba produkcijskih migracija nad prljavim podacima: **19/19 migracija bez greške**, bez gubitka podataka, idempotentno, anon bez ijedne dozvole.
+- Otvoreno: nijedan P0/P1/P2. Uslov za push: dva upita na produkciji (P7-N5) i commit svih necommitovanih izmena.
+- Presuda: **✅ SME na produkciju** (uz uslove ispod).
+
+## Test scenariji T01–T29
+| T | Status | Dokaz |
+|---|---|---|
+| T01 | ✅ | `assignments.test.js`, `payroll/dashboard.test.js`, pgTAP 22; ekran „Active Workers — counted once" |
+| T02 | ✅ | `assignments.test.js` T02 (isti skup za tabelu, KPI, grafike, izvoz) |
+| T03 | ✅ | `assignments.test.js` T03; donut 100.0 % |
+| T04 | ✅ | `assignments.test.js` — 3 × T04 (traka → projekat, Quick Insights → lista sa istim brojem, Workforce linkovi) |
+| T05 | ✅ | `workforce.test.js`, `workforceUi.test.js`, pgTAP 27 |
+| T06 | ✅ | pgTAP 22 (T06 baza); Add/View/Edit/More actions otvaraju stvarne dijaloge |
+| T07 | ✅ | `timesheetDays.test.js`, `rateHistory.test.js`, pgTAP 23/24/34 |
+| T08 | ✅ | `payroll.test.js` T08, pgTAP 03 i 14 (`-- T08`) |
+| T09 | ✅ | `finance/laborLines`, `timesheetDays`, `projectReport` testovi, pgTAP 24 |
+| T10 | ✅ | `timesheetDays.test.js`, pgTAP 24 |
+| T11 | ✅ | `finance/payables`, `payablesDue`, `payablesList` testovi, pgTAP 28 |
+| T12 | ✅ | `payablesList.test.js`, pgTAP 28 |
+| T13 | ✅ | `projectCosts.test.js`, pgTAP 25 |
+| T14 | ✅ | `projectCosts.test.js`, `projectReport.test.js`, pgTAP 25 |
+| T15 | ✅ | `projectCosts`, `billingOverview` testovi, pgTAP 25/29 |
+| T16 | ✅ | `billingOverview`, `finance/billing` testovi, pgTAP 29 |
+| T17 | ✅ | `projectReport`, `dashboard`, `finance/kpis` testovi; odvojene kartice na Dashboard-u |
+| T18 | ✅ | `onboarding.test.js`, pgTAP 26 |
+| T19 | ✅ | pgTAP 26 i 20 (direktan poziv bez prava odbijen, storage politika) |
+| T20 | ✅ | `workforce`, `workforceUi` testovi, pgTAP 27 |
+| T21 | ✅ | `workforce`, `replacements` testovi, pgTAP 27/30/33 |
+| T22 | ✅ | `workforceUi`, `replacements` testovi |
+| T23 | ✅ | migracija `20261125170000`, `replacements.test.js`, pgTAP 30 i 36 (PM bez pristupa izvornom projektu: bez potvrde odbijeno sa brojem koji nedostaje, uz potvrdu prolazi + audit) |
+| T24 | ✅ | pgTAP 20/30/33 |
+| T25 | ✅ | `projectReport.test.js`, pgTAP 21/22 |
+| T26 | ✅ | `assignments`, `payablesList`, `projectReport` testovi; pgTAP 20/24/28 i dr.; SQL kao HR: tarife, obaveze, isplate, troškovi = 0 redova, iznosi satnica maskirani; UI (koordinator): HR bez B2C/B2B kolona i bez pristupa troškovima/obavezama |
+| T27 | ✅ | `payroll/dashboard.test.js`, `assignments.test.js` (isti servis za Dashboard i izveštaje) |
+| T28 | ✅ | `projectCosts`, `finance/currency`, `projectReport` testovi, pgTAP 25 |
+| T29 | ✅ | pgTAP 29 (nema broja, sekvence, PDF-a ni slanja fakture); izvoz, ručni status i uplate rade |
+
+## Proba produkcijskih migracija
+- Zasebna baza `probe7` u lokalnom kontejneru: šeme `auth`/`storage` iz lokalne baze, migracije do `20261124150000`, pa „prljavi" podaci kakvi mogu biti na produkciji: dodele u `projects.assigned_employees` (duplikat sa velikim slovima, nepostojeći radnik, prazan id, tarife u JSON-u), tarife u profilu radnika i posebne satnice, preklapajuće tarife istog nivoa, dve preklapajuće dodele istog radnika na istom projektu, trošak bez kategorije / sa nepostojećom kategorijom / RSD bez kursa / RSD sa kursom bez datuma, nalog `operater`, odobrene satnice sa snimkom v1 (kroz pravi `guard_timesheet`), submitted i draft, odobren obračun i zaključan mesec 03.2026, preklopljen raspored i preklopljena odsustva.
+- Svih 19 migracija `20261125*` redom u jednoj transakciji, pa `ROLLBACK`: **nijedna greška**. Drugi prolaz u istoj transakciji: bez greške, isti md5 nad `rates` i `project_assignments` → idempotentno.
+- Podaci: broj radnika, projekata, troškova, satnica, obračuna, odsustava, dokumenata i profila isti; dodate samo dodele (2 → 5) i tarife (3 → 11) iz JSON-a/profila/satnica; snimci i iznosi odobrenih satnica bit-identični (md5); `operater` → `hr`; JSON keš projekta ostaje bez tarifa. Sporno ide u `migration_report` (preklapanja, nevažeći JSON elementi, troškovi bez kategorije i van EUR bez datuma kursa, nejednoznačna dodela odobrene satnice — ona i dalje ulazi u `labor_day_lines`).
+- D14: posle migracija `anon` nema nijednu dozvolu nad tabelama ni funkcijama u `public`.
+
+## Nalazi
+| # | Ozb. | Nalaz | Status |
+|---|---|---|---|
+| P7-N1 | Visoko (isporuka) | `IMPLEMENTATION-MATRIX.md` nije bio ažuriran posle Phase 7 | REŠENO — 189/189 Implemented sa dokazom |
+| P7-N2 | Srednje | Nije bilo plana migracije (§18) | REŠENO — `docs/PLAN-MIGRACIJE.md` |
+| P7-N3 | Srednje | BACKLOG Phase 7 nije pratio stanje | REŠENO — 61 čekirana, 1 otvorena (ovaj QA) |
+| P7-N4 | Srednje | Vendors bez ugovornih perioda i obaveza (§11.02) | REŠENO — `20261125180000_ugovori_vendora.sql`, pgTAP 37, `VendorDetail.jsx` |
+| P7-N5 | Srednje (posle deploy-a) | Odobrena satnica bez `rate_snapshot` i trošak van EUR bez datuma kursa izlaze iz iznosa (spec-ispravno, ali vidljivo kao pad brojeva) | OTVORENO kao uslov — pre push-a na produkciji pokrenuti dva upita iz `docs/PLAN-MIGRACIJE.md` §6.1 (očekivano 0 / spisak za admina) |
+| P7-N6 | Nisko | T04 i T08 bez imenovanog testa | REŠENO |
+| P7-N7 | Info | PM može da premesti radnika sa projekta koji ne vidi — samo uz izričitu potvrdu, broj koji nedostaje i audit (§14.2.4) | OTVORENO — informacija za Luku |
+| P7-N8 | Info | `migration_report` nema ekran u aplikaciji; pregled upitom (plan §6.3) | OTVORENO — informacija |
+| P7-N9 | Info | 15.05: uvoz iz Base44 je po D30 K7 samo CSV (zaposleni, vendori); ostalo se unosi kroz aplikaciju, odobreni sati se ne prenose kao odobreni. Ispravno po D30, ali po slovu spec-a („bez gubitka istorije") suženje ako Base44 ima istoriju | NEEDS-USER — Luka potvrđuje da li u Base44 ima istorije za prenos |
+
+## Provereno i radi
+- Uloge Admin / Project Manager / HR / Finance + opseg projekata; `operater` → `hr`; prava u bazi (RLS, column grant, maskirani view-ovi), ne samo u UI-u; `PermissionDenied` za rute bez prava.
+- Jedna evidencija angažmana (`project_assignments`), JSON samo izvedeni keš (direktan upis odbijen); Rate History sa `effective_from/to`, exclusion bez preklapanja, `change_rate` uz razlog; tarifa po datumu rada.
+- Satnice: dodela, intervali, preklapanje i dnevni limit u bazi; korekcija odobrene uz razlog i audit; samo Approved u obračunu.
+- Payables/Payments, Billing Overview bez faktura, Financial Reports po valuti, Onboarding ZIP sa serverskom kontrolom, Workforce Planning/Gantt, Leave kapacitet i zamene, obaveštenja, audit log na 19 tabela.
+- Prevodi: 615 ključeva, 0 bez SK.
+
+## Zaključak
+- Phase 7 pokriva ceo spec v1.4 (189/189 u matrici, 192/192 u QA listi), testovi i proba migracija su zeleni.
+- Presuda: **✅ SME na produkciju**, uz uslove: (1) dva upita iz plana §6.1 na produkciji pre push-a; (2) sve necommitovane izmene u commitu koji ide na main; (3) posle deploy-a admin pregleda `migration_report` (plan §6.3–6.4). Luka potvrđuje P7-N9.

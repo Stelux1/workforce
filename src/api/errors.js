@@ -100,6 +100,14 @@ const M = {
     en: "The employee is linked to project costs, so they can't be deleted. Set the status to Terminated instead.",
     rs: "Radnik je vezan za troškove projekata, pa ne može da se obriše. Umesto toga postavite status Otpušten.", sk: "Zamestnanec je viazaný na náklady projektov, preto ho nemožno odstrániť. Nastavte radšej stav Ukončený.",
   },
+  inUseVendorContracts: {
+    en: "The vendor has contract periods, so it can't be deleted. Set it to Inactive instead.",
+    rs: "Dobavljač ima ugovorne periode, pa ne može da se obriše. Umesto toga ga postavite na Neaktivan.", sk: "Dodávateľ má zmluvné obdobia, preto ho nemožno odstrániť. Nastavte ho radšej ako Neaktívny.",
+  },
+  vendorContractOverlap: {
+    en: "This contract period overlaps another active contract of the same vendor. End the previous contract or change the dates.",
+    rs: "Ugovorni period se preklapa sa drugim aktivnim ugovorom istog dobavljača. Završite prethodni ugovor ili promenite datume.", sk: "Zmluvné obdobie sa prekrýva s inou aktívnou zmluvou toho istého dodávateľa. Ukončite predchádzajúcu zmluvu alebo zmeňte dátumy.",
+  },
   inUseVendorCosts: {
     en: "The vendor is linked to project costs, so it can't be deleted. Set it to Inactive instead.",
     rs: "Dobavljač je vezan za troškove projekata, pa ne može da se obriše. Umesto toga ga postavite na Neaktivan.", sk: "Dodávateľ je viazaný na náklady projektov, preto ho nemožno odstrániť. Nastavte ho radšej ako Neaktívny.",
@@ -246,6 +254,7 @@ const IN_USE_BY_CONSTRAINT = {
   project_assignments_project_role_id_fkey: "inUseRole",
   projects_client_id_fkey: "inUseClientProjects",
   employment_history_vendor_id_fkey: "inUseVendorEngagements",
+  vendor_contracts_vendor_id_fkey: "inUseVendorContracts",
 };
 const inUseKey = (constraint) => IN_USE_BY_CONSTRAINT[constraint] || "inUse";
 
@@ -417,6 +426,9 @@ const DB_MESSAGES_EN = [
   [/^Odsustvo je odbijeno — zamena nije potrebna$/, "The leave was rejected — no replacement is needed."],
   [/^Radnik je raspoređen na projektu kome nemate pristup — premeštaj tamo odobrava ovlašćeni korisnik tog projekta$/,
     "The employee is scheduled on a project you can't access — a user authorised for that project must approve the transfer."],
+  // Zamena: izvorni projekat na svim projektima radnika (migracija 20261125170000)
+  [/^Premeštaj oslobađa raspored radnika na projektu kome nemate pristup \((.+)\) — potvrdite transfer$/,
+    "The transfer releases the employee's schedule on a project you can't access ($1) — confirm the transfer."],
   // --- Poruke ostalih migracija 20261125* (prevod za EN/SK; RS ostaje izvorni tekst) ---
   // Prava i opšte provere (prava_rls, obaveze_isplate)
   [/^Podrazumevane kategorije troškova vraća samo admin$/, "Only an admin can restore the default cost categories."],
@@ -616,6 +628,7 @@ export function describeError(error, lang = currentLang()) {
   if (code === "23P01") {
     if (constraint === "rates_no_overlap") return say("rateOverlap");
     if (constraint === "timesheet_entries_no_overlap") return say("overlapInterval");
+    if (constraint === "vendor_contracts_no_overlap") return say("vendorContractOverlap");
     if (raw && !/violates exclusion constraint/i.test(raw)) return { key: "db", text: dbMessage(raw, lang) };
     return say("overlap");
   }

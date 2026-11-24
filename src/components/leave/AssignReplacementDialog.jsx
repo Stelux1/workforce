@@ -2,8 +2,11 @@
 // Pre potvrde prikazuje šta se menja: pokrivenost ciljne potrebe posle zamene i — kod premeštaja — manjak koji odlazak
 // pravi na izvornom projektu, uz obaveznu izričitu potvrdu. Isto računa i proverava baza (`assign_replacement`);
 // bez potvrde baza odbija i ništa ne upisuje. Posle potvrde se osvežavaju Workforce, Coverage i Onboarding.
+// Izvorni manjak meri baza na SVIM projektima radnika (`replacement_source_impact`, bez upisa) — i na projektu koji
+// korisnik ne vidi; taj se prikazuje po nazivu iz baze (samo brojevi i nazivi). Ako baza ipak odbije premeštaj zbog
+// manjka, njen odgovor (DETAIL) postaje upozorenje i traži se potvrda.
 import { useEffect, useMemo, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, UserCheck } from "lucide-react";
 import { toast } from "sonner";
 import { base44 } from "@/api/base44Client";
@@ -15,7 +18,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useL } from "@/lib/translations";
 import { useLang } from "@/lib/LanguageContext";
 import { formatIsoDate } from "@/lib/dateFormat";
-import { replacementImpact, suggestedRange } from "@/lib/replacements";
+import { normalizeSourceImpact, replacementImpact, sourceNeedsAck, suggestedRange } from "@/lib/replacements";
 import { CategoryChip, MissingDocs, errorText } from "./common";
 
 export default function AssignReplacementDialog({ open, onOpenChange, leave, need, candidate, data, leavesAsApproved, lookups, onAssigned }) {
@@ -24,30 +27,45 @@ export default function AssignReplacementDialog({ open, onOpenChange, leave, nee
   const queryClient = useQueryClient();
   const [range, setRange] = useState({ from: "", to: "" });
   const [ack, setAck] = useState(false);
+  // izvorni manjak iz odbijanja baze (DETAIL), kad stigne pre pregleda ili se stanje promenilo u međuvremenu
+  const [rejected, setRejected] = useState(null);
 
   useEffect(() => {
     if (open && candidate && need) {
       setRange(suggestedRange(candidate, need));
       setAck(false);
+      setRejected(null);
     }
   }, [open, candidate, need]);
+  useEffect(() => { setRejected(null); }, [range.from, range.to]);
 
   const validRange = !!range.from && !!range.to && range.from <= range.to && range.from >= need?.from && range.to <= need?.to;
+  const rpcArgs = candidate && need && leave ? {
+    p_leave: leave.id, p_employee: candidate.employeeId, p_project: need.projectId, p_role: need.projectRoleId, p_shift: need.shiftId,
+    p_from: range.from, p_to: range.to, p_source_assignment: candidate.sourceAssignmentId || null,
+  } : null;
+  // Pregled bez upisa: isti izračun kao pri potvrdi, na svim projektima radnika (i onima koje korisnik ne vidi).
+  const preview = useQuery({
+    queryKey: ["replacement-source-impact", rpcArgs],
+    enabled: open && !!rpcArgs && validRange,
+    staleTime: 0,
+    retry: false,
+    queryFn: () => base44.rpc("replacement_source_impact", rpcArgs),
+  });
+  const serverSource = rejected || (preview.isSuccess ? preview.data : null);
   const impact = useMemo(() => {
     if (!open || !candidate || !need || !data || !validRange) return null;
     return replacementImpact({
       employeeId: candidate.employeeId, need, from: range.from, to: range.to, requirements: data.requirements,
-      assignments: data.assignments, schedules: data.schedules, leaves: leavesAsApproved, shifts: data.shifts,
+      assignments: data.assignments, schedules: data.schedules, leaves: leavesAsApproved, shifts: data.shifts, serverSource,
     });
-  }, [open, candidate, need, data, validRange, range, leavesAsApproved]);
-  const needsAck = (impact?.sourceShortage.length || 0) > 0;
+  }, [open, candidate, need, data, validRange, range, leavesAsApproved, serverSource]);
+  const needsAck = sourceNeedsAck(impact);
+  const checking = validRange && preview.isFetching && !rejected;
   const unavailable = (candidate?.days || []).filter((d) => d.date >= range.from && d.date <= range.to && (d.state === "leave" || d.state === "covering"));
 
   const assign = useMutation({
-    mutationFn: () => base44.rpc("assign_replacement", {
-      p_leave: leave.id, p_employee: candidate.employeeId, p_project: need.projectId, p_role: need.projectRoleId, p_shift: need.shiftId,
-      p_from: range.from, p_to: range.to, p_source_assignment: candidate.sourceAssignmentId || null, p_ack_source_shortage: needsAck && ack,
-    }),
+    mutationFn: () => base44.rpc("assign_replacement", { ...rpcArgs, p_ack_source_shortage: needsAck && ack }),
     onSuccess: async () => {
       // Server je izvor istine: pokrivenost ciljne potrebe posle zamene.
       let after = null;
@@ -64,7 +82,15 @@ export default function AssignReplacementDialog({ open, onOpenChange, leave, nee
       onAssigned?.({ deficitAfter: after });
       onOpenChange(false);
     },
-    onError: (e) => toast.error(errorText(e)),
+    onError: (e) => {
+      // Odbijanje zbog izvornog manjka nosi tačne redove (i projekat koji korisnik ne vidi) — prikaži ih i traži potvrdu.
+      const source = normalizeSourceImpact(e?.details);
+      if (source) {
+        setRejected(e.details);
+        setAck(false);
+      }
+      toast.error(errorText(e));
+    },
   });
 
   if (!candidate || !need) return null;
@@ -123,19 +149,45 @@ export default function AssignReplacementDialog({ open, onOpenChange, leave, nee
               </span>
             </div>
 
+            {checking && (
+              <p className="text-xs text-muted-foreground" data-testid="source-checking">
+                {L("Checking the impact on the employee's other projects…", "Proveravam posledicu po ostale projekte radnika…", "Kontrolujem dopad na ostatné projekty pracovníka…")}
+              </p>
+            )}
+            {preview.isError && !rejected && (
+              <p className="flex items-start gap-2 text-xs text-warning" role="alert">
+                <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                <span>
+                  {L("The impact on the source project could not be checked on the server: ", "Posledica po izvorni projekat nije proverena na serveru: ", "Dopad na zdrojový projekt sa nepodarilo overiť na serveri: ")}
+                  {errorText(preview.error)}
+                </span>
+              </p>
+            )}
+
             {needsAck && (
               <div className="space-y-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm" data-testid="source-warning">
                 <p className="flex items-start gap-2 font-medium text-destructive">
                   <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
-                  {L(`Moving ${name} creates a shortage of ${impact.sourceMissing} on the source project:`,
-                    `Premeštaj radnika ${name} pravi manjak ${impact.sourceMissing} na izvornom projektu:`,
-                    `Presun pracovníka ${name} spôsobí nedostatok ${impact.sourceMissing} na zdrojovom projekte:`)}
+                  {impact.sourceMissing > 0
+                    ? L(`Moving ${name} creates a shortage of ${impact.sourceMissing} on the source project:`,
+                      `Premeštaj radnika ${name} pravi manjak ${impact.sourceMissing} na izvornom projektu:`,
+                      `Presun pracovníka ${name} spôsobí nedostatok ${impact.sourceMissing} na zdrojovom projekte:`)
+                    : L(`Moving ${name} releases their schedule on a project you can't access.`,
+                      `Premeštaj radnika ${name} oslobađa njegov raspored na projektu kome nemate pristup.`,
+                      `Presun pracovníka ${name} uvoľní jeho rozvrh na projekte, ku ktorému nemáte prístup.`)}
                 </p>
                 <ul className="space-y-0.5 pl-6 text-destructive">
                   {impact.sourceShortage.map((r) => (
                     <li key={`${r.projectId}|${r.projectRoleId}|${r.shiftId}|${r.date}`}>
-                      {lookups.project(r.projectId)} · {lookups.role(r.projectRoleId)} · {formatIsoDate(r.date, lang)} {lookups.shift(r.shiftId)} —{" "}
+                      {r.projectName || lookups.project(r.projectId)}
+                      {r.hidden && <span className="text-muted-foreground"> ({L("no access", "nemate pristup", "bez prístupu")})</span>}
+                      {" · "}{r.roleTitle || lookups.role(r.projectRoleId)} · {formatIsoDate(r.date, lang)} {r.shiftName || lookups.shift(r.shiftId)} —{" "}
                       {L(`required ${r.required}, available ${r.available}, shortage ${r.deficit}`, `potrebno ${r.required}, dostupno ${r.available}, deficit ${r.deficit}`, `potrebných ${r.required}, k dispozícii ${r.available}, deficit ${r.deficit}`)}
+                    </li>
+                  ))}
+                  {impact.sourceShortage.length === 0 && impact.hiddenProjects.map((h) => (
+                    <li key={h.projectId}>
+                      {h.projectName} <span className="text-muted-foreground">({L("no access", "nemate pristup", "bez prístupu")})</span>
                     </li>
                   ))}
                 </ul>
@@ -150,7 +202,7 @@ export default function AssignReplacementDialog({ open, onOpenChange, leave, nee
 
         <DialogFooter className="gap-2">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={assign.isPending}>{L("Cancel", "Otkaži", "Zrušiť")}</Button>
-          <Button onClick={() => assign.mutate()} disabled={assign.isPending || !validRange || unavailable.length > 0 || (needsAck && !ack)} data-testid="confirm-replacement">
+          <Button onClick={() => assign.mutate()} disabled={assign.isPending || checking || !validRange || unavailable.length > 0 || (needsAck && !ack)} data-testid="confirm-replacement">
             <UserCheck className="w-4 h-4 mr-1" />{L("Confirm replacement", "Potvrdi zamenu", "Potvrdiť zástup")}
           </Button>
         </DialogFooter>
