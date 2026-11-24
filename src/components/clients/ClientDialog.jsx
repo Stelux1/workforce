@@ -9,7 +9,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
  * recreated the component type on every keystroke and remounted the inputs,
  * which is what caused the focus loss.
  */
-export default function ClientDialog({ open, onOpenChange, form, setForm, onSave, isSaving, t }) {
+// showRate: default_b2b_rate je tarifa klijenta — prikaz i upis samo uz rates.view_b2b i billing.manage (W2-F, §4).
+export default function ClientDialog({ open, onOpenChange, form, setForm, onSave, isSaving, t, showRate = false }) {
   const set = (key, value) => setForm((p) => ({ ...p, [key]: value }));
 
   return (
@@ -34,10 +35,12 @@ export default function ClientDialog({ open, onOpenChange, form, setForm, onSave
               <Label>{t("Phone")}</Label>
               <Input value={form.phone || ""} onChange={(e) => set("phone", e.target.value)} />
             </div>
-            <div className="space-y-2">
-              <Label>{t("B2B Rate") || "Default B2B Rate (€/h)"}</Label>
-              <Input type="number" value={form.default_b2b_rate || ""} onChange={(e) => set("default_b2b_rate", parseFloat(e.target.value) || 0)} />
-            </div>
+            {showRate && (
+              <div className="space-y-2">
+                <Label>{t("B2B Rate") || "Default B2B Rate (€/h)"}</Label>
+                <Input type="number" min="0" step="0.01" value={form.default_b2b_rate ?? ""} onChange={(e) => set("default_b2b_rate", e.target.value === "" ? null : parseFloat(e.target.value))} />
+              </div>
+            )}
             <div className="space-y-2">
               <Label>{t("VAT Number") || "VAT Number"}</Label>
               <Input value={form.vat_number || ""} onChange={(e) => set("vat_number", e.target.value)} />

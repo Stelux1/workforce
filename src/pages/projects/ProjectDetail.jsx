@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, MapPin, Calendar, Edit, Trash2, BarChart2, LayoutGrid, Users, FileCheck2, Receipt } from "lucide-react";
+import { ArrowLeft, MapPin, Calendar, Edit, Trash2, BarChart2, LayoutGrid, Users, FileCheck2, Receipt, CalendarRange } from "lucide-react";
 import { format } from "date-fns";
 import { useT } from "@/lib/translations";
 import { useLang } from "@/lib/LanguageContext";
@@ -15,6 +15,7 @@ import ProjectRoles from "@/components/projects/ProjectRoles";
 import ProjectFinancialReport from "@/components/projects/ProjectFinancialReport";
 import ProjectOnboarding from "@/components/projects/ProjectOnboarding";
 import ProjectCosts from "@/components/projects/ProjectCosts";
+import WorkforcePlanner from "@/components/workforce/WorkforcePlanner";
 import { useAuth } from "@/lib/AuthContext";
 import { projectAddress, projectQueryKeys } from "@/lib/projectSite";
 
@@ -36,6 +37,8 @@ const PROJECT_TABS = [
     render: ({ project }) => <ProjectOnboarding project={project} /> },
   { key: "costs", label: { en: "Costs", rs: "Troškovi", sk: "Náklady" }, icon: Receipt, permission: "costs.view",
     render: ({ project }) => <ProjectCosts projectId={project.id} projectName={project.name} /> },
+  { key: "workforce", label: { en: "Workforce Plan", rs: "Plan radne snage", sk: "Plán pracovnej sily" }, icon: CalendarRange,
+    render: ({ project }) => <WorkforcePlanner projectId={project.id} /> },
   { key: "financials", label: { en: "Financial Report", rs: "Finansijski izveštaj", sk: "Finančný prehľad" }, icon: BarChart2,
     permission: "reports.financial", render: ({ project }) => <ProjectFinancialReport project={project} /> },
 ];
@@ -56,7 +59,8 @@ export default function ProjectDetail() {
   // Izmena radnika/zanimanja/podataka projekta osvežava i listu projekata (Satnica, Projekti) — bug 16/17.
   const refreshProject = () => projectQueryKeys(id).forEach((queryKey) => queryClient.invalidateQueries({ queryKey }));
   const [showEdit, setShowEdit] = useState(false);
-  const [activeTab, setActiveTab] = useState("overview");
+  const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "overview");
   
   const getStatusLabel = () => {
     if (!project?.status) return "";

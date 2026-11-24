@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
+import { readListParams } from "@/lib/listLinks";
 import { Search, Users, Mail, Phone, Pencil, Check, ArrowUpDown, ArrowUp, ArrowDown, Upload } from "lucide-react";
 
 import { Card } from "@/components/ui/card";
@@ -28,7 +29,9 @@ export default function Employees() {
   const t = useT();
   const { lang } = useLang();
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  // Dashboard vodi ovde sa ?status=active (src/lib/listLinks.js).
+  const [searchParams] = useSearchParams();
+  const [statusFilter, setStatusFilter] = useState(() => readListParams(searchParams).status || "all");
   const [deptFilter, setDeptFilter] = useState("all");
   const [view, setView] = useViewPreference("employees", "grid");
   const [selected, setSelected] = useState(new Set());

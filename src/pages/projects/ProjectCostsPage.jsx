@@ -1,6 +1,7 @@
 // Projects → Project Costs (spec §8.2, Faza C2): centralna tabela troškova SVIH projekata i analitika po kategorijama.
 // To je isti entitet kao kartica Costs na projektu (T13) — trošak se čuva jednom, ovde se samo drugačije gleda.
 import { useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BarChart, Bar, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Lock, Receipt, RefreshCw, Search, X } from "lucide-react";
@@ -20,6 +21,7 @@ import CostTotals from "@/components/projects/CostTotals";
 import { CostsTable, ExportMenu, costProjectLabel, invalidateCosts, useCostLookups } from "@/components/projects/costsShared";
 import { useCostLabels } from "@/components/projects/costsLabels";
 import { useAuth } from "@/lib/AuthContext";
+import { readListParams } from "@/lib/listLinks";
 import { intlLocale } from "@/lib/dateFormat";
 import { sortCurrencies } from "@/lib/finance/currency";
 import { pageTitle } from "@/lib/pageTitles";
@@ -41,10 +43,16 @@ export default function ProjectCostsPage() {
   const lookup = useCostLookups(canView);
   const { data: clients = [] } = useQuery({ queryKey: ["clients"], queryFn: () => base44.entities.Client.list("name"), enabled: canView });
 
-  const [filters, setFilters] = useState(NO_FILTERS);
+  // Dashboard vodi ovde sa filterima (src/lib/listLinks.js): from/to, project, client, pstatus; action=new otvara unos.
+  const [searchParams] = useSearchParams();
+  const urlF = readListParams(searchParams);
+  const [filters, setFilters] = useState(() => ({
+    ...NO_FILTERS,
+    projectId: urlF.project || "all", clientId: urlF.client || "all", from: urlF.from, to: urlF.to,
+  }));
   const [sort, setSort] = useState({ key: "cost_date", dir: "desc" });
   const [limit, setLimit] = useState(PAGE);
-  const [formOpen, setFormOpen] = useState(false);
+  const [formOpen, setFormOpen] = useState(() => canManage && searchParams.get("action") === "new");
   const [editing, setEditing] = useState(null);
   const [deleting, setDeleting] = useState(null);
   const [historyFor, setHistoryFor] = useState(undefined);
@@ -59,7 +67,12 @@ export default function ProjectCostsPage() {
   const costs = useMemo(() => uniqueCosts(raw), [raw]);
 
   const set = (patch) => { setFilters((f) => ({ ...f, ...patch })); setLimit(PAGE); };
-  const filtered = useMemo(() => filterCosts(costs, filters, lookup), [costs, filters, lookup]);
+  const filtered = useMemo(() => {
+    const list = filterCosts(costs, filters, lookup);
+    if (!urlF.pstatus) return list;
+    const statusOf = new Map((lookup.projects || []).map((p) => [p.id, p.status]));
+    return list.filter((c) => statusOf.get(c.project_id) === urlF.pstatus);
+  }, [costs, filters, lookup, urlF.pstatus]);
   const visible = useMemo(() => sortCosts(filtered, sort, lookup), [filtered, sort, lookup]);
   const hasFilters = JSON.stringify(filters) !== JSON.stringify(NO_FILTERS);
   const category = lookup.categories.find((c) => c.id === filters.categoryId);

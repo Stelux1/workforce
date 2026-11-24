@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useMemo, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { readListParams } from "@/lib/listLinks";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
@@ -13,6 +14,7 @@ import { useL } from "@/lib/translations";
 import { useLang } from "@/lib/LanguageContext";
 import { pageTitle } from "@/lib/pageTitles";
 import { projectAddress } from "@/lib/projectSite";
+import { workersByProject } from "@/lib/assignments";
 
 const STATUS_LABELS = {
   active: { en: "Active", rs: "Aktivan", sk: "Aktívny" },
@@ -31,6 +33,9 @@ export default function Projects() {
   const statusLabel = (s) => (STATUS_LABELS[s] ? L(STATUS_LABELS[s].en, STATUS_LABELS[s].rs, STATUS_LABELS[s].sk) : s);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  // Dashboard vodi ovde sa ?status=active (src/lib/listLinks.js).
+  const [searchParams] = useSearchParams();
+  const [statusFilter, setStatusFilter] = useState(() => readListParams(searchParams).status || "all");
   const [search, setSearch] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [view, setView] = useState("grid");
@@ -41,12 +46,20 @@ export default function Projects() {
     queryFn: () => base44.entities.Project.list("-created_date"),
   });
 
+  // Broj radnika iz jedine evidencije angažmana (važeći i predstojeći, svaki radnik jednom) — ne iz JSON keša (W2-K).
+  const { data: assignments = [] } = useQuery({
+    queryKey: ["project-assignments"],
+    queryFn: () => base44.entities.ProjectAssignment.list("-start_date"),
+  });
+  const workerCount = useMemo(() => workersByProject(assignments, new Date().toISOString().slice(0, 10)), [assignments]);
+
   const deleteMutation = useMutation({
     mutationFn: (id) => base44.entities.Project.delete(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["projects"] }),
   });
 
   const filtered = projects
+    .filter((p) => statusFilter === "all" || p.status === statusFilter)
     .filter((p) =>
       p.name?.toLowerCase().includes(search.toLowerCase()) ||
       p.client_name?.toLowerCase().includes(search.toLowerCase()) ||
@@ -81,6 +94,13 @@ export default function Projects() {
             className="pl-9"
           />
         </div>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-[160px]" aria-label={L("Status", "Status", "Stav")}><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{L("All statuses", "Svi statusi", "Všetky stavy")}</SelectItem>
+            {Object.keys(STATUS_LABELS).map((s) => <SelectItem key={s} value={s}>{statusLabel(s)}</SelectItem>)}
+          </SelectContent>
+        </Select>
         <div className="flex items-center border rounded-lg overflow-hidden">
           <button
             onClick={() => setView("grid")}
@@ -162,7 +182,7 @@ export default function Projects() {
               )}
               <div className="flex items-center gap-1.5 text-sm text-muted-foreground border-t pt-3 mt-2">
                 <Users className="w-3.5 h-3.5" />
-                <span>{project.assigned_employees?.length || 0} {L("employees", "zaposlenih", "zamestnancov")}</span>
+                <span>{workerCount.get(project.id) || 0} {L("employees", "zaposlenih", "zamestnancov")}</span>
               </div>
             </div>
           ))}
@@ -211,7 +231,7 @@ export default function Projects() {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5 text-muted-foreground">
                         <Users className="w-3.5 h-3.5" />
-                        <span>{project.assigned_employees?.length || 0}</span>
+                        <span>{workerCount.get(project.id) || 0}</span>
                       </div>
                     </td>
                     <td className="px-4 py-3">

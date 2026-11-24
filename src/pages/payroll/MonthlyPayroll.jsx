@@ -38,6 +38,7 @@ import {
 import { payslipFileName, payslipsFileName, runIsDraft, runIsFinal } from "@/lib/payroll/payslipExport";
 import { exportPayslipsPDF } from "@/lib/payslipPdf";
 import { exportBankExcel } from "@/lib/payrollBankExport";
+import MonthPayablesCard from "@/components/payroll/MonthPayablesCard";
 
 const eur = (n) => (n === null || n === undefined ? "—" : `€${Number(n).toFixed(2)}`);
 const hrs = (n) => `${Number(n || 0).toFixed(1)}h`;
@@ -442,6 +443,9 @@ export default function MonthlyPayroll() {
           ))}
         </div>
       )}
+
+      {/* Obaveze meseca (Payables, §7): obračunato / isplaćeno i poređenje sa „za isplatu" sa listića */}
+      <MonthPayablesCard month={month} run={run} payslips={slipsQ.data || []} />
 
       {/* Payslips Table */}
       <Card>

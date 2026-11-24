@@ -2,7 +2,7 @@
 import {
   LayoutGrid, Users, User, FileText, Calendar, SquareCheck, Bell, ChartNoAxesColumn, ClipboardList,
   Building2, Building, Mail, Settings, Folder, FolderKanban, Receipt, Table2, Handshake, Clock, CalendarDays, Percent,
-  UserCog, SlidersHorizontal, Gauge, Briefcase, Languages,
+  UserCog, Link2, CalendarRange, Gauge, Briefcase, Languages, Wallet,
 } from "lucide-react";
 import { CalendarDollar, CoinStack } from "./NavIcons";
 
@@ -15,9 +15,9 @@ export const NAV_LABELS = {
     "Projects": "Project Overview", "Project Costs": "Project Costs",
     "Payroll Dashboard": "Payroll Dashboard", "Timesheets": "Timesheets",
     "Timesheet Dashboard": "Timesheet Overview",
-    "Monthly Payroll": "Monthly Payroll", "Clients": "Clients", "Payroll Reports": "Payroll Reports",
+    "Monthly Payroll": "Monthly Payroll", "Payables": "Payables & Payments", "Clients": "Clients / Billing Overview", "Payroll Reports": "Payroll Reports",
     "Email Notifications": "Email Notifications", "Departments & Positions": "Departments & Positions",
-    "Cost Categories": "Cost Categories", "Coefficients & Holidays": "Coefficients & Holidays", "Company Details": "Company Details", "Users": "Users", "Language & Currency": "Language & Currency", "Vendors": "Vendors", "Rates & Assignments": "Rates & Assignments",
+    "Cost Categories": "Cost Categories", "Coefficients & Holidays": "Coefficients & Holidays", "Company Details": "Company Details", "Users": "Users", "Language & Currency": "Language & Currency", "Vendors": "Vendors", "Project Assignments": "Project Assignments", "Workforce Planning": "Workforce Planning",
     "Logout": "Logout", "Collapse": "Collapse",
     "section_employees": "Staff Management", "section_projects": "Projects", "section_payroll": "Payroll", "section_settings": "Settings",
   },
@@ -29,9 +29,9 @@ export const NAV_LABELS = {
     "Projects": "Pregled projekata", "Project Costs": "Troškovi projekata",
     "Payroll Dashboard": "Platni spisak", "Timesheets": "Radni sati",
     "Timesheet Dashboard": "Pregled radnih sati",
-    "Monthly Payroll": "Mesečni obračun", "Clients": "Klijenti", "Payroll Reports": "Finansijski izveštaji",
+    "Monthly Payroll": "Mesečni obračun", "Payables": "Obaveze i isplate", "Clients": "Klijenti / Billing Overview", "Payroll Reports": "Finansijski izveštaji",
     "Email Notifications": "Email poruke", "Departments & Positions": "Odeljenja",
-    "Cost Categories": "Kategorije troškova", "Coefficients & Holidays": "Koeficijenti i praznici", "Company Details": "Podaci firme", "Users": "Korisnici", "Language & Currency": "Jezik i valuta", "Vendors": "Dobavljači", "Rates & Assignments": "Tarife i dodele",
+    "Cost Categories": "Kategorije troškova", "Coefficients & Holidays": "Koeficijenti i praznici", "Company Details": "Podaci firme", "Users": "Korisnici", "Language & Currency": "Jezik i valuta", "Vendors": "Dobavljači", "Project Assignments": "Angažmani na projektima", "Workforce Planning": "Planiranje radne snage",
     "Logout": "Odjava", "Collapse": "Skupi",
     "section_employees": "Kadrovi", "section_projects": "Projekti", "section_payroll": "Obračun i finansije", "section_settings": "Podešavanja",
   },
@@ -43,9 +43,9 @@ export const NAV_LABELS = {
     "Projects": "Prehľad projektov", "Project Costs": "Náklady projektov",
     "Payroll Dashboard": "Mzdový prehľad", "Timesheets": "Pracovné výkazy",
     "Timesheet Dashboard": "Prehľad výkazov",
-    "Monthly Payroll": "Mesačné zúčtovanie miezd", "Clients": "Klienti", "Payroll Reports": "Finančné prehľady",
+    "Monthly Payroll": "Mesačné zúčtovanie miezd", "Payables": "Záväzky a výplaty", "Clients": "Klienti / Billing Overview", "Payroll Reports": "Finančné prehľady",
     "Email Notifications": "E-mailové upozornenia", "Departments & Positions": "Oddelenia",
-    "Cost Categories": "Kategórie nákladov", "Coefficients & Holidays": "Koeficienty a sviatky", "Company Details": "Údaje o firme", "Users": "Používatelia", "Language & Currency": "Jazyk a mena", "Vendors": "Dodávatelia", "Rates & Assignments": "Sadzby a pridelenia",
+    "Cost Categories": "Kategórie nákladov", "Coefficients & Holidays": "Koeficienty a sviatky", "Company Details": "Údaje o firme", "Users": "Používatelia", "Language & Currency": "Jazyk a mena", "Vendors": "Dodávatelia", "Project Assignments": "Pridelenia na projektoch", "Workforce Planning": "Plánovanie pracovnej sily",
     "Logout": "Odhlásiť sa", "Collapse": "Zbaliť",
     "section_employees": "Správa personálu", "section_projects": "Projekty", "section_payroll": "Mzdy a financie", "section_settings": "Nastavenia",
   },
@@ -73,7 +73,8 @@ export const NAV_SECTIONS = [
     items: [
       { label: "Projects", icon: FolderKanban, path: "/projects" },
       { label: "Project Costs", icon: CoinStack, path: "/project-costs" },
-      { label: "Rates & Assignments", icon: SlidersHorizontal, path: "/rates" },
+      { label: "Project Assignments", icon: Link2, path: "/assignments" },
+      { label: "Workforce Planning", icon: CalendarRange, path: "/workforce" },
     ],
   },
   {
@@ -83,6 +84,7 @@ export const NAV_SECTIONS = [
       { label: "Timesheets", icon: ClipboardList, path: "/timesheets" },
       { label: "Timesheet Dashboard", icon: Table2, path: "/timesheet-dashboard" },
       { label: "Monthly Payroll", icon: CalendarDollar, path: "/payroll/monthly" },
+      { label: "Payables", icon: Wallet, path: "/payroll/payables" },
       { label: "Clients", icon: Building2, path: "/clients" },
       { label: "Payroll Reports", icon: ChartNoAxesColumn, path: "/payroll/reports" },
     ],

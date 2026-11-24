@@ -1,273 +1,355 @@
-// Finansijski izveštaj jednog projekta po mesecima (Faza 4; D8, D9, D16, D17, D19). Čiste funkcije — ništa se ne
-// čita iz baze.
+// Financial Reports (spec §10, §2.2 Financial Report; D30 K3/K4; docs/TEAMORA-DATA-MODEL.md §3.3–3.4, W2-J).
+// Čiste funkcije — ništa se ne čita iz baze.
 //
-// Projekat je samo `project_id`: satnice, troškovi i redovi obračuna se biraju po ID-u. Ime projekta (ni trenutno
-// ni snimak u satnici `timesheets.project`) se ne koristi, pa preimenovanje projekta ne menja nijednu brojku.
+// Ovo je samo OMOTAČ oko jednog obračunskog servisa (`financialSummary` iz src/lib/finance): isti KPI-jevi, isto
+// pravilo zaokruživanja i isti filteri kao Dashboard, Billing i Payables (T27). Ovde nema nijedne sopstvene formule
+// za prihod, trošak ili profit:
+//   Labor Revenue = Σ grupa(Approved × B2B × Client Coef)
+//   Payroll Cost  = Σ grupa(Approved × B2C × Worker Coef) — obračun, NIJE isplaćeno i NIJE srpski bruto 2 (K4)
+//   Net Profit    = Labor Revenue − Payroll Cost − Additional Project Costs; Profit Margin null kad prihod nije > 0.
 //
-// Prihod = odobrene satnice (`client_revenue`, D9). Nedelja u jednom mesecu ide cela, iznosima koje je izračunala
-// baza (D16). Nedelja koja prelazi u drugi mesec deli se PO DANU istom funkcijom kao mesečni obračun
-// (`timesheetMonthLines`, tarife i koeficijenti iz snimka odobravanja, D17), pa zbir dva meseca može da odstupi od
-// satnice za cent (isto kao u obračunu).
+// Novčani tokovi (T17) su ODVOJENE sekcije i nikad se ne mešaju sa obračunom:
+//   - billing:  interni B2B obračun klijentu (billing_summaries), ručno evidentiran eksterni račun, primljene uplate;
+//   - payables: obaveze prema radnicima/vendorima i stvarne isplate (payments).
+// Kad tabela još ne postoji ili korisnik nema pravo, sekcija je `null` (ekran: „nema podataka" / „nemate pravo").
 //
-// Trošak radnika po mesecu (D8):
-//   - mesec sa ODOBRENIM ili ISPLAĆENIM obračunom → bruto 2 raspodeljen na ovaj projekat (`payslip_projects.labor_cost`);
-//   - svi ostali meseci (bez obračuna ili samo nacrt) → PROCENA: iznos sati iz odobrenih satnica (`worker_cost` =
-//     sati × satnica radnika, bez poreza i doprinosa), podeljen po danu kao prihod. Ekran je obavezno označava
-//     kao „procena".
-// Troškovi projekta nemaju datum, pa se oduzimaju od ukupnog iznosa projekta (EUR, uključeni preračunati RSD —
-// `sumCostsEur`, D19). Ostaje nama = projectMargin(prihod, trošak radnika, troškovi projekta).
+// Valute (K3, T28): sve je po valuti. Jedan broj u EUR postoji samo kad korisnik izabere konverziju, uz kurs i datum
+// (`summary.converted`); valuta bez kursa i trošak sa kursom bez datuma su izdvojeni i NISU u zbiru.
+// Projekat i klijent su samo ID-jevi (T25): ime se nigde ne koristi za spajanje ni filtriranje.
 
-import { allocate, round2, sum2 } from "./money.js";
-import { computeWorkerMonth, ENGAGEMENT, projectMargin } from "./monthly.js";
-import { formatDay, monthStart, problemMessage, timesheetMonthLines } from "./payrollMonth.js";
-import { sumCostsEur } from "./costs.js";
-import { UNASSIGNED_KEY } from "./reports.js";
-import { DAY_FIELDS } from "./timesheetRow.js";
+import {
+  aggregateLabor, billingBalance, billingTotals, costEurAmount, filterAdditionalCosts, financialSummary,
+  laborDayLines, normalizeCurrency, payableBalance, payablesTotals, sortCurrencies, sumByCurrency, unbilledRevenue,
+} from "../finance/index.js";
+import { costsByCategory, hasPerm, uniqueCosts } from "../projectCosts.js";
 
-/** Statusi obračuna čiji je trošak konačan (bruto 2 iz obračuna). Nacrt se može ponovo generisati → procena. */
-export const FINAL_RUN_STATUSES = Object.freeze(["approved", "paid"]);
+const dateOnly = (d) => (d ? String(d).slice(0, 10) : null);
+const asList = (v) => (v === null || v === undefined || v === "" || v === "all" ? null : Array.isArray(v) ? (v.length ? v : null) : [v]);
 
-/** Odakle je trošak radnika za mesec. */
-export const LABOR_SOURCE = Object.freeze({ PAYROLL: "obracun", ESTIMATE: "procena" });
-
-export const REPORT_PROBLEM = Object.freeze({
-  /** Nedelja preko granice meseca bez ispravnog snimka: podeljena srazmerno satima po danu (procena). */
-  SPLIT_BY_HOURS: "split_by_hours",
-  /** Sati ovog projekta u odobrenom obračunu ne odgovaraju odobrenim satnicama meseca. */
-  PAYROLL_HOURS_MISMATCH: "payroll_hours_mismatch",
-});
-
-// Prazan iznos (null) sabira se kao 0 — sum2 bi inače bacio grešku na undefined (isto kao reports.js).
-const amount = (v) => (v === null || v === undefined || v === "" ? 0 : v);
-const day = (v) => (v ? String(v).slice(0, 10) : "");
-
-/** "YYYY-MM-DD" + n dana, u UTC da vremenska zona ne pomeri dan (isto kao payrollMonth.js). */
-function addDays(iso, n) {
-  const d = new Date(`${iso}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + n);
-  return d.toISOString().slice(0, 10);
+/** Period [aStart, aEnd] seče izabrani period [from, to] (prazna granica = otvoreno). */
+function overlaps(aStart, aEnd, from, to) {
+  const s = dateOnly(aStart);
+  const e = dateOnly(aEnd) ?? s;
+  if (from && e && e < from) return false;
+  if (to && s && s > to) return false;
+  return true;
 }
-
-/** Sati satnice po mesecu (datum rada = week_start + dan u nedelji), samo dani sa satima > 0. */
-function hoursByMonth(row) {
-  const weekStart = day(row?.week_start);
-  const parts = new Map();
-  if (!weekStart) return new Map();
-  DAY_FIELDS.forEach((field, i) => {
-    const n = Number.parseFloat(row?.[field]);
-    if (!Number.isFinite(n) || !(round2(n) > 0)) return;
-    const month = monthStart(addDays(weekStart, i));
-    parts.set(month, [...(parts.get(month) || []), round2(n)]);
-  });
-  return new Map([...parts.entries()].map(([m, list]) => [m, sum2(list)]));
-}
-
-/**
- * Iznos sati iz linija meseca (timesheetMonthLines) — isto sabiranje i zaokruživanje kao obračun
- * (computeWorkerMonth: sati po vrsti, tarifi i koeficijentu, pa množenje). Računa se kao „bez poreza i doprinosa"
- * (podizvođač), jer je procena troška = iznos sati, a ne bruto 2.
- */
-function linesAmounts(lines) {
-  const m = computeWorkerMonth({ engagement: ENGAGEMENT.SUBCONTRACTOR, lines });
-  return { hours: m.totalHours, revenue: m.revenue, cost: m.basisAmount };
-}
-
-/**
- * Delovi jedne odobrene satnice po mesecu: { month, hours, revenue, cost } (cost = procena troška, iznos sati).
- * @returns {{ parts: Array, problem: object|null }}
- */
-function timesheetParts(row) {
-  const byMonth = hoursByMonth(row);
-  const whole = { hours: amount(row.total_hours), revenue: amount(row.client_revenue), cost: amount(row.worker_cost) };
-  if (byMonth.size <= 1) {
-    const month = byMonth.size ? [...byMonth.keys()][0] : monthStart(row.week_start);
-    return { parts: [{ month, hours: round2(whole.hours), revenue: round2(whole.revenue), cost: round2(whole.cost) }], problem: null };
-  }
-
-  const months = [...byMonth.keys()].sort();
-  const split = months.map((month) => ({ month, r: timesheetMonthLines(row, month) }));
-  const bad = split.find((s) => s.r.problems.length);
-  if (!bad) {
-    return { parts: split.map(({ month, r }) => ({ month, ...linesAmounts(r.lines) })), problem: null };
-  }
-
-  // Bez ispravnog snimka nedelja ne može da se podeli po vrsti sati i tarifi dana. Da se iznos ne izgubi ni ne
-  // duplira, deli se srazmerno satima po danu (zbir tačan na cent) i prijavljuje kao problem — nikad tiho.
-  const weights = months.map((m) => byMonth.get(m));
-  const revenue = allocate(whole.revenue, weights);
-  const cost = allocate(whole.cost, weights);
-  return {
-    parts: months.map((month, i) => ({ month, hours: byMonth.get(month), revenue: revenue[i], cost: cost[i] })),
-    problem: { code: REPORT_PROBLEM.SPLIT_BY_HOURS, cause: bad.r.problems[0], months },
-  };
-}
-
-const push = (map, key, init) => {
-  let v = map.get(key);
-  if (!v) {
-    v = init();
-    map.set(key, v);
-  }
-  return v;
+const inRange = (d, from, to) => {
+  const x = dateOnly(d);
+  if (!x) return !from && !to;
+  return (!from || x >= from) && (!to || x <= to);
 };
 
+/** Čisti filtere: prazno i "all" = bez filtera; ostaje samo ono što obračunski servis zna. */
+export function normalizeFilters(filters = {}) {
+  const out = {};
+  for (const key of ["projectId", "clientId", "employeeId", "projectRoleId", "costCategoryId"]) {
+    const list = asList(filters?.[key]);
+    if (list) out[key] = list;
+  }
+  return out;
+}
+
+// ───────────────────────── prava (T26) ─────────────────────────
+
+const P = Object.freeze({
+  B2B: "rates.view_b2b",
+  B2C: "rates.view_b2c",
+  COSTS: "costs.view",
+  BILLING: "billing.view",
+  PAYROLL: "payroll.view",
+});
+
 /**
- * Finansijski izveštaj projekta.
- * @param {object} input
- * @param {string} input.projectId
- * @param {Array}  input.timesheets       satnice (neodobrene i satnice drugih projekata se ne računaju u novac)
- * @param {Array}  [input.costs]          project_costs (samo redovi sa ovim project_id)
- * @param {Array}  [input.runs]           payroll_runs { id, month, status }
- * @param {Array}  [input.payslips]       payslips { id, run_id, employee_id, employee_name }
- * @param {Array}  [input.payslipProjects] payslip_projects { payslip_id, project_id, hours, labor_cost }
- * @returns {{ months: Array, employees: Array, totals: object, costs: object, pending: object, problems: Array }}
+ * Koje vrednosti korisnik sme da vidi i izveze. Iste provere važe za ekran i za CSV/PDF (druga linija odbrane —
+ * server te vrednosti ionako ne vraća: timesheet_money maskira tarife, RLS sakriva billing/payables).
  */
-export function projectFinancialReport({ projectId, timesheets, costs, runs, payslips, payslipProjects }) {
-  const own = (timesheets || []).filter((ts) => ts && ts.project_id != null && ts.project_id === projectId);
-  const approved = own.filter((ts) => ts.approval_status === "approved");
-  const notApproved = own.filter((ts) => ts.approval_status !== "approved");
-
-  // Status obračuna po mesecu (bilo koji status — za prikaz); konačan trošak samo iz odobrenog/isplaćenog.
-  const runStatus = new Map((runs || []).filter((r) => r?.month).map((r) => [monthStart(r.month), r.status]));
-  const finalRunMonth = new Map(
-    (runs || []).filter((r) => r?.month && FINAL_RUN_STATUSES.includes(r.status)).map((r) => [r.id, monthStart(r.month)])
-  );
-  const slipById = new Map((payslips || []).filter((s) => s?.id != null).map((s) => [s.id, s]));
-
-  const months = new Map(); // month → { hours[], revenue[], estimate[], payrollCost[], payrollHours[] }
-  const employees = new Map(); // employee_id → { name, hours[], revenue[], cost[], estimate }
-  const problems = [];
-  const monthOf = (m) => push(months, m, () => ({ hours: [], revenue: [], estimate: [], payrollCost: [], payrollHours: [], payroll: false }));
-  const workerOf = (id, name) => {
-    const w = push(employees, id ?? null, () => ({ name: null, hours: [], revenue: [], cost: [], estimate: false }));
-    if (!w.name && name) w.name = name;
-    return w;
-  };
-
-  // Odobreni obračuni: bruto 2 na ovaj projekat, po mesecu i radniku.
-  for (const pp of payslipProjects || []) {
-    if (!pp || pp.project_id !== projectId) continue;
-    const slip = slipById.get(pp.payslip_id);
-    const month = slip ? finalRunMonth.get(slip.run_id) : null;
-    if (!month) continue; // nacrt ili listić koji nije učitan
-    const m = monthOf(month);
-    m.payroll = true;
-    m.payrollCost.push(amount(pp.labor_cost));
-    m.payrollHours.push(amount(pp.hours));
-    workerOf(slip.employee_id, slip.employee_name).cost.push(amount(pp.labor_cost));
-  }
-  const isFinal = (month) => months.get(month)?.payroll === true || FINAL_RUN_STATUSES.includes(runStatus.get(month));
-
-  for (const ts of approved) {
-    const { parts, problem } = timesheetParts(ts);
-    if (problem) {
-      problems.push({ ...problem, timesheetId: ts.id, weekStart: day(ts.week_start), employeeId: ts.employee_id ?? null, employeeName: ts.employee_name || "" });
-    }
-    const w = workerOf(ts.employee_id, ts.employee_name);
-    for (const p of parts) {
-      const m = monthOf(p.month);
-      m.hours.push(p.hours);
-      m.revenue.push(p.revenue);
-      w.hours.push(p.hours);
-      w.revenue.push(p.revenue);
-      if (!isFinal(p.month)) {
-        m.estimate.push(p.cost);
-        w.cost.push(p.cost);
-        w.estimate = true;
-      }
-    }
-  }
-
-  const monthRows = [...months.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([month, m]) => {
-      const final = isFinal(month);
-      const hours = sum2(m.hours);
-      const revenue = sum2(m.revenue);
-      const laborCost = final ? sum2(m.payrollCost) : sum2(m.estimate);
-      if (final) {
-        const payrollHours = sum2(m.payrollHours);
-        if (payrollHours !== hours) problems.push({ code: REPORT_PROBLEM.PAYROLL_HOURS_MISMATCH, month, payrollHours, timesheetHours: hours });
-      }
-      return {
-        month,
-        runStatus: runStatus.get(month) || null,
-        laborSource: final ? LABOR_SOURCE.PAYROLL : LABOR_SOURCE.ESTIMATE,
-        estimate: !final,
-        hours,
-        revenue,
-        laborCost,
-        difference: projectMargin({ revenue, laborCost }).remaining,
-      };
-    });
-
-  const employeeRows = [...employees.entries()]
-    .map(([id, w]) => ({
-      id,
-      key: id ?? UNASSIGNED_KEY,
-      name: w.name,
-      hours: sum2(w.hours),
-      revenue: sum2(w.revenue),
-      laborCost: sum2(w.cost),
-      estimate: w.estimate,
-    }))
-    .sort((a, b) => b.hours - a.hours || String(a.name || "").localeCompare(String(b.name || ""), "sr"));
-
-  const ownCosts = (costs || []).filter((c) => c && c.project_id === projectId);
-  const c = sumCostsEur(ownCosts);
-  const payrollLaborCost = sum2(monthRows.filter((r) => !r.estimate).map((r) => r.laborCost));
-  const estimatedLaborCost = sum2(monthRows.filter((r) => r.estimate).map((r) => r.laborCost));
-  const revenue = sum2(monthRows.map((r) => r.revenue));
-  const laborCost = sum2([payrollLaborCost, estimatedLaborCost]);
-  const margin = projectMargin({ revenue, laborCost, otherCosts: c.total });
-
+export function reportVisibility(perms) {
+  const b2b = hasPerm(perms, P.B2B);
+  const b2c = hasPerm(perms, P.B2C);
   return {
-    months: monthRows,
-    employees: employeeRows,
-    totals: {
-      hours: sum2(monthRows.map((r) => r.hours)),
-      count: approved.length,
-      revenue: margin.revenue,
-      laborCost: margin.laborCost,
-      payrollLaborCost,
-      estimatedLaborCost,
-      hasEstimate: monthRows.some((r) => r.estimate), // bar jedan mesec bez odobrenog obračuna → ukupno je procena
-      otherCosts: margin.otherCosts,
-      laborDifference: projectMargin({ revenue, laborCost }).remaining, // prihod − trošak radnika (pre troškova projekta)
-      remaining: margin.remaining,
-      marginPct: margin.marginPct,
-    },
-    costs: {
-      count: ownCosts.length,
-      eur: c.total,
-      fromRsd: c.converted.RSD || { amount: 0, eur: 0 },
-      missingRsd: c.missingByCurrency.RSD || 0, // RSD bez kursa: NIJE oduzet (ni kao 0 ni kao RSD), prikazuje se posebno
-    },
-    pending: { count: notApproved.length, hours: sum2(notApproved.map((ts) => amount(ts.total_hours))) },
-    problems,
+    laborRevenue: b2b,
+    payrollCost: b2c,
+    laborMargin: b2b && b2c,
+    additionalCosts: hasPerm(perms, P.COSTS),
+    netProfit: b2b && b2c && hasPerm(perms, P.COSTS),
+    profitMargin: b2b && b2c && hasPerm(perms, P.COSTS),
+    billing: hasPerm(perms, P.BILLING),
+    payables: hasPerm(perms, P.PAYROLL) && b2c,
   };
 }
 
-/** "MM.YYYY" za poruke. */
-const formatMonth = (month) => formatDay(month).slice(3);
+// ───────────────────────── novčani tokovi (odvojeno, T17) ─────────────────────────
 
-/** Poruka problema izveštaja na izabranom jeziku. */
-export function reportProblemMessage(p, lang = "rs") {
-  const en = lang === "en";
-  const sk = lang === "sk";
-  if (p.code === REPORT_PROBLEM.SPLIT_BY_HOURS) {
-    const cause = problemMessage({ ...p.cause, employeeName: p.employeeName, weekStart: p.weekStart }, lang);
-    const months = (p.months || []).map(formatMonth).join(en ? " and " : sk ? " a " : " i ");
-    if (sk) return `${cause}. Týždeň zasahuje do mesiacov ${months}, preto sú jeho sumy rozdelené pomerne podľa hodín za deň (odhad).`;
-    return en
-      ? `${cause}. The week spans ${months}, so its amounts are split by hours per day (estimate).`
-      : `${cause}. Nedelja prelazi ${months}, pa su iznosi podeljeni srazmerno satima po danu (procena).`;
+/**
+ * Billing Summary-ji, eksterni račun i uplate klijenta za obuhvat izveštaja.
+ * - Pregled „ceo klijent" (project_id null) se ne pripisuje jednom projektu: kod filtera po projektu ide u
+ *   `clientWide` (prikaz uz napomenu), ne u zbir projekta.
+ * - Filter po radniku ili ulozi: pregled se ne može razdvojiti → `notAttributable`.
+ * - `unbilled` = prihod odobrenih sati u obuhvatu koji nije ni u jednom pregledu (bilo kog statusa).
+ */
+export function billingSection(data, { from = null, to = null, filters = {}, projects = [], lines = [], today = null } = {}) {
+  if (!data) return null;
+  const summaries = (data.summaries || []).filter(Boolean);
+  const clientPayments = (data.clientPayments || []).filter(Boolean);
+  const unbilled = unbilledRevenue(lines, summaries);
+  if (filters.employeeId || filters.projectRoleId) {
+    return { notAttributable: true, rows: [], clientWide: [], totals: {}, clientWideTotals: {}, unlinkedReceived: {}, unlinkedCount: 0, unbilled };
   }
-  if (p.code === REPORT_PROBLEM.PAYROLL_HOURS_MISMATCH) {
-    if (sk) return `${formatMonth(p.month)}: schválené zúčtovanie má na tomto projekte ${p.payrollHours} h, schválené pracovné výkazy ${p.timesheetHours} h.`;
-    return en
-      ? `${formatMonth(p.month)}: approved payroll has ${p.payrollHours} h on this project, approved timesheets ${p.timesheetHours} h.`
-      : `${formatMonth(p.month)}: odobren obračun ima ${p.payrollHours} h na ovom projektu, odobrene satnice ${p.timesheetHours} h.`;
+  const projectIds = filters.projectId || null;
+  const clientIds = filters.clientId || null;
+  const clientOfProject = new Map((projects || []).map((p) => [p.id, p.client_id ?? null]));
+  const projectClients = projectIds ? new Set(projectIds.map((id) => clientOfProject.get(id)).filter(Boolean)) : null;
+
+  const own = [];
+  const clientWide = [];
+  for (const s of summaries) {
+    if (!overlaps(s.period_start, s.period_end, from, to)) continue;
+    if (clientIds && !clientIds.includes(s.client_id)) continue;
+    if (projectIds) {
+      if (s.project_id) {
+        if (projectIds.includes(s.project_id)) own.push(s);
+      } else if (projectClients.has(s.client_id)) {
+        clientWide.push(s);
+      }
+      continue;
+    }
+    own.push(s);
   }
-  return p.code;
+  const row = (s) => ({ summary: s, balance: billingBalance(s, clientPayments, { today }) });
+
+  // Uplate bez veze sa pregledom: prikazuju se kao „primljeno, nepovezano" — nikad kao smanjenje obračuna.
+  const unlinked = clientPayments.filter((p) => {
+    if (p.voided_at || p.billing_summary_id) return false;
+    if (!inRange(p.payment_date, from, to)) return false;
+    if (clientIds && !clientIds.includes(p.client_id)) return false;
+    if (projectIds && !projectIds.includes(p.project_id)) return false;
+    return true;
+  });
+
+  return {
+    notAttributable: false,
+    rows: own.map(row),
+    clientWide: clientWide.map(row),
+    totals: billingTotals(own, clientPayments, { today }),
+    clientWideTotals: billingTotals(clientWide, clientPayments, { today }),
+    unlinkedReceived: sumByCurrency(unlinked, { amountOf: (p) => p.amount, currencyOf: (p) => p.currency }),
+    unlinkedCount: unlinked.length,
+    unbilled,
+  };
+}
+
+/**
+ * Payroll obaveze (payables) i stvarne isplate (payments) za obuhvat izveštaja.
+ * Obaveza pripada primaocu (radnik ili vendor), ne projektu: kod filtera po projektu/klijentu/radniku ulaze obaveze
+ * koje imaju bar jednu liniju u obuhvatu; `scopeShare` je zbir tih linija po valuti, a `totals` (plaćeno, ostatak)
+ * su iznosi CELIH obaveza — `spansOtherScope` kaže da obaveza obuhvata i rad van filtera (isplata se ne deli).
+ */
+export function payablesSection(data, { from = null, to = null, filters = {}, projects = [], today = null } = {}) {
+  if (!data) return null;
+  if (filters.projectRoleId) return { notAttributable: true, rows: [], totals: {}, scopeShare: null, spansOtherScope: false };
+  const payables = (data.payables || []).filter((p) => p && p.status !== "cancelled" && overlaps(p.period_start, p.period_end, from, to));
+  const payments = (data.payments || []).filter(Boolean);
+  const lines = (data.payableLines || []).filter(Boolean);
+  const scoped = Boolean(filters.projectId || filters.clientId || filters.employeeId);
+
+  let included = payables;
+  let scopeShare = null;
+  let spansOtherScope = false;
+  if (scoped) {
+    const clientOf = new Map((projects || []).map((p) => [p.id, p.client_id ?? null]));
+    const match = (l) =>
+      (!filters.projectId || filters.projectId.includes(l.project_id))
+      && (!filters.clientId || filters.clientId.includes(clientOf.get(l.project_id) ?? null))
+      && (!filters.employeeId || filters.employeeId.includes(l.employee_id));
+    const ids = new Set(payables.map((p) => p.id));
+    const own = lines.filter((l) => ids.has(l.payable_id));
+    const hit = own.filter(match);
+    const hitIds = new Set(hit.map((l) => l.payable_id));
+    included = payables.filter((p) => hitIds.has(p.id));
+    spansOtherScope = own.some((l) => hitIds.has(l.payable_id) && !match(l));
+    scopeShare = sumByCurrency(hit, { amountOf: (l) => l.amount, currencyOf: (l) => l.currency });
+  }
+  return {
+    notAttributable: false,
+    rows: included.map((p) => ({ payable: p, balance: payableBalance(p, payments, { today }) })),
+    totals: payablesTotals(included, payments, { today }),
+    scopeShare,
+    spansOtherScope,
+  };
+}
+
+// ───────────────────────── izveštaj ─────────────────────────
+
+/** Status kursa troškova (T28): ne-EUR trošak bez datuma kursa ili bez kursa — po valuti, odvojeno od zbira u EUR. */
+function costRateIssues(costs) {
+  const withoutRateDate = [];
+  const missingRate = [];
+  for (const c of costs) {
+    const r = costEurAmount(c);
+    if (r.reason === "rate_without_date") withoutRateDate.push(c);
+    else if (r.reason === "missing_rate") missingRate.push(c);
+  }
+  const by = (list) => sumByCurrency(list, { amountOf: (c) => c.amount, currencyOf: (c) => c.currency });
+  return { withoutRateDate: by(withoutRateDate), withoutRateDateCount: withoutRateDate.length, missingRate: by(missingRate), missingRateCount: missingRate.length };
+}
+
+/**
+ * Financial Report (centralni ili projekta).
+ * @param {object} input
+ * @param {object[]} input.timesheets  satnice (samo odobrene ulaze u obračun; submitted je odvojena procena)
+ * @param {object[]} [input.costs]     project_costs
+ * @param {object[]} [input.projects]  za klijenta linije/troška (po ID-u)
+ * @param {object[]} [input.assignments] za Job Role linije
+ * @param {object[]} [input.categories] cost_categories (naziv kategorije)
+ * @param {object[]|null} [input.exchangeRates] kursevi; niz = korisnik je izabrao konverziju u `convertTo`
+ * @param {{from?:string,to?:string}} [input.range]
+ * @param {object} [input.filters] { projectId, clientId, employeeId, projectRoleId, costCategoryId }
+ * @param {{summaries, clientPayments}|null} [input.billing]   null = nema tabele ili prava
+ * @param {{payables, payableLines, payments}|null} [input.payables]
+ * @returns {{summary, breakdown, costs, billing, payables, filters}}
+ */
+export function financialReport({
+  timesheets = [],
+  costs = [],
+  projects = [],
+  assignments = [],
+  categories = [],
+  exchangeRates = null,
+  convertTo = "EUR",
+  rateDate = null,
+  range = {},
+  filters = {},
+  billing = null,
+  payables = null,
+  today = null,
+  dayLinesOf,
+} = {}) {
+  const f = normalizeFilters(filters);
+  const from = dateOnly(range?.from);
+  const to = dateOnly(range?.to);
+  const uniq = uniqueCosts(costs); // isti trošak stigao dvaput se broji jednom (T13/T14)
+
+  const summary = financialSummary({ timesheets, costs: uniq, range: { from, to }, filters: f, projects, assignments, exchangeRates, convertTo, rateDate, dayLinesOf });
+  // Iste linije kao u summary-ju (ista funkcija, isti ulaz) — za razradu po dimenzijama.
+  const { lines } = laborDayLines(timesheets, { from, to, filters: f, projects, assignments, dayLinesOf });
+  const additional = filterAdditionalCosts(uniq, { from, to, filters: f, projects });
+
+  const byProjectCosts = new Map();
+  for (const c of additional.costs) byProjectCosts.set(c.project_id ?? null, [...(byProjectCosts.get(c.project_id ?? null) || []), c]);
+  const projectRows = aggregateLabor(lines, "project").map((r) => ({ ...r, additionalCosts: sumByCurrency(byProjectCosts.get(r.key) || []) }));
+  // Projekat sa troškom a bez odobrenih sati u periodu ima svoj red (trošak se ne gubi iz razrade).
+  for (const [projectId, list] of byProjectCosts) {
+    if (!projectRows.some((r) => r.key === projectId)) {
+      projectRows.push({ key: projectId, hours: 0, revenue: {}, cost: {}, missingRevenueRate: 0, missingCostRate: 0, additionalCosts: sumByCurrency(list) });
+    }
+  }
+
+  return {
+    filters: f,
+    range: { from, to },
+    summary,
+    breakdown: {
+      project: projectRows,
+      client: aggregateLabor(lines, "client"),
+      employee: aggregateLabor(lines, "employee"),
+      role: aggregateLabor(lines, "role"),
+    },
+    costs: {
+      count: additional.costs.length,
+      notAttributable: additional.notAttributable,
+      byCurrency: sumByCurrency(additional.costs),
+      byCategory: costsByCategory(additional.costs, categories),
+      ...costRateIssues(additional.costs),
+    },
+    billing: billingSection(billing, { from, to, filters: f, projects, lines, today }),
+    payables: payablesSection(payables, { from, to, filters: f, projects, today }),
+  };
+}
+
+/** Financial Report jednog projekta: isti izveštaj sa filterom `projectId` (po ID-u — preimenovanje ne menja ništa, T25). */
+export function projectFinancialReport({ projectId, filters = {}, ...rest } = {}) {
+  return financialReport({ ...rest, filters: { ...filters, projectId } });
+}
+
+/** Valute koje izveštaj ima u bilo kojoj sekciji obračuna (za kolone po valuti). */
+export function reportCurrencies(report) {
+  const s = report?.summary;
+  return sortCurrencies([...(s?.currencies || []), ...Object.keys(s?.pendingEstimate?.laborRevenue || {}), ...Object.keys(s?.pendingEstimate?.payrollCost || {})].map(normalizeCurrency));
+}
+
+// ───────────────────────── izvoz (CSV/PDF), T26 ─────────────────────────
+
+/**
+ * Redovi izvoza u „dugom" obliku: { section, item, metric, currency, value }. Vrednost za koju korisnik nema pravo se
+ * NE pojavljuje (ni kao prazno polje) — isti `reportVisibility` kao na ekranu. Ništa se ne sabira kroz valute;
+ * konverzija je poseban odeljak uz kurs i datum.
+ * @param {object} report rezultat financialReport
+ * @param {*} perms Set/niz prava ili funkcija can()
+ * @param {{names?: {project?:Map, client?:Map, employee?:Map, role?:Map, category?:Map}}} [opts] imena po ID-u (samo prikaz)
+ */
+export function financialReportExportRows(report, perms, { names = {} } = {}) {
+  const v = reportVisibility(perms);
+  const rows = [];
+  const push = (section, item, metric, currency, value) => {
+    if (value === null || value === undefined) return;
+    rows.push({ section, item: item ?? "", metric, currency: currency ?? "", value });
+  };
+  const s = report.summary;
+
+  push("summary", "", "approvedHours", "", s.approvedHours);
+  for (const cur of Object.keys(s.byCurrency)) {
+    const k = s.byCurrency[cur];
+    for (const m of ["laborRevenue", "payrollCost", "laborMargin", "additionalCosts", "netProfit", "profitMargin"]) {
+      if (v[m]) push("summary", "", m, cur, k[m]);
+    }
+  }
+  if (s.pendingEstimate?.hours) {
+    push("estimate", "", "pendingHours", "", s.pendingEstimate.hours);
+    if (v.laborRevenue) for (const [cur, x] of Object.entries(s.pendingEstimate.laborRevenue)) push("estimate", "", "laborRevenue", cur, x);
+    if (v.payrollCost) for (const [cur, x] of Object.entries(s.pendingEstimate.payrollCost)) push("estimate", "", "payrollCost", cur, x);
+  }
+  if (s.converted) {
+    const c = s.converted;
+    for (const m of ["laborRevenue", "payrollCost", "laborMargin", "additionalCosts", "netProfit", "profitMargin"]) {
+      if (v[m]) push("converted", `${c.to} @ ${c.date || ""}`, m, c.to, c[m]);
+    }
+    for (const u of c.used) push("converted", `${u.currency} ${u.rateDate || ""}`.trim(), "unitsPerEur", u.currency, u.unitsPerEur);
+    for (const cur of c.missing) push("converted", cur, "missingRate", cur, cur);
+  }
+
+  const dims = [["project", "project"], ["client", "client"], ["employee", "employee"], ["role", "role"]];
+  for (const [dim, nameKey] of dims) {
+    for (const r of report.breakdown[dim] || []) {
+      const item = names[nameKey]?.get(r.key) ?? r.key ?? "";
+      push(dim, item, "approvedHours", "", r.hours);
+      if (v.laborRevenue) for (const [cur, x] of Object.entries(r.revenue)) push(dim, item, "laborRevenue", cur, x);
+      if (v.payrollCost) for (const [cur, x] of Object.entries(r.cost)) push(dim, item, "payrollCost", cur, x);
+      if (v.additionalCosts && r.additionalCosts) for (const [cur, x] of Object.entries(r.additionalCosts)) push(dim, item, "additionalCosts", cur, x);
+    }
+  }
+
+  if (v.additionalCosts) {
+    for (const c of report.costs.byCategory) {
+      const item = c.name ?? names.category?.get(c.key) ?? c.key;
+      for (const [cur, x] of Object.entries(c.byCurrency)) push("costs", item, "additionalCosts", cur, x);
+    }
+    for (const [cur, x] of Object.entries(report.costs.withoutRateDate)) push("costs", "", "rateWithoutDate", cur, x);
+    for (const [cur, x] of Object.entries(report.costs.missingRate)) push("costs", "", "missingRate", cur, x);
+  }
+
+  if (v.billing && report.billing && !report.billing.notAttributable) {
+    for (const [cur, t] of Object.entries(report.billing.totals)) {
+      for (const m of ["calculated", "invoiced", "received", "outstanding", "estimatedUnpaid", "overdue"]) push("billing", "", m, cur, t[m]);
+    }
+    for (const [cur, x] of Object.entries(report.billing.unlinkedReceived)) push("billing", "", "receivedUnlinked", cur, x);
+    if (v.laborRevenue) for (const [cur, x] of Object.entries(report.billing.unbilled.revenue)) push("billing", "", "unbilledRevenue", cur, x);
+  }
+  if (v.payables && report.payables && !report.payables.notAttributable) {
+    for (const [cur, t] of Object.entries(report.payables.totals)) {
+      for (const m of ["calculated", "confirmed", "paid", "remaining", "overdue"]) push("payables", "", m, cur, t[m]);
+    }
+    for (const [cur, x] of Object.entries(report.payables.scopeShare || {})) push("payables", "", "scopeShare", cur, x);
+  }
+  return rows;
 }

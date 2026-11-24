@@ -13,6 +13,7 @@
 // (odobrene) bira stranica.
 
 import { round2, sum2 } from "./money.js";
+import { PAYABLE_STATUS, payableBalance, payablesTotals } from "../finance/payables.js";
 import { projectMargin } from "./monthly.js";
 import { sumCostsEur } from "./costs.js";
 import { monthStart, payrollTotals } from "./payrollMonth.js";
@@ -160,4 +161,24 @@ export function payrollDue(runs, payslips) {
     })
     .sort((a, b) => a.month.localeCompare(b.month));
   return { total: sum2(months.map((m) => m.payout)), workers: months.reduce((n, m) => n + m.workers, 0), months };
+}
+
+/**
+ * „Payroll Due" iz obaveza (spec §7, W2-E): Σ Remaining POTVRĐENIH obaveza po valuti (nacrt nije dug, otkazana se
+ * ne broji) i spisak otvorenih obaveza — dospele prve, pa najveći ostatak. Stanje računa finance/payables.js.
+ * Zamenjuje payrollDue (mesečni obračun) na Kontrolnoj tabli; payrollDue ostaje za stare izveštaje.
+ * @returns {{ byCurrency: Record<string, {confirmed, paid, remaining, overdue}>, openCount: number,
+ *            open: Array<{ payable, balance }> }}
+ */
+export function payablesDue(payables, payments, { today = null } = {}) {
+  const confirmed = (payables || []).filter((p) => p?.status === PAYABLE_STATUS.CONFIRMED);
+  const totals = payablesTotals(confirmed, payments, { today });
+  const byCurrency = Object.fromEntries(Object.entries(totals).map(([cur, t]) => [cur, {
+    confirmed: t.confirmed, paid: t.paid, remaining: t.remaining, overdue: t.overdue,
+  }]));
+  const open = confirmed
+    .map((payable) => ({ payable, balance: payableBalance(payable, payments, { today }) }))
+    .filter((x) => x.balance.remaining > 0)
+    .sort((a, b) => Number(b.balance.overdue) - Number(a.balance.overdue) || b.balance.remaining - a.balance.remaining);
+  return { byCurrency, openCount: open.length, open };
 }

@@ -546,6 +546,8 @@ const TRANSLATIONS = {
   "This Year": { rs: "Ova godina", sk: "Tento rok" },
   "Payroll Cost": { rs: "Trošak rada", sk: "Mzdové náklady" },
   "Gross Profit": { rs: "Bruto zarada", sk: "Hrubý zisk" },
+  "Project Profit": { rs: "Zarada projekata", sk: "Zisk projektov" },
+  "Additional Project Costs": { rs: "Dodatni troškovi projekata", sk: "Dodatočné náklady projektov" },
   "Revenue, Costs & Profit": { rs: "Prihod, troškovi i zarada", sk: "Tržby, náklady a zisk" },
   "Cumulative amounts of approved timesheets, by day": { rs: "Kumulativni iznosi odobrenih satnica, po danima", sk: "Kumulatívne sumy schválených výkazov po dňoch" },
   "No approved hours in this period": { rs: "Nema odobrenih sati u ovom periodu", sk: "V tomto období nie sú schválené hodiny" },

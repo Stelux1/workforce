@@ -1,185 +1,258 @@
 import { describe, expect, it } from "vitest";
-import { round2 } from "./money.js";
-import { projectMargin } from "./monthly.js";
-import { classifyWeek, timesheetAmountsByType } from "./hours.js";
-import { DAY_FIELDS } from "./timesheetRow.js";
-import { LABOR_SOURCE, projectFinancialReport, REPORT_PROBLEM, reportProblemMessage } from "./projectReport.js";
-import { payrollDue, projectFinancials } from "./reports.js";
+import { financialSummary } from "../finance/index.js";
+import { v2Timesheet } from "../finance/testFixtures.js";
+import {
+  billingSection, financialReport, financialReportExportRows, normalizeFilters, payablesSection, projectFinancialReport,
+  reportVisibility,
+} from "./projectReport.js";
+import { payrollDue } from "./reports.js";
 
-// Odobrena satnica sa snimkom (rate_snapshot) kakav upisuje guard_timesheet — isti postupak kao u payroll.test.js.
-const KOEF = [
-  { code: "redovni", worker_coef: 1, client_coef: 1 },
-  { code: "prekovremeni", worker_coef: 1.5, client_coef: 1.6 },
-  { code: "vikend", worker_coef: 1.3, client_coef: 1.4 },
-  { code: "praznik", worker_coef: 2, client_coef: 2.2 },
+// Odobrena satnica v2 (snimak po danu): 8 h ponedeljak, B2C 45, B2B 50, koeficijenti 1.0 — primer iz spec-a §5.
+const projects = [
+  { id: "P1", name: "Hala A", client_id: "C1", client_name: "Klijent A" },
+  { id: "P2", name: "Hala B", client_id: "C1", client_name: "Klijent A" },
+  { id: "P3", name: "Most", client_id: "C2", client_name: "Klijent B" },
 ];
-function odobrena({ id, employee_id = "E1", employee_name = "QA Radnik 1", project_id = "PA", project = "QA Hala A", week_start, days: pocetak, b2c = 12, b2b = 20, threshold = 8, holidays = [], status = "approved" }) {
-  const days = Array.from({ length: 7 }, (_, i) => pocetak[i] ?? 0); // pon–ned, dani koji nisu navedeni = 0
-  const row = {
-    id, employee_id, employee_name, project_id, project, week_start, approval_status: status, b2c_rate: b2c, b2b_rate: b2b,
-    ...Object.fromEntries(DAY_FIELDS.map((f, i) => [f, days[i]])),
-    total_hours: round2(days.reduce((a, b) => a + b, 0)),
+const assignments = [{ id: "A1", project_role_id: "R-WELD" }, { id: "A2", project_role_id: "R-FIT" }];
+const T1 = v2Timesheet({ id: "T1", days: [{ i: 0, hours: 8 }] });
+const ALL = ["rates.view_b2b", "rates.view_b2c", "costs.view", "billing.view", "payroll.view", "reports.financial"];
+const base = { projects, assignments };
+
+describe("Financial Report — omotač oko financialSummary (§10, K4)", () => {
+  it("§5 primer: 8 × 45 × 1.0 = 360 Payroll Cost; 8 × 50 × 1.0 = 400 Labor Revenue", () => {
+    const r = projectFinancialReport({ ...base, projectId: "P1", timesheets: [T1] });
+    expect(r.summary.approvedHours).toBe(8);
+    expect(r.summary.byCurrency.EUR).toEqual({ laborRevenue: 400, payrollCost: 360, laborMargin: 40, additionalCosts: 0, netProfit: 40, profitMargin: 10 });
+  });
+
+  it("jedan obračunski servis: summary je tačno financialSummary za isti ulaz (nema paralelne formule)", () => {
+    const T2 = v2Timesheet({ id: "T2", employee_id: "E2", project_id: "P3", assignment_id: "A2", days: [{ i: 1, hours: 10, code: "prekovremeni", wc: 1.5, cc: 1.6 }] });
+    const costs = [{ id: "K1", project_id: "P1", cost_date: "2026-11-03", amount: 25, currency: "EUR" }];
+    const input = { timesheets: [T1, T2], costs, range: { from: "2026-11-01", to: "2026-11-30" }, projects, assignments };
+    expect(financialReport(input).summary).toEqual(financialSummary(input));
+  });
+
+  it("Profit Margin je null kad je Labor Revenue 0 (nije 0 ni ∞)", () => {
+    // samo trošak projekta, bez odobrenih sati: prihod 0, profit −120, marža null
+    const r = projectFinancialReport({ ...base, projectId: "P1", costs: [{ id: "K1", project_id: "P1", cost_date: "2026-11-02", amount: 120, currency: "EUR" }] });
+    expect(r.summary.byCurrency.EUR).toEqual({ laborRevenue: 0, payrollCost: 0, laborMargin: 0, additionalCosts: 120, netProfit: -120, profitMargin: null });
+    const empty = projectFinancialReport({ ...base, projectId: "P1" });
+    expect(empty.summary.byCurrency).toEqual({});
+    expect(empty.summary.approvedHours).toBe(0);
+  });
+
+  it("K4: srpski bruto 2 nije Payroll Cost — izveštaj ga ne prima i ne menja broj", () => {
+    const withPayroll = projectFinancialReport({
+      ...base, projectId: "P1", timesheets: [T1],
+      runs: [{ id: "R1", month: "2026-11-01", status: "approved" }],
+      payslipProjects: [{ payslip_id: "S1", project_id: "P1", hours: 8, labor_cost: 589.12 }],
+    });
+    expect(withPayroll.summary.byCurrency.EUR.payrollCost).toBe(360);
+  });
+
+  it("T09: submitted i rejected ne ulaze u konačne brojke; submitted je odvojena procena", () => {
+    const sub = v2Timesheet({ id: "S", status: "submitted", estimate: true, days: [{ i: 2, hours: 4 }] });
+    const rej = { ...v2Timesheet({ id: "X", days: [{ i: 3, hours: 6 }] }), approval_status: "rejected" };
+    const r = projectFinancialReport({ ...base, projectId: "P1", timesheets: [T1, sub, rej] });
+    expect(r.summary.approvedHours).toBe(8);
+    expect(r.summary.pendingEstimate.hours).toBe(4);
+    expect(r.summary.pendingEstimate.laborRevenue).toEqual({ EUR: 200 });
+  });
+
+  it("razrada po projektu, klijentu, radniku i ulozi sabira se tačno u zbir (po valuti)", () => {
+    const T2 = v2Timesheet({ id: "T2", employee_id: "E2", project_id: "P2", assignment_id: "A2", days: [{ i: 0, hours: 5 }] });
+    const T3 = v2Timesheet({ id: "T3", employee_id: "E3", project_id: "P3", assignment_id: "A2", days: [{ i: 0, hours: 2 }] });
+    const r = financialReport({ ...base, timesheets: [T1, T2, T3] });
+    const total = r.summary.byCurrency.EUR.laborRevenue;
+    for (const dim of ["project", "client", "employee", "role"]) {
+      expect(r.breakdown[dim].reduce((a, x) => a + (x.revenue.EUR || 0), 0)).toBe(total);
+    }
+    expect(r.breakdown.client.map((x) => [x.key, x.hours])).toEqual([["C1", 13], ["C2", 2]]);
+    expect(r.breakdown.role.map((x) => [x.key, x.hours])).toEqual([["R-FIT", 7], ["R-WELD", 8]]);
+  });
+
+  it("filteri Client / Employee / Job Role / Cost Category idu kroz isti servis", () => {
+    const T2 = v2Timesheet({ id: "T2", employee_id: "E2", project_id: "P3", assignment_id: "A2", days: [{ i: 0, hours: 5 }] });
+    const costs = [
+      { id: "K1", project_id: "P1", cost_date: "2026-11-02", amount: 30, currency: "EUR", cost_category_id: "cat-acc" },
+      { id: "K2", project_id: "P1", cost_date: "2026-11-02", amount: 70, currency: "EUR", cost_category_id: "cat-misc" },
+    ];
+    const run = (filters) => financialReport({ ...base, timesheets: [T1, T2], costs, filters });
+    expect(run({ clientId: "C2" }).summary.approvedHours).toBe(5);
+    expect(run({ employeeId: "E1" }).summary.approvedHours).toBe(8);
+    expect(run({ projectRoleId: "R-FIT" }).summary.approvedHours).toBe(5);
+    expect(run({ projectRoleId: "R-FIT" }).costs.notAttributable).toBe(true);
+    expect(run({ costCategoryId: "cat-acc" }).summary.byCurrency.EUR.additionalCosts).toBe(30);
+    expect(normalizeFilters({ projectId: "all", clientId: "", employeeId: ["E1"] })).toEqual({ employeeId: ["E1"] });
+  });
+});
+
+describe("T14 — Cost sa Category/Subcategory i povezanim radnikom ulazi jednom u projektni profit", () => {
+  const cost = { id: "W1", project_id: "P1", cost_date: "2026-11-04", amount: 250, currency: "EUR", cost_category_id: "cat-acc", category: "Accommodation", subcategory: "Utilities", employee_id: "E1" };
+  it("isti red stigao dvaput se oduzima jednom", () => {
+    const r = projectFinancialReport({ ...base, projectId: "P1", timesheets: [T1], costs: [cost, { ...cost }], categories: [{ id: "cat-acc", name: "Accommodation" }] });
+    expect(r.costs.count).toBe(1);
+    expect(r.summary.byCurrency.EUR).toMatchObject({ additionalCosts: 250, netProfit: 400 - 360 - 250 });
+    expect(r.costs.byCategory).toEqual([{ key: "cat-acc", name: "Accommodation", count: 1, byCurrency: { EUR: 250 } }]);
+    // razrada po projektu nosi isti trošak jednom
+    expect(r.breakdown.project).toEqual([expect.objectContaining({ key: "P1", additionalCosts: { EUR: 250 } })]);
+  });
+  it("filter po radniku: trošak vezan za tog radnika ulazi jednom, tuđi ne", () => {
+    const other = { ...cost, id: "W2", employee_id: "E9", amount: 99 };
+    const r = financialReport({ ...base, timesheets: [T1], costs: [cost, other], filters: { employeeId: "E1" } });
+    expect(r.summary.byCurrency.EUR.additionalCosts).toBe(250);
+  });
+  it("trošak projekta bez sati u periodu ima svoj red u razradi (ne gubi se)", () => {
+    const r = financialReport({ ...base, timesheets: [T1], costs: [{ ...cost, project_id: "P2" }] });
+    expect(r.breakdown.project.map((x) => [x.key, x.hours, x.additionalCosts])).toEqual([["P1", 8, {}], ["P2", 0, { EUR: 250 }]]);
+  });
+});
+
+describe("T25 — promena naziva projekta ili klijenta ne menja izveštaj", () => {
+  it("isti ID, novo ime → isti brojevi; drugi projekat sa starim imenom se ne spaja", () => {
+    const costs = [{ id: "K1", project_id: "P1", cost_date: "2026-11-02", amount: 40, currency: "EUR" }];
+    const before = projectFinancialReport({ ...base, projectId: "P1", timesheets: [T1], costs });
+    const renamed = projects.map((p) => (p.id === "P1" ? { ...p, name: "Hala A — novo ime", client_name: "Klijent A d.o.o." } : p));
+    const sameOldName = v2Timesheet({ id: "TX", project_id: "P3", assignment_id: "A2", days: [{ i: 0, hours: 8 }] });
+    const after = projectFinancialReport({
+      projects: [...renamed, { id: "P9", name: "Hala A", client_id: "C1" }], assignments, projectId: "P1",
+      timesheets: [{ ...T1, project: "Hala A — novo ime", client_name: "Klijent A d.o.o." }, { ...sameOldName, project: "Hala A" }], costs,
+    });
+    expect(after).toEqual(before);
+  });
+});
+
+describe("T17 — obračun je odvojen od fakturisanog, uplaćenog i isplaćenog", () => {
+  const summaries = [
+    { id: "B1", client_id: "C1", project_id: "P1", period_start: "2026-11-01", period_end: "2026-11-30", currency: "EUR", status: "invoiced_externally", calculated_amount: 400, ext_invoice_amount: 1000, ext_due_date: "2026-11-20" },
+    { id: "B2", client_id: "C1", project_id: null, period_start: "2026-10-01", period_end: "2026-10-31", currency: "EUR", status: "sent_to_accounting", calculated_amount: 800 },
+  ];
+  const clientPayments = [
+    { id: "CP1", client_id: "C1", billing_summary_id: "B1", payment_date: "2026-11-21", amount: 400, currency: "EUR" },
+    { id: "CP2", client_id: "C1", billing_summary_id: "B1", payment_date: "2026-11-22", amount: 300, currency: "EUR" },
+    { id: "CP3", client_id: "C1", billing_summary_id: "B1", payment_date: "2026-11-23", amount: 999, currency: "EUR", voided_at: "2026-11-24", void_reason: "pogrešan unos" },
+    { id: "CP4", client_id: "C1", project_id: "P1", billing_summary_id: null, payment_date: "2026-11-25", amount: 50, currency: "EUR" },
+  ];
+  const payables = [
+    { id: "PY1", payee_type: "employee", employee_id: "E1", period_start: "2026-11-01", period_end: "2026-11-30", currency: "EUR", status: "confirmed", calculated_amount: 360, adjustments_amount: 0 },
+    { id: "PY2", payee_type: "vendor", vendor_id: "V1", period_start: "2026-11-01", period_end: "2026-11-30", currency: "EUR", status: "confirmed", calculated_amount: 500, adjustments_amount: 0 },
+  ];
+  const payableLines = [
+    { payable_id: "PY1", kind: "labor", employee_id: "E1", project_id: "P1", amount: 360, currency: "EUR" },
+    { payable_id: "PY2", kind: "labor", employee_id: "E5", project_id: "P1", amount: 200, currency: "EUR" },
+    { payable_id: "PY2", kind: "labor", employee_id: "E6", project_id: "P3", amount: 300, currency: "EUR" },
+  ];
+  const payments = [{ id: "PM1", payable_id: "PY1", amount: 100, currency: "EUR", payment_date: "2026-11-28" }];
+  const input = {
+    ...base, projectId: "P1", timesheets: [T1], range: { from: "2026-11-01", to: "2026-11-30" }, today: "2026-11-24",
+    billing: { summaries, clientPayments }, payables: { payables, payableLines, payments },
   };
-  const hbt = classifyWeek({ weekStart: week_start, dayHours: days, holidays, dailyThreshold: threshold });
-  const a = timesheetAmountsByType({ hoursByType: hbt, workerRate: b2c, clientRate: b2b, hourTypes: KOEF });
-  row.hours_by_type = hbt;
-  row.worker_cost = a.worker_cost;
-  row.client_revenue = a.client_revenue;
-  row.profit = round2(a.client_revenue - a.worker_cost);
-  row.rate_snapshot = { worker: { rate: b2c }, client: { rate: b2b }, daily_regular_hours: threshold, holidays, lines: a.lines.map((l) => ({ ...l, special_rate: null })) };
-  return row;
-}
 
-// Mart 2026: E1 pon 8h (96 / 160), E2 pon 8h + uto 10h (16 redovno + 2 prekovremeno: 228 / 384).
-const T1 = odobrena({ id: "T1", week_start: "2026-03-02", days: [8] });
-const T2 = odobrena({ id: "T2", employee_id: "E2", employee_name: "QA Radnik 2", week_start: "2026-03-09", days: [8, 10] });
-const TROSKOVI = [
-  { id: "C1", project_id: "PA", amount: 100, currency: "EUR", eur_amount: 100 },
-  { id: "C2", project_id: "PA", amount: 11720, currency: "RSD", eur_rsd_rate: 117.2, eur_amount: 100, fx_rate_date: "2026-04-01" },
-  { id: "C3", project_id: "PA", amount: 5000, currency: "RSD", eur_rsd_rate: null, eur_amount: null }, // bez kursa
-  { id: "C4", project_id: "PB", amount: 999, currency: "EUR", eur_amount: 999 }, // drugi projekat
-];
-const report = (o) => projectFinancialReport({ projectId: "PA", costs: TROSKOVI, runs: [], payslips: [], payslipProjects: [], ...o });
-
-describe("finansijski izveštaj projekta (projectReport.js)", () => {
-  it("Accept: ostaje nama = projectMargin(prihod, trošak radnika, troškovi u EUR)", () => {
-    expect([T1.worker_cost, T1.client_revenue, T2.worker_cost, T2.client_revenue]).toEqual([96, 160, 228, 384]);
-    const nacrt = odobrena({ id: "N1", week_start: "2026-03-16", days: [8], status: "submitted" });
-    const drugi = odobrena({ id: "X1", project_id: "PB", week_start: "2026-03-02", days: [8] });
-    const r = report({ timesheets: [T1, T2, nacrt, drugi] });
-
-    // prihod 160 + 384 = 544; trošak 96 + 228 = 324 (procena); troškovi 100 + 11.720 RSD / 117,2 = 200 (5.000 RSD bez kursa nije oduzet)
-    expect(r.totals).toMatchObject({ hours: 26, count: 2, revenue: 544, laborCost: 324, estimatedLaborCost: 324, payrollLaborCost: 0, otherCosts: 200 });
-    expect(r.totals.remaining).toBe(20);
-    const m = projectMargin({ revenue: 544, laborCost: 324, otherCosts: 200 });
-    expect([r.totals.remaining, r.totals.marginPct]).toEqual([m.remaining, m.marginPct]);
-    expect(r.totals.laborDifference).toBe(220);
-    expect(r.costs).toEqual({ count: 3, eur: 200, fromRsd: { amount: 11720, eur: 100 }, missingRsd: 5000 });
-    expect(r.pending).toEqual({ count: 1, hours: 8 });
-    expect(r.problems).toEqual([]);
-
-    // Bez obračuna i bez nedelje preko meseca ukupno je isto kao Izveštaji o platama (reports.js → projectFinancials).
-    const pf = projectFinancials([T1, T2], TROSKOVI.filter((c) => c.project_id === "PA"));
-    expect([r.totals.revenue, r.totals.laborCost, r.totals.otherCosts, r.totals.remaining]).toEqual([pf.revenue, pf.workerCost, pf.costsEUR, pf.profit]);
+  it("summary nema polja fakturisanog, uplata ni isplata; uplate ne menjaju profit", () => {
+    const r = projectFinancialReport(input);
+    const noFlows = projectFinancialReport({ ...input, billing: null, payables: null });
+    expect(r.summary).toEqual(noFlows.summary);
+    expect(Object.keys(r.summary.byCurrency.EUR).sort()).toEqual(["additionalCosts", "laborMargin", "laborRevenue", "netProfit", "payrollCost", "profitMargin"]);
   });
 
-  it("mesec bez odobrenog obračuna je procena iz satnica", () => {
-    const r = report({ timesheets: [T1, T2] });
-    expect(r.months).toEqual([
-      { month: "2026-03-01", runStatus: null, laborSource: LABOR_SOURCE.ESTIMATE, estimate: true, hours: 26, revenue: 544, laborCost: 324, difference: 220 },
-    ]);
-    expect(r.totals.hasEstimate).toBe(true);
-    expect(r.employees.map((e) => [e.id, e.name, e.hours, e.revenue, e.laborCost, e.estimate])).toEqual([
-      ["E2", "QA Radnik 2", 18, 384, 228, true],
-      ["E1", "QA Radnik 1", 8, 160, 96, true],
-    ]);
+  it("billing: eksterni 1000 + uplate 400 + 300 → outstanding 300; storno se ne broji; pregled celog klijenta odvojeno", () => {
+    const r = projectFinancialReport(input).billing;
+    expect(r.rows).toHaveLength(1);
+    expect(r.rows[0].balance).toMatchObject({ calculated: 400, invoiced: 1000, received: 700, outstanding: 300, status: "partially_paid", overdue: true });
+    expect(r.totals.EUR).toMatchObject({ calculated: 400, invoiced: 1000, received: 700, outstanding: 300, estimatedUnpaid: 0 });
+    // B2 je za oktobar (van perioda) — ne ulazi ni u clientWide
+    expect(r.clientWide).toHaveLength(0);
+    expect(r.unlinkedReceived).toEqual({ EUR: 50 });
+    // svi odobreni sati P1 u novembru su u B1 → nefakturisano 0
+    expect(r.unbilled.revenue).toEqual({});
   });
 
-  it("Accept: preimenovanje projekta ne menja brojke (grupiše se samo po project_id)", () => {
-    const pre = report({ timesheets: [T1, T2] });
-    // Isti ID, drugo ime u snimku satnice; drugi projekat sa STARIM imenom se ne spaja.
-    const preimenovan = [T1, T2].map((ts) => ({ ...ts, project: "QA Hala A — novo ime" }));
-    const istoIme = odobrena({ id: "X2", project_id: "PB", project: "QA Hala A", week_start: "2026-03-02", days: [8] });
-    expect(report({ timesheets: [...preimenovan, istoIme] })).toEqual(pre);
+  it("billing: pregled celog klijenta se ne pripisuje projektu", () => {
+    const r = billingSection({ summaries, clientPayments }, { filters: normalizeFilters({ projectId: "P1" }), projects });
+    expect(r.rows.map((x) => x.summary.id)).toEqual(["B1"]);
+    expect(r.clientWide.map((x) => x.summary.id)).toEqual(["B2"]);
+    expect(r.clientWideTotals.EUR).toMatchObject({ calculated: 800, estimatedUnpaid: 800 });
+    expect(billingSection({ summaries, clientPayments }, { filters: { employeeId: ["E1"] } }).notAttributable).toBe(true);
   });
 
-  it("mesec sa odobrenim obračunom: trošak radnika = bruto 2 iz payslip_projects, ne procena iz satnica", () => {
-    const T3 = odobrena({ id: "T3", week_start: "2026-04-06", days: [8] }); // april: 96 / 160
-    const runs = [
-      { id: "R3", month: "2026-03-01", status: "approved" },
-      { id: "R4", month: "2026-04-01", status: "draft" },
-    ];
-    const payslips = [
-      { id: "S1", run_id: "R3", employee_id: "E1", employee_name: "QA Radnik 1" },
-      { id: "S2", run_id: "R3", employee_id: "E2", employee_name: "QA Radnik 2" },
-      { id: "S3", run_id: "R4", employee_id: "E1", employee_name: "QA Radnik 1" },
-    ];
-    const payslipProjects = [
-      { payslip_id: "S1", project_id: "PA", hours: 8, worker_amount: 96, labor_cost: 157.45, revenue: 160 },
-      { payslip_id: "S1", project_id: "PB", hours: 4, worker_amount: 48, labor_cost: 78.72, revenue: 80 }, // drugi projekat
-      { payslip_id: "S2", project_id: "PA", hours: 18, worker_amount: 228, labor_cost: 373.97, revenue: 384 },
-      { payslip_id: "S3", project_id: "PA", hours: 8, worker_amount: 96, labor_cost: 157.45, revenue: 160 }, // nacrt → ne važi
-    ];
-    const r = report({ timesheets: [T1, T2, T3], runs, payslips, payslipProjects });
-
-    expect(r.months).toEqual([
-      { month: "2026-03-01", runStatus: "approved", laborSource: LABOR_SOURCE.PAYROLL, estimate: false, hours: 26, revenue: 544, laborCost: 531.42, difference: 12.58 },
-      { month: "2026-04-01", runStatus: "draft", laborSource: LABOR_SOURCE.ESTIMATE, estimate: true, hours: 8, revenue: 160, laborCost: 96, difference: 64 },
-    ]);
-    expect(r.totals).toMatchObject({ revenue: 704, payrollLaborCost: 531.42, estimatedLaborCost: 96, laborCost: 627.42, otherCosts: 200, hasEstimate: true });
-    expect(r.totals.remaining).toBe(projectMargin({ revenue: 704, laborCost: 627.42, otherCosts: 200 }).remaining);
-    expect(r.totals.remaining).toBe(-123.42);
-    // po satima: E2 18 h (samo mart, obračun), E1 8 + 8 h (mart obračun 157,45 + april procena 96)
-    expect(r.employees.map((e) => [e.id, e.hours, e.laborCost, e.estimate])).toEqual([["E2", 18, 373.97, false], ["E1", 16, 253.45, true]]);
-    expect(r.problems).toEqual([]);
-
-    // Isplaćen obračun je takođe konačan; bez procene u ukupnom.
-    const paid = report({ timesheets: [T1, T2], runs: [{ ...runs[0], status: "paid" }], payslips, payslipProjects });
-    expect(paid.months[0]).toMatchObject({ runStatus: "paid", laborSource: LABOR_SOURCE.PAYROLL, laborCost: 531.42 });
-    expect(paid.totals.hasEstimate).toBe(false);
+  it("payables: Payroll Cost (obračun) ≠ isplaćeno; obaveza vendora sa radom i van projekta je označena", () => {
+    const r = projectFinancialReport(input);
+    expect(r.summary.byCurrency.EUR.payrollCost).toBe(360);
+    expect(r.payables.totals.EUR).toMatchObject({ confirmed: 860, paid: 100, remaining: 760 });
+    expect(r.payables.scopeShare).toEqual({ EUR: 560 });
+    expect(r.payables.spansOtherScope).toBe(true);
+    const all = payablesSection({ payables, payableLines, payments }, {});
+    expect(all.scopeShare).toBeNull();
+    expect(all.rows.map((x) => [x.payable.id, x.balance.status])).toEqual([["PY1", "partially_paid"], ["PY2", "unpaid"]]);
   });
 
-  it("odobren obračun čiji sati ne odgovaraju satnicama se prijavljuje (ne prećutkuje)", () => {
-    const r = report({
-      timesheets: [T1, T2],
-      runs: [{ id: "R3", month: "2026-03-01", status: "approved" }],
-      payslips: [{ id: "S1", run_id: "R3", employee_id: "E1" }],
-      payslipProjects: [{ payslip_id: "S1", project_id: "PA", hours: 8, labor_cost: 157.45 }],
-    });
-    expect(r.months[0]).toMatchObject({ laborSource: LABOR_SOURCE.PAYROLL, laborCost: 157.45 });
-    expect(r.problems).toEqual([{ code: REPORT_PROBLEM.PAYROLL_HOURS_MISMATCH, month: "2026-03-01", payrollHours: 8, timesheetHours: 26 }]);
-    expect(reportProblemMessage(r.problems[0])).toBe("03.2026: odobren obračun ima 8 h na ovom projektu, odobrene satnice 26 h.");
+  it("sekcija bez podataka (tabela ne postoji / nema prava) je null — ekran kaže „nema podataka“", () => {
+    const r = projectFinancialReport({ ...input, billing: null, payables: null });
+    expect(r.billing).toBeNull();
+    expect(r.payables).toBeNull();
+  });
+});
+
+describe("T28 — nijedan agregat ne sabira EUR i drugu valutu bez kursa i datuma", () => {
+  const gbp = v2Timesheet({ id: "G1", employee_id: "E2", days: [{ i: 1, hours: 10, w: 30, wCur: "GBP", c: 40, cCur: "GBP" }] });
+  const costs = [
+    { id: "R1", project_id: "P1", cost_date: "2026-11-03", amount: 11720, currency: "RSD", eur_rsd_rate: 117.2, eur_amount: 100, fx_rate_date: "2026-11-01" },
+    { id: "R2", project_id: "P1", cost_date: "2026-11-03", amount: 5000, currency: "RSD", eur_rsd_rate: 117.2, eur_amount: 42.66 },
+    { id: "R3", project_id: "P1", cost_date: "2026-11-03", amount: 3000, currency: "USD" },
+  ];
+  it("po valuti: EUR i GBP odvojeno, RSD/USD troškovi u svojoj valuti", () => {
+    const r = projectFinancialReport({ ...base, projectId: "P1", timesheets: [T1, gbp], costs });
+    expect(r.summary.currencies).toEqual(["EUR", "RSD", "GBP", "USD"]);
+    expect(r.summary.byCurrency.EUR).toMatchObject({ laborRevenue: 400, payrollCost: 360 });
+    expect(r.summary.byCurrency.GBP).toMatchObject({ laborRevenue: 400, payrollCost: 300, profitMargin: 25 });
+    expect(r.summary.byCurrency.RSD).toMatchObject({ laborRevenue: 0, additionalCosts: 16720, profitMargin: null });
+    expect(r.costs.withoutRateDate).toEqual({ RSD: 5000 });
+    expect(r.costs.missingRate).toEqual({ USD: 3000 });
+    expect(r.summary.converted).toBeNull();
+  });
+  it("konverzija bez kursa za GBP: GBP je u `missing`, zbir prihoda nije izračunat (ne tiho izostavljen)", () => {
+    const r = projectFinancialReport({ ...base, projectId: "P1", timesheets: [T1, gbp], costs, exchangeRates: [], rateDate: "2026-11-30" });
+    expect(r.summary.converted.missing).toContain("GBP");
+    expect(r.summary.converted.laborRevenue).toBeNull();
+    expect(r.summary.converted.netProfit).toBeNull();
+    expect(r.summary.converted.costsWithoutRateDate.map((c) => c.id)).toEqual(["R2"]);
+  });
+  it("konverzija sa kursom: prikazuje kurs i datum kursa", () => {
+    const rates = [{ currency: "GBP", units_per_eur: 0.8, rate_date: "2026-11-15" }];
+    const r = projectFinancialReport({ ...base, projectId: "P1", timesheets: [T1, gbp], exchangeRates: rates, rateDate: "2026-11-30" });
+    expect(r.summary.converted.laborRevenue).toBe(900); // 400 EUR + 400 GBP / 0,8
+    expect(r.summary.converted.used).toEqual([{ currency: "GBP", unitsPerEur: 0.8, rateDate: "2026-11-15", source: null }]);
+    expect(r.summary.converted.missing).toEqual([]);
+  });
+});
+
+describe("T26 — izvoz bez B2C za korisnika bez prava", () => {
+  const costs = [{ id: "K1", project_id: "P1", cost_date: "2026-11-02", amount: 40, currency: "EUR", cost_category_id: "cat-acc", category: "Accommodation" }];
+  const payables = { payables: [{ id: "PY1", payee_type: "employee", employee_id: "E1", period_start: "2026-11-01", period_end: "2026-11-30", currency: "EUR", status: "confirmed", calculated_amount: 360 }], payableLines: [], payments: [] };
+  const report = financialReport({ ...base, timesheets: [T1], costs, payables, billing: { summaries: [], clientPayments: [] } });
+  const metrics = (rows) => [...new Set(rows.map((r) => r.metric))].sort();
+
+  it("pun pristup: izvoz ima prihod, payroll cost, profit i obaveze; zbir izvoza = zbir ekrana", () => {
+    const rows = financialReportExportRows(report, new Set(ALL));
+    expect(metrics(rows)).toEqual(expect.arrayContaining(["laborRevenue", "payrollCost", "laborMargin", "netProfit", "profitMargin", "additionalCosts", "remaining"]));
+    const s = (m) => rows.find((r) => r.section === "summary" && r.metric === m && r.currency === "EUR").value;
+    expect([s("laborRevenue"), s("payrollCost"), s("netProfit")]).toEqual([400, 360, 0]);
   });
 
-  it("Accept: nedelja 30.3.–5.4. se deli po danu (isto kao mesečni obračun), ništa se ne gubi na granici", () => {
-    // pon 8, uto 10, sre 10 (1.4. praznik u snimku), čet 8; prag 8 — isti primer kao payroll.test.js (D17).
-    const r0 = odobrena({ id: "T9", week_start: "2026-03-30", days: [8, 10, 10, 8], holidays: ["2026-04-01"] });
-    expect([r0.worker_cost, r0.client_revenue]).toEqual([564, 984]);
-    const r = report({ timesheets: [r0], costs: [] });
-    expect(r.months.map((m) => [m.month, m.hours, m.revenue, m.laborCost])).toEqual([
-      ["2026-03-01", 18, 384, 228], // 16×12 + 2×12×1,5 = 228; 16×20 + 2×20×1,6 = 384
-      ["2026-04-01", 18, 600, 336], // 10×12×2 + 8×12 = 336; 10×20×2,2 + 8×20 = 600
-    ]);
-    expect([r.totals.hours, r.totals.revenue, r.totals.laborCost]).toEqual([36, 984, 564]);
-    expect(r.problems).toEqual([]);
-
-    // Mart odobren: trošak marta iz obračuna, april i dalje procena (podeljen deo nedelje).
-    const s = report({
-      timesheets: [r0], costs: [],
-      runs: [{ id: "R3", month: "2026-03-01", status: "approved" }],
-      payslips: [{ id: "S1", run_id: "R3", employee_id: "E1" }],
-      payslipProjects: [{ payslip_id: "S1", project_id: "PA", hours: 18, labor_cost: 373.97 }],
-    });
-    expect(s.months.map((m) => [m.month, m.laborSource, m.laborCost])).toEqual([
-      ["2026-03-01", LABOR_SOURCE.PAYROLL, 373.97],
-      ["2026-04-01", LABOR_SOURCE.ESTIMATE, 336],
-    ]);
-    expect(s.problems).toEqual([]);
+  it("bez rates.view_b2c: nema Payroll Cost, marže, profita ni obaveza — ni u jednom odeljku", () => {
+    const noB2C = ALL.filter((p) => p !== "rates.view_b2c");
+    const rows = financialReportExportRows(report, noB2C);
+    for (const m of ["payrollCost", "laborMargin", "netProfit", "profitMargin", "remaining", "paid", "confirmed", "scopeShare"]) {
+      expect(rows.some((r) => r.metric === m)).toBe(false);
+    }
+    expect(rows.some((r) => r.section === "payables")).toBe(false);
+    expect(rows.some((r) => r.metric === "laborRevenue")).toBe(true);
+    expect(reportVisibility(noB2C)).toMatchObject({ payrollCost: false, payables: false, laborRevenue: true });
   });
 
-  it("nedelja preko meseca bez snimka: deli se srazmerno satima i prijavljuje kao problem (procena)", () => {
-    // Odobrena pre Faze 2 (bez snimka): pet 27.2. 8h, ned 1.3. 4h; iznosi iz baze 144 / 240.
-    const stara = { ...odobrena({ id: "S9", week_start: "2026-02-23", days: [0, 0, 0, 0, 8, 0, 4] }), rate_snapshot: null, worker_cost: 144, client_revenue: 240 };
-    const r = report({ timesheets: [stara], costs: [] });
-    expect(r.months.map((m) => [m.month, m.hours, m.revenue, m.laborCost, m.estimate])).toEqual([
-      ["2026-02-01", 8, 160, 96, true],
-      ["2026-03-01", 4, 80, 48, true],
-    ]);
-    expect([r.totals.revenue, r.totals.laborCost]).toEqual([240, 144]); // zbir tačan na cent
-    expect(r.problems).toHaveLength(1);
-    expect(r.problems[0]).toMatchObject({ code: REPORT_PROBLEM.SPLIT_BY_HOURS, timesheetId: "S9", weekStart: "2026-02-23", months: ["2026-02-01", "2026-03-01"] });
-    const poruka = reportProblemMessage(r.problems[0]);
-    expect(poruka).toContain("QA Radnik 1, nedelja od 23.02.2026");
-    expect(poruka).toContain("02.2026 i 03.2026");
-    expect(poruka).toContain("(procena)");
-    expect(reportProblemMessage(r.problems[0], "en")).toContain("(estimate)");
-  });
-
-  it("bez podataka: nule, bez meseci i bez procene", () => {
-    const r = projectFinancialReport({ projectId: "PA" });
-    expect(r.months).toEqual([]);
-    expect(r.totals).toMatchObject({ hours: 0, revenue: 0, laborCost: 0, otherCosts: 0, remaining: 0, marginPct: null, hasEstimate: false });
-    expect(r.costs).toEqual({ count: 0, eur: 0, fromRsd: { amount: 0, eur: 0 }, missingRsd: 0 });
+  it("bez B2B i B2C (npr. HR): samo sati i troškovi", () => {
+    const rows = financialReportExportRows(report, ["costs.view"]);
+    expect(metrics(rows)).toEqual(["additionalCosts", "approvedHours"]);
   });
 });
 

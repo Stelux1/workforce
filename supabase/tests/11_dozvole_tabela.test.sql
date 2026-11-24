@@ -15,6 +15,7 @@ select is(
      from pg_class c join pg_namespace n on n.oid = c.relnamespace
     where n.nspname = 'public' and c.relkind in ('r', 'p')
       and c.relname not in ('audit_log', 'migration_report', 'timesheets', 'employee_private') -- T26: column grant (20261125040000)
+      and c.relname <> 'clients' -- default_b2b_rate: column grant, tarifa kroz view client_money (W2-F, 20261125090000)
       and not (has_table_privilege('authenticated', c.oid, 'select')
            and has_table_privilege('authenticated', c.oid, 'insert')
            and has_table_privilege('authenticated', c.oid, 'update')

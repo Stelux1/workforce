@@ -10,7 +10,9 @@
 
 import { sum2 } from "./money.js";
 import { monthStart, payrollTotals, projectTotals } from "./payrollMonth.js";
-import { FINAL_RUN_STATUSES } from "./projectReport.js";
+
+/** Statusi obračuna čiji su iznosi konačni. Nacrt se može ponovo generisati. */
+export const FINAL_RUN_STATUSES = Object.freeze(["approved", "paid"]);
 
 /** Da li je obračun konačan (odobren ili isplaćen). Nacrt i nepoznat status nisu. */
 export const isFinalRun = (run) => FINAL_RUN_STATUSES.includes(run?.status);

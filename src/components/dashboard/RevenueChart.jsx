@@ -5,7 +5,8 @@ import { formatDate, shortDatePattern } from "@/lib/dateFormat";
 import { parseISO } from "date-fns";
 import { useT } from "@/lib/translations";
 import { useLang } from "@/lib/LanguageContext";
-import { CHART_COLORS, formatEur } from "./format";
+import { CHART_COLORS, formatMoney } from "./format";
+import CurrencyTabs from "./CurrencyTabs";
 
 const SERIES = [
   { key: "revenue", label: "Revenue", color: CHART_COLORS.revenue },
@@ -21,7 +22,7 @@ function lastDot(color, lastIndex) {
   };
 }
 
-export default function RevenueChart({ series, hasData }) {
+export default function RevenueChart({ series, hasData, currency = "EUR", currencies = [], onCurrency }) {
   const t = useT();
   const { lang } = useLang();
   const label = (iso) => formatDate(parseISO(iso), shortDatePattern(lang), lang);
@@ -37,7 +38,8 @@ export default function RevenueChart({ series, hasData }) {
               <Info className="w-4 h-4" />
             </span>
           </CardTitle>
-          <div className="flex items-center gap-4 text-xs text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+            <CurrencyTabs currencies={currencies} value={currency} onChange={onCurrency} />
             {SERIES.map((s) => (
               <span key={s.key} className="inline-flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full" style={{ background: s.color }} />
@@ -66,10 +68,10 @@ export default function RevenueChart({ series, hasData }) {
                 </defs>
                 <CartesianGrid vertical={false} stroke="#EDE9FE" />
                 <XAxis dataKey="date" tickFormatter={label} interval={interval} tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#6B7280" }} />
-                <YAxis tickFormatter={formatEur} tickLine={false} axisLine={false} width={64} tick={{ fontSize: 11, fill: "#6B7280" }} />
+                <YAxis tickFormatter={(v) => formatMoney(v, currency)} tickLine={false} axisLine={false} width={currency === "EUR" ? 64 : 84} tick={{ fontSize: 11, fill: "#6B7280" }} />
                 <Tooltip
                   labelFormatter={label}
-                  formatter={(v, name) => [formatEur(v), t(SERIES.find((s) => s.key === name)?.label || name)]}
+                  formatter={(v, name) => [formatMoney(v, currency), t(SERIES.find((s) => s.key === name)?.label || name)]}
                   contentStyle={{ borderRadius: 10, border: "1px solid #EDE9FE", fontSize: 12 }}
                 />
                 {SERIES.map((s) => (

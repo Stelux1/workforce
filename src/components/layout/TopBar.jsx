@@ -11,6 +11,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { NAV_LABELS } from "./navConfig";
+import { useUnreadCount } from "@/components/notifications/useNotifications";
 
 const MAX_PER_GROUP = 5;
 
@@ -126,20 +127,23 @@ function NotificationBell() {
   const T = useT();
   const { lang } = useLang();
   const NL = NAV_LABELS[lang] || NAV_LABELS.en;
-  const { data: unread = 0 } = useQuery({
-    queryKey: ["notifications", "unread"],
-    queryFn: async () => (await base44.entities.Notification.filter({ is_read: false }, "-created_date", 1)).length,
-    refetchInterval: 60_000,
-    staleTime: 30_000,
-  });
+  // Nepročitana po korisniku (notification_reads); poziv takođe osvežava obaveštenja (najviše na 2 minuta).
+  const { data: unread = 0 } = useUnreadCount();
   return (
     <Link
       to="/notifications"
-      aria-label={unread > 0 ? `${NL.Notifications} (${T("Unread notifications")})` : NL.Notifications}
+      aria-label={unread > 0 ? `${NL.Notifications} (${unread} ${T("Unread notifications")})` : NL.Notifications}
       className="relative flex items-center justify-center w-10 h-10 rounded-full border border-border bg-card text-foreground shadow-sm hover:bg-accent transition-colors"
     >
       <Bell className="w-[18px] h-[18px]" strokeWidth={1.75} />
-      {unread > 0 && <span className="absolute top-2 right-2.5 w-2 h-2 rounded-full bg-primary ring-2 ring-card" />}
+      {unread > 0 && (
+        <span
+          className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-semibold leading-[18px] text-center ring-2 ring-background tabular-nums"
+          aria-hidden="true"
+        >
+          {unread > 99 ? "99+" : unread}
+        </span>
+      )}
     </Link>
   );
 }

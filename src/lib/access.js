@@ -6,10 +6,14 @@ import { can, PERMISSIONS as P } from "@/lib/permissions";
 // Prefiks adrese → pravo (ili niz: dovoljno je jedno). Najduži prefiks pobeđuje; adresa bez unosa je za svakog
 // aktivnog korisnika. Druge trake dodaju po jedan red za svoje stranice.
 export const ROUTE_PERMISSIONS = {
-  "/payroll": P.PAYROLL_VIEW, // Payroll Dashboard, Monthly Payroll, Payroll Reports
+  "/payroll": P.PAYROLL_VIEW, // Payroll Dashboard, Monthly Payroll
+  "/payroll/reports": [P.REPORTS_FINANCIAL, P.PAYROLL_VIEW], // Financial Reports (W2-J) + kartica Mesečni obračun
   "/timesheet-dashboard": [P.RATES_VIEW_B2B, P.RATES_VIEW_B2C],
   "/project-costs": P.COSTS_VIEW,
-  "/rates": [P.RATES_VIEW_B2B, P.RATES_VIEW_B2C, P.RATES_MANAGE],
+  "/rates": [P.RATES_VIEW_B2B, P.RATES_VIEW_B2C, P.RATES_MANAGE], // stara adresa → /assignments?tab=rates
+  // "/assignments": bez posebnog prava — angažmane čita svako ko vidi projekat (RLS); A2 akcije traže assignments.manage,
+  // B2B/B2C kolone rates.view_b2b / rates.view_b2c (T26).
+  // "/workforce": bez posebnog prava — plan radne snage čita svako ko vidi projekat (RLS); izmene traže workforce.manage.
   "/email-notifications": P.SETTINGS_MANAGE,
   "/settings": P.SETTINGS_MANAGE,
   "/settings/users": P.USERS_MANAGE,

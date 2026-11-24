@@ -44,11 +44,20 @@ const ENTITY_TABLES = {
   WorkRules: "work_rules",
   CompanySettings: "company_settings",
   PayrollRun: "payroll_runs",
+  Payable: "payables",
+  PayableLine: "payable_lines",
+  Payment: "payments",
   Payslip: "payslips",
   PayslipProject: "payslip_projects",
   PayrollParams: "payroll_params",
   MonthLock: "month_locks",
   Profile: "profiles",
+  // Client Billing Overview (W2-F, migracija 20261125090000)
+  BillingSummary: "billing_summaries",
+  BillingSummaryLine: "billing_summary_lines",
+  BillingSummaryCost: "billing_summary_costs",
+  BillingStatusHistory: "billing_status_history",
+  ClientPayment: "client_payments",
 };
 
 const SYSTEM_FIELDS = new Set(["id", "created_date", "updated_date", "created_by"]);
@@ -58,10 +67,15 @@ export const SENSITIVE_COLUMNS = Object.freeze({
   timesheets: ["b2c_rate", "b2b_rate", "worker_cost", "client_revenue", "profit", "rate_snapshot", "estimate_days"],
   // Zarada i satnice iz profila radnika: HR čita lične podatke, ali ne i novac (view employee_private_money).
   employee_private: ["salary", "b2c_hourly_rate", "b2b_hourly_rate", "overtime_rate", "weekend_rate", "holiday_rate"],
+  // Tarifa klijenta: samo uz rates.view_b2b (view client_money, W2-F); HR je ne vidi.
+  clients: ["default_b2b_rate"],
 });
+// Zaštićene kolone koje se ipak šalju pri čuvanju (pravo upisa proverava RLS — billing.manage).
+const WRITABLE_SENSITIVE = Object.freeze({ clients: ["default_b2b_rate"] });
 const MONEY_VIEW = {
   timesheets: { view: "timesheet_money", key: "timesheet_id", permissions: ["rates.view_b2b", "rates.view_b2c"] },
   employees: { view: "employee_private_money", key: "employee_id", permissions: ["payroll.view", "rates.view_b2b", "rates.view_b2c"] },
+  clients: { view: "client_money", key: "client_id", permissions: ["rates.view_b2b"] },
 };
 const MONEY_CHUNK = 500;
 const isSensitive = (table, column) => (SENSITIVE_COLUMNS[table] || []).includes(column);
@@ -191,7 +205,8 @@ function preparePayload(table, data) {
   for (const [key, raw] of Object.entries(data || {})) {
     if (SYSTEM_FIELDS.has(key)) continue;
     if (table === "employees" && PRIVATE_EMPLOYEE_FIELDS.has(key)) continue; // ide u employee_private
-    if (isSensitive(table, key)) continue; // iznose i tarife računa baza (guard_timesheet), ekran ih ne šalje
+    // iznose i tarife računa baza (guard_timesheet), ekran ih ne šalje
+    if (isSensitive(table, key) && !(WRITABLE_SENSITIVE[table] || []).includes(key)) continue;
     if (!columns.includes(key)) {
       dropped.push(key);
       continue;

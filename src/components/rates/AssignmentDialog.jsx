@@ -21,7 +21,7 @@ const NONE = "__none";
 const today = () => new Date().toISOString().slice(0, 10);
 const nameOf = (e) => `${e?.last_name || ""} ${e?.first_name || ""}`.trim();
 
-/** Posle svake izmene dodele osvežavaju se svi pogledi na istu evidenciju (projekat, /rates, Workforce, Onboarding). */
+/** Posle svake izmene dodele osvežavaju se svi pogledi na istu evidenciju (projekat, /assignments, Workforce, Onboarding). */
 export function invalidateAssignmentViews(queryClient, projectId) {
   for (const queryKey of [["project-assignments"], ["rates"], ["projects"], ["project", projectId], ["project-roles"]]) {
     queryClient.invalidateQueries({ queryKey });
@@ -155,9 +155,9 @@ export default function AssignmentDialog({ open, onOpenChange, assignment, proje
               ? L("Change the job role, dates, shift or note. Employee and project stay the same — use End and a new assignment instead.",
                   "Menjaju se Job Role, datumi, smena i napomena. Radnik i projekat ostaju isti — za to završite dodelu i napravite novu.",
                   "Mení sa pracovná rola, dátumy, zmena a poznámka. Zamestnanec a projekt ostávajú — na to ukončite pridelenie a vytvorte nové.")
-              : L("The assignment appears at once on the project's Workers tab, in Rates & Assignments and in planning.",
-                  "Dodela se odmah vidi na kartici Radnici projekta, u Tarifama i dodelama i u planiranju.",
-                  "Pridelenie sa hneď zobrazí na karte Pracovníci projektu, v Sadzbách a prideleniach aj v plánovaní.")}
+              : L("The assignment appears at once on the project's Workers tab, in Project Assignments and in planning.",
+                  "Dodela se odmah vidi na kartici Radnici projekta, u Angažmanima na projektima i u planiranju.",
+                  "Pridelenie sa hneď zobrazí na karte Pracovníci projektu, v Prideleniach na projektoch aj v plánovaní.")}
           </DialogDescription>
         </DialogHeader>
 

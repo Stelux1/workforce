@@ -1,19 +1,22 @@
 import { Cell, Pie, PieChart } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useT } from "@/lib/translations";
-import { CHART_COLORS, formatEur, formatPct } from "./format";
+import { CHART_COLORS, formatMargin, formatMoney } from "./format";
 
-export default function ProfitDonut({ kpis }) {
+/** `kpi` = byCurrency[valuta] iz financialSummary (laborRevenue, payrollCost, additionalCosts, netProfit, profitMargin). */
+export default function ProfitDonut({ kpi, currency = "EUR" }) {
   const t = useT();
-  const positive = Math.max(kpis.profit, 0);
-  const cost = Math.max(kpis.revenue - positive, 0);
-  const empty = kpis.revenue <= 0;
+  const revenue = kpi?.laborRevenue ?? 0;
+  const positive = Math.max(kpi?.netProfit ?? 0, 0);
+  const cost = Math.max(revenue - positive, 0);
+  const empty = revenue <= 0;
   const data = empty ? [{ v: 1, color: "#EDE9FE" }] : [{ v: positive, color: "#7C3AED" }, { v: cost, color: CHART_COLORS.cost }];
 
   const rows = [
-    { label: "Client Revenue", value: kpis.revenue, color: CHART_COLORS.revenue },
-    { label: "Payroll Cost", value: kpis.cost, color: CHART_COLORS.cost },
-    { label: "Gross Profit", value: kpis.profit, color: CHART_COLORS.profit },
+    { label: "Client Revenue", value: kpi?.laborRevenue ?? 0, color: CHART_COLORS.revenue },
+    { label: "Payroll Cost", value: kpi?.payrollCost ?? 0, color: CHART_COLORS.cost },
+    { label: "Additional Project Costs", value: kpi?.additionalCosts ?? 0, color: "#F59E0B" },
+    { label: "Project Profit", value: kpi?.netProfit ?? 0, color: CHART_COLORS.profit },
   ];
 
   return (
@@ -29,7 +32,7 @@ export default function ProfitDonut({ kpis }) {
             </Pie>
           </PieChart>
           <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <span className="text-2xl font-bold tracking-tight">{formatPct(kpis.marginPct)}</span>
+            <span className="text-2xl font-bold tracking-tight">{formatMargin(kpi?.profitMargin)}</span>
             <span className="text-xs text-muted-foreground">{t("Profit Margin")}</span>
           </div>
         </div>
@@ -40,7 +43,7 @@ export default function ProfitDonut({ kpis }) {
                 <span className="w-2.5 h-2.5 rounded-[3px]" style={{ background: r.color }} />
                 {t(r.label)}
               </span>
-              <span className="font-semibold">{formatEur(r.value)}</span>
+              <span className="font-semibold">{formatMoney(r.value, currency)}</span>
             </li>
           ))}
         </ul>

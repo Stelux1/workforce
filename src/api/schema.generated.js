@@ -36,6 +36,95 @@ export const TABLE_COLUMNS = {
     "actor_role",
     "occurred_at"
   ],
+  "billing_balances": [
+    "summary_id",
+    "client_id",
+    "project_id",
+    "status",
+    "currency",
+    "calculated_amount",
+    "invoiced_amount",
+    "received_amount",
+    "outstanding",
+    "estimated_unpaid",
+    "payment_status",
+    "overdue"
+  ],
+  "billing_status_history": [
+    "id",
+    "summary_id",
+    "from_status",
+    "to_status",
+    "changed_by",
+    "changed_at",
+    "note"
+  ],
+  "billing_summaries": [
+    "id",
+    "client_id",
+    "project_id",
+    "period_start",
+    "period_end",
+    "currency",
+    "status",
+    "status_changed_by",
+    "status_changed_at",
+    "calculated_hours",
+    "calculated_amount",
+    "calculated_at",
+    "ext_invoice_reference",
+    "ext_invoice_date",
+    "ext_invoice_amount",
+    "ext_invoice_currency",
+    "ext_due_date",
+    "notes",
+    "created_date",
+    "updated_date",
+    "created_by"
+  ],
+  "billing_summary_costs": [
+    "id",
+    "summary_id",
+    "project_cost_id",
+    "created_date",
+    "created_by"
+  ],
+  "billing_summary_lines": [
+    "id",
+    "summary_id",
+    "project_id",
+    "employee_id",
+    "project_role_id",
+    "hour_type",
+    "hours",
+    "client_rate",
+    "client_coef",
+    "amount",
+    "currency"
+  ],
+  "client_money": [
+    "client_id",
+    "default_b2b_rate"
+  ],
+  "client_payments": [
+    "id",
+    "client_id",
+    "project_id",
+    "billing_summary_id",
+    "period_start",
+    "period_end",
+    "payment_date",
+    "amount",
+    "currency",
+    "reference",
+    "ext_invoice_reference",
+    "notes",
+    "recorded_by",
+    "recorded_at",
+    "voided_at",
+    "voided_by",
+    "void_reason"
+  ],
   "clients": [
     "id",
     "name",
@@ -233,7 +322,13 @@ export const TABLE_COLUMNS = {
     "reviewed_by",
     "created_date",
     "updated_date",
-    "created_by"
+    "created_by",
+    "requested_by",
+    "decided_by",
+    "decided_at",
+    "decision_reason",
+    "shortage_override",
+    "shortage_snapshot"
   ],
   "migration_report": [
     "id",
@@ -251,6 +346,11 @@ export const TABLE_COLUMNS = {
     "locked_by",
     "locked_at"
   ],
+  "notification_reads": [
+    "notification_id",
+    "user_id",
+    "read_at"
+  ],
   "notifications": [
     "id",
     "title",
@@ -261,7 +361,17 @@ export const TABLE_COLUMNS = {
     "link",
     "created_date",
     "updated_date",
-    "created_by"
+    "created_by",
+    "recipient_user_id",
+    "audience_permission",
+    "event_key",
+    "entity_table",
+    "entity_id",
+    "project_id",
+    "severity",
+    "due_date",
+    "resolved_at",
+    "payload"
   ],
   "onboarding_package_downloads": [
     "id",
@@ -280,6 +390,63 @@ export const TABLE_COLUMNS = {
     "prepared_by",
     "prepared_at",
     "notes"
+  ],
+  "payable_balances": [
+    "payable_id",
+    "total_amount",
+    "paid_amount",
+    "remaining_amount",
+    "payment_status",
+    "overdue"
+  ],
+  "payable_lines": [
+    "id",
+    "payable_id",
+    "kind",
+    "employee_id",
+    "project_id",
+    "assignment_id",
+    "hours",
+    "amount",
+    "currency",
+    "reason",
+    "created_date",
+    "created_by"
+  ],
+  "payables": [
+    "id",
+    "period_start",
+    "period_end",
+    "payee_type",
+    "employee_id",
+    "vendor_id",
+    "currency",
+    "calculated_amount",
+    "adjustments_amount",
+    "total_amount",
+    "status",
+    "due_date",
+    "confirmed_by",
+    "confirmed_at",
+    "payroll_run_id",
+    "notes",
+    "created_date",
+    "updated_date",
+    "created_by"
+  ],
+  "payments": [
+    "id",
+    "payable_id",
+    "payment_date",
+    "amount",
+    "currency",
+    "reference",
+    "description",
+    "recorded_by",
+    "recorded_at",
+    "voided_at",
+    "voided_by",
+    "void_reason"
   ],
   "payroll_params": [
     "id",
@@ -675,7 +842,8 @@ export const TABLE_COLUMNS = {
     "notes",
     "created_date",
     "updated_date",
-    "created_by"
+    "created_by",
+    "payment_terms_days"
   ],
   "work_rules": [
     "id",

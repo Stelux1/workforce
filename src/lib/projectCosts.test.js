@@ -41,10 +41,10 @@ describe("T13 — isti trošak u oba pogleda, jednom", () => {
 describe("T14 — trošak sa kategorijom i radnikom ulazi jednom u projektni profit", () => {
   it("izveštaj projekta: jedan trošak sa radnikom = jedan put oduzet", () => {
     const c = cost({ id: "w1", amount: 250, employee_id: "e1" });
-    const report = projectFinancialReport({ projectId: P1, timesheets: [], costs: uniqueCosts([c, c]), runs: [], payslips: [], payslipProjects: [] });
+    const report = projectFinancialReport({ projectId: P1, projects, timesheets: [], costs: uniqueCosts([c, c]) });
     expect(report.costs.count).toBe(1);
-    expect(report.costs.eur).toBe(250);
-    expect(report.totals.otherCosts).toBe(250);
+    expect(report.costs.byCurrency).toEqual({ EUR: 250 });
+    expect(report.summary.byCurrency.EUR.additionalCosts).toBe(250);
   });
   it("trošak radnika i dobavljača se ne vezuju zajedno", () => {
     expect(costParty({ employee_id: "e1" })).toBe("employee");
@@ -60,9 +60,9 @@ describe("T15 — Billable je samo oznaka", () => {
     const flagged = plain.map((c) => ({ ...c, billable: true }));
     expect(costTotalsByCurrency(flagged)).toEqual(costTotalsByCurrency(plain));
     expect(sumCostsEur(flagged).total).toBe(sumCostsEur(plain).total);
-    const report = (costs) => projectFinancialReport({ projectId: P1, timesheets: [], costs, runs: [], payslips: [], payslipProjects: [] });
-    expect(report(flagged).totals.revenue).toBe(0);
-    expect(report(flagged).totals.otherCosts).toBe(report(plain).totals.otherCosts);
+    const report = (costs) => projectFinancialReport({ projectId: P1, projects, timesheets: [], costs });
+    expect(report(flagged).summary.byCurrency.EUR.laborRevenue).toBe(0);
+    expect(report(flagged).summary.byCurrency).toEqual(report(plain).summary.byCurrency);
   });
   it("filter po oznaci billable samo izdvaja kandidate", () => {
     const list = [cost({ id: "a", billable: true }), cost({ id: "b" })];

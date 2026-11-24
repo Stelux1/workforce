@@ -30,6 +30,7 @@ import PayrollDashboard from '@/pages/payroll/PayrollDashboard';
 import Timesheets from '@/pages/payroll/Timesheets';
 import TimesheetDashboard from '@/pages/timesheets/TimesheetDashboard';
 import MonthlyPayroll from '@/pages/payroll/MonthlyPayroll';
+import Payables from '@/pages/payroll/Payables';
 import PayrollReports from '@/pages/payroll/PayrollReports';
 import Clients from '@/pages/payroll/Clients';
 import EmailNotifications from '@/pages/EmailNotifications';
@@ -43,7 +44,8 @@ import CompanySettings from '@/pages/CompanySettings';
 import UsersSettings from '@/pages/UsersSettings';
 import GeneralSettings from '@/pages/GeneralSettings';
 import Vendors from '@/pages/Vendors';
-import RatesPage from '@/pages/rates/RatesPage';
+import ProjectAssignmentsPage from '@/pages/assignments/ProjectAssignmentsPage';
+import WorkforcePlanningPage from '@/pages/workforce/WorkforcePlanningPage';
 
 // Korisnik koji otvori adresu stranice za koju nema pravo vidi jasnu poruku (§15, src/lib/access.js ROUTE_PERMISSIONS).
 const AdminRouteGuard = ({ children }) => {
@@ -95,12 +97,16 @@ const AuthenticatedApp = () => {
         <Route path="/timesheets" element={<Timesheets />} />
         <Route path="/timesheet-dashboard" element={<TimesheetDashboard />} />
         <Route path="/payroll/monthly" element={<MonthlyPayroll />} />
+        <Route path="/payroll/payables" element={<Payables />} />
         {/* Stari „Nedeljni obračun" je sada mesečni (Faza 3) — stari linkovi vode na novu stranicu. */}
         <Route path="/payroll/weekly" element={<Navigate to="/payroll/monthly" replace />} />
         <Route path="/payroll/reports" element={<PayrollReports />} />
         <Route path="/clients" element={<Clients />} />
         <Route path="/vendors" element={<Vendors />} />
-        <Route path="/rates" element={<RatesPage />} />
+        <Route path="/assignments" element={<ProjectAssignmentsPage />} />
+        {/* „Rates & Assignments" je postao Project Assignments; Rate History je kartica na istoj strani. */}
+        <Route path="/rates" element={<Navigate to="/assignments?tab=rates" replace />} />
+        <Route path="/workforce" element={<WorkforcePlanningPage />} />
         <Route path="/email-notifications" element={<EmailNotifications />} />
         <Route path="/settings/departments" element={<DepartmentsSettings />} />
         <Route path="/projects" element={<Projects />} />

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { ChevronLeft, ChevronRight, Check, X, Trash2, Send, Download, Eye, Clock, Pencil, Paperclip, FileText, AlertTriangle, Undo2, ListChecks } from "lucide-react";
@@ -29,6 +30,7 @@ import { assignmentWeekDays, employeesForProject } from "@/lib/projectSite";
 import { useLang } from "@/lib/LanguageContext";
 import { formatDate } from "@/lib/dateFormat";
 import { useAuth } from "@/lib/AuthContext";
+import { readListParams } from "@/lib/listLinks";
 import { totalHours as sumHours } from "@/lib/payroll/timesheet";
 import { sum2 } from "@/lib/payroll/money";
 import {
@@ -306,6 +308,12 @@ export default function Timesheets() {
   const [rejectReason, setRejectReason] = useState("");
   const [detailsTs, setDetailsTs] = useState(null);
 
+  // Filtrirana lista (Dashboard KPI vodi ovde, src/lib/listLinks.js): from/to, status, project, client, pstatus.
+  // Bez parametara ostaje pregled jedne nedelje. Sa parametrima se prikazuju cele nedelje koje preklapaju period.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const listFilter = readListParams(searchParams);
+  const listMode = ["from", "to", "status", "project", "client", "pstatus"].some((k) => listFilter[k] !== "");
+
   // Prava (T-B): ista pravila sprovodi baza (guard_timesheet, RLS, timesheet_money) — ovde samo prikaz dugmadi.
   const { can } = useAuth();
   const canEdit = can("timesheets.edit");
@@ -327,7 +335,7 @@ export default function Timesheets() {
   const dayLabelsWithDates = DAYS.map((d, i) => ({
     key: d,
     label: DAY_LABELS[i],
-    date: format(addDays(weekDate, i), "d/M"),
+    date: listMode ? "" : format(addDays(weekDate, i), "d/M"),
     weekend: i >= 5,
   }));
 
@@ -335,8 +343,19 @@ export default function Timesheets() {
 
   // Samo izabrana nedelja (ranije 1000 najnovijih redova za sve nedelje — starije nedelje su nestajale).
   const { data: timesheets = [], isLoading } = useQuery({
-    queryKey: ["timesheets", "week", format(weekDate, "yyyy-MM-dd")],
-    queryFn: () => base44.entities.Timesheet.filter({ week_start: format(weekDate, "yyyy-MM-dd") }, "-created_date"),
+    queryKey: listMode
+      ? ["timesheets", "list", listFilter.from, listFilter.to, listFilter.status]
+      : ["timesheets", "week", format(weekDate, "yyyy-MM-dd")],
+    queryFn: () => {
+      if (!listMode) return base44.entities.Timesheet.filter({ week_start: format(weekDate, "yyyy-MM-dd") }, "-created_date");
+      const weekRange = {};
+      if (listFilter.from) weekRange.$gte = format(addDays(new Date(`${listFilter.from}T00:00:00`), -6), "yyyy-MM-dd");
+      if (listFilter.to) weekRange.$lte = listFilter.to;
+      return base44.entities.Timesheet.filter({
+        ...(listFilter.status ? { approval_status: listFilter.status } : {}),
+        ...(Object.keys(weekRange).length ? { week_start: weekRange } : {}),
+      }, "-week_start");
+    },
   });
 
   const { data: employees = [] } = useQuery({
@@ -437,7 +456,20 @@ export default function Timesheets() {
     { value: "status_asc", label: L("Status A → Z", "Status A → Ž", "Stav A → Z") },
   ];
 
-  const weekTimesheets = [...timesheets.filter((t) => t.week_start === weekStartStr)].sort((a, b) => {
+  const projectOfFilter = new Map(projects.map((p) => [p.id, p]));
+  const matchesList = (t) => {
+    const start = String(t.week_start || "").slice(0, 10);
+    const end = format(addDays(new Date(`${start}T00:00:00`), 6), "yyyy-MM-dd");
+    if (listFilter.from && end < listFilter.from) return false;
+    if (listFilter.to && start > listFilter.to) return false;
+    if (listFilter.status && t.approval_status !== listFilter.status) return false;
+    const project = projectOfFilter.get(t.project_id);
+    if (listFilter.project && t.project_id !== listFilter.project) return false;
+    if (listFilter.client && project?.client_id !== listFilter.client) return false;
+    if (listFilter.pstatus && project?.status !== listFilter.pstatus) return false;
+    return true;
+  };
+  const weekTimesheets = [...timesheets.filter((t) => (listMode ? matchesList(t) : t.week_start === weekStartStr))].sort((a, b) => {
     if (sort === "name_asc") return (a.employee_name || "").localeCompare(b.employee_name || "");
     if (sort === "name_desc") return (b.employee_name || "").localeCompare(a.employee_name || "");
     if (sort === "hours_desc") return (b.total_hours || 0) - (a.total_hours || 0);
@@ -719,8 +751,29 @@ export default function Timesheets() {
         <ViewToggle view={view} onViewChange={setView} />
       </PageHeader>
 
+      {listMode && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-primary/5 px-4 py-3 text-sm" role="status">
+          <span className="font-medium">{L("Filtered list", "Filtrirana lista", "Filtrovaný zoznam")}</span>
+          {listFilter.from && listFilter.to && (
+            <Badge variant="outline">{formatDate(new Date(`${listFilter.from}T00:00:00`), "MMM d", lang)} – {formatDate(new Date(`${listFilter.to}T00:00:00`), "MMM d, yyyy", lang)}</Badge>
+          )}
+          {listFilter.status && <Badge variant="outline">{T[listFilter.status] || listFilter.status}</Badge>}
+          {listFilter.project && <Badge variant="outline">{projectOfFilter.get(listFilter.project)?.name || "—"}</Badge>}
+          {listFilter.client && <Badge variant="outline">{clients.find((c) => c.id === listFilter.client)?.name || "—"}</Badge>}
+          {listFilter.pstatus && <Badge variant="outline">{L("Project status", "Status projekta", "Stav projektu")}: {listFilter.pstatus}</Badge>}
+          {listFilter.from && (
+            <span className="text-xs text-muted-foreground">
+              {L("Whole weeks that overlap the period are shown.", "Prikazane su cele nedelje koje preklapaju period.", "Zobrazené sú celé týždne, ktoré sa prekrývajú s obdobím.")}
+            </span>
+          )}
+          <Button variant="ghost" size="sm" className="ml-auto gap-1" onClick={() => setSearchParams({}, { replace: true })}>
+            <X className="w-4 h-4" />{L("Show one week", "Prikaži jednu nedelju", "Zobraziť jeden týždeň")}
+          </Button>
+        </div>
+      )}
+
       {/* Week Navigator */}
-      <div className="flex items-center gap-3 flex-wrap">
+      {!listMode && <div className="flex items-center gap-3 flex-wrap">
         <Button variant="outline" size="icon" onClick={() => setWeekDate(subWeeks(weekDate, 1))}>
           <ChevronLeft className="w-4 h-4" />
         </Button>
@@ -732,7 +785,7 @@ export default function Timesheets() {
            {T.thisWeek}
          </Button>
         <span className="text-xs text-muted-foreground ml-1">{isoYear}W{String(isoWeek).padStart(2, "0")}</span>
-      </div>
+      </div>}
 
       {/* KPI row — iznosi samo uz pravo (T26); procena neodobrenih odvojeno (T09) */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
