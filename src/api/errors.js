@@ -306,7 +306,7 @@ const DB_MESSAGES_EN = [
   [/^Svoja prava i projekte ne možete da menjate$/, "You can't change your own permissions or projects."],
   [/^Admin ima sva prava; pojedinačna prava mu se ne menjaju$/, "An admin has all permissions; individual permissions can't be changed."],
   [/^Audit log se ne menja i ne briše$/, "The audit log can't be changed or deleted."],
-  // Kreiranje korisnika (migracija 20261125190000, D31).
+  // Kreiranje korisnika (migracija 20261125210000, D31).
   [/^Samo admin može da otvori nov nalog$/, "Only an admin can create a new account."],
   [/^Email adresa nije ispravna$/, "The email address isn't valid."],
   [/^Lozinka mora da ima bar 10 znakova$/, "The password must have at least 10 characters."],

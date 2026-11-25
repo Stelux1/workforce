@@ -1,4 +1,4 @@
--- Kreiranje korisnika iz aplikacije i sekcije view.* (D31, migracija 20261125190000_kreiranje_korisnika_sekcije.sql).
+-- Kreiranje korisnika iz aplikacije i sekcije view.* (D31, migracija 20261125210000_kreiranje_korisnika_sekcije.sql).
 -- Accept: samo aktivan admin pravi nalog; nalog je odmah aktivan sa ulogom, opsegom, projektima i sakrivenim
 -- sekcijama; lozinka radi (bcrypt); duplikat, kratka lozinka, nepoznata uloga/pravo se odbijaju; sve uloge podrazumevano
 -- vide sve sekcije. Sopstveni podaci sa oznakom QA-38; sve se vraća (rollback).

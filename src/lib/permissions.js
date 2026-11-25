@@ -39,7 +39,7 @@ export const PERMISSIONS = Object.freeze({
   TASKS_MANAGE: "tasks.manage",
   LEAVE_MANAGE: "leave.manage",
   VENDORS_MANAGE: "vendors.manage",
-  // Sekcije menija (D31, migracija 20261125190000): sve uloge ih podrazumevano imaju, admin ih skida po korisniku.
+  // Sekcije menija (D31, migracija 20261125210000): sve uloge ih podrazumevano imaju, admin ih skida po korisniku.
   VIEW_EMPLOYEES: "view.employees",
   VIEW_VENDORS: "view.vendors",
   VIEW_DOCUMENTS: "view.documents",

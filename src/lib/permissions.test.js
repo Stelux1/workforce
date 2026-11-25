@@ -27,7 +27,7 @@ describe("katalog prava (§2.1)", () => {
     expect(permissionLabel("rates.manage", "en")).toBe("Enter and change rates");
   });
 
-  it("sve uloge podrazumevano vide sve sekcije (isto kao seed u migraciji 20261125190000)", () => {
+  it("sve uloge podrazumevano vide sve sekcije (isto kao seed u migraciji 20261125210000)", () => {
     for (const codes of Object.values(ROLE_DEFAULTS)) for (const c of SECTION_PERMISSIONS) expect(codes).toContain(c);
   });
 
