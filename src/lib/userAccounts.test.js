@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   activeAdminCount, isLastActiveAdmin, needsSelfConfirm, overrideChange, permissionState, removesAdminAccess, roleDefaultsFrom,
-  userPermissions, ROLES,
+  userPermissions, ROLES, generatePassword, validateNewUser,
 } from "./userAccounts";
 
 const admin = { id: "a", role: "admin", active: true };
@@ -62,5 +62,22 @@ describe("userAccounts", () => {
     const set = userPermissions(operater, [{ user_id: "d", permission: "b", granted: false }, { user_id: "x", permission: "a", granted: false }], defaults.hr);
     expect([...set]).toEqual(["a"]);
     expect(userPermissions(admin, [], []).has("users.manage")).toBe(true);
+  });
+});
+
+describe("novi korisnik (D31)", () => {
+  it("validateNewUser: email i lozinka od bar 10 znakova", () => {
+    expect(validateNewUser({ email: "a@b.sk", password: "1234567890" })).toEqual({});
+    expect(validateNewUser({ email: " a@b.sk ", password: "1234567890" })).toEqual({});
+    expect(validateNewUser({ email: "nije-email", password: "123456789" })).toEqual({ email: true, password: true });
+    expect(validateNewUser({})).toEqual({ email: true, password: true });
+  });
+
+  it("generatePassword: dužina, dozvoljeni znakovi, prolazi validaciju", () => {
+    const pw = generatePassword();
+    expect(pw).toHaveLength(14);
+    expect(pw).toMatch(/^[A-HJ-NP-Za-km-z2-9]+$/);
+    expect(validateNewUser({ email: "a@b.sk", password: pw })).toEqual({});
+    expect(generatePassword(3, () => [0, 1, 55])).toBe("AB9");
   });
 });

@@ -3,7 +3,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { requireSupabase } from "@/api/supabase";
 import { dataError } from "@/api/errors";
-import { AlertTriangle, Info, KeyRound, ShieldCheck } from "lucide-react";
+import { AlertTriangle, Info, KeyRound, ShieldCheck, UserPlus } from "lucide-react";
+import CreateUserDialog from "@/components/users/CreateUserDialog";
 import { toast } from "sonner";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -28,7 +29,7 @@ import {
 // Podešavanja → „Korisnici" (users.manage; podrazumevano samo admin). Aktivacija, uloga (Admin, Project Manager, HR,
 // Finance), opseg projekata i pojedinačna prava (override). Baza sprovodi sva pravila (migracije 20261125010000 i
 // 20261125020000): ulogu admin daje samo admin, override nad adminom se odbija, poslednji aktivan admin ostaje.
-// Nalozi i lozinke se ne prave ovde (D14).
+// Nov nalog otvara samo admin (dugme „Novi korisnik“ → admin_create_user, D31); lozinke se posle ne menjaju ovde.
 
 const sb = () => requireSupabase();
 const run = async (promise, context) => {
@@ -44,6 +45,7 @@ export default function UsersSettings() {
   const queryClient = useQueryClient();
   const [confirm, setConfirm] = useState(null); // { profile, patch } — admin sebi oduzima pristup
   const [editing, setEditing] = useState(null); // profil za dijalog prava i projekata
+  const [creating, setCreating] = useState(false); // dijalog „Novi korisnik“ (samo admin)
 
   const allowed = can(PERMISSIONS.USERS_MANAGE);
 
@@ -128,15 +130,22 @@ export default function UsersSettings() {
           "Accounts that can sign in: activation, role, project access and individual permissions",
           "Nalozi koji mogu da se prijave: aktivacija, uloga, pristup projektima i pojedinačna prava", "Účty, ktoré sa môžu prihlásiť: aktivácia, rola, prístup k projektom a jednotlivé oprávnenia"
         )}
-      />
+      >
+        {isAdmin && (
+          <Button onClick={() => setCreating(true)} className="gap-1.5" data-testid="new-user">
+            <UserPlus className="w-4 h-4" />
+            {L("New user", "Novi korisnik", "Nový používateľ")}
+          </Button>
+        )}
+      </PageHeader>
 
       <div className="flex items-start gap-2 rounded-lg border border-primary/20 bg-primary/5 p-4 text-sm" data-testid="users-note">
         <Info className="w-4 h-4 mt-0.5 shrink-0 text-primary" />
         <div className="space-y-1">
           <p>
             {L(
-              "Accounts are not created here and passwords are not changed here. A new person's account is opened in Supabase (Authentication → Users); it waits inactive, as HR, until you activate it on this page.",
-              "Nalozi se ovde ne otvaraju i lozinke se ovde ne menjaju. Nalog za novu osobu se otvara u Supabase-u (Authentication → Users) i čeka neaktivan, kao HR, dok ga ovde ne aktivirate.", "Účty sa tu nevytvárajú a heslá sa tu nemenia. Účet novej osoby sa otvára v Supabase (Authentication → Users); čaká neaktívny, ako HR, kým ho na tejto stránke neaktivujete."
+              "Only an admin creates new users (“New user”): email, initial password, role, projects and the sections the person sees. The account is active right away. Under “Permissions” you can later hide sections or change individual actions.",
+              "Nove korisnike pravi samo admin („Novi korisnik“): email, početna lozinka, uloga, projekti i sekcije koje osoba vidi. Nalog je odmah aktivan. Pod „Prava“ kasnije možete da sakrijete sekcije ili promenite pojedinačne radnje.", "Nových používateľov vytvára iba admin („Nový používateľ“): e-mail, počiatočné heslo, rola, projekty a sekcie, ktoré osoba vidí. Účet je hneď aktívny. V časti „Oprávnenia“ môžete neskôr skryť sekcie alebo zmeniť jednotlivé akcie."
             )}
           </p>
           <p>
@@ -269,6 +278,17 @@ export default function UsersSettings() {
           onScope={(project_scope) => change.mutate({ profile: editing, patch: { project_scope } })}
           onChanged={refreshAll}
           onClose={() => setEditing(null)}
+        />
+      )}
+
+      {creating && (
+        <CreateUserDialog
+          projects={projects}
+          onClose={() => setCreating(false)}
+          onCreated={() => {
+            setCreating(false);
+            refreshAll();
+          }}
         />
       )}
 

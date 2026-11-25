@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   ALL_PERMISSIONS, PERMISSION_GROUPS, PERMISSION_LABELS, PERMISSIONS, ROLE_DEFAULTS, ROLE_LABELS, ROLES,
-  can, canAll, effectivePermissions, permissionLabel, roleLabel,
+  SECTION_PERMISSIONS, can, canAll, effectivePermissions, permissionLabel, roleLabel,
 } from "./permissions";
 
 describe("katalog prava (§2.1)", () => {
-  it("30 kodova, svi u grupama i sa nazivom na tri jezika", () => {
-    expect(ALL_PERMISSIONS).toHaveLength(30);
+  it("30 kodova + 13 sekcija (D31), svi u grupama i sa nazivom na tri jezika", () => {
+    expect(ALL_PERMISSIONS).toHaveLength(43);
+    expect(SECTION_PERMISSIONS).toHaveLength(13);
     const grouped = PERMISSION_GROUPS.flatMap((g) => g.codes);
     expect(new Set(grouped)).toEqual(new Set(ALL_PERMISSIONS));
     expect(grouped).toHaveLength(ALL_PERMISSIONS.length);
@@ -21,6 +22,10 @@ describe("katalog prava (§2.1)", () => {
     expect(roleLabel("project_manager", "rs")).toBe("Projekt menadžer");
     expect(roleLabel("nepoznata", "rs")).toBe("nepoznata");
     expect(permissionLabel("rates.manage", "en")).toBe("Enter and change rates");
+  });
+
+  it("sve uloge podrazumevano vide sve sekcije (isto kao seed u migraciji 20261125190000)", () => {
+    for (const codes of Object.values(ROLE_DEFAULTS)) for (const c of SECTION_PERMISSIONS) expect(codes).toContain(c);
   });
 
   it("podrazumevana prava koriste samo kodove iz kataloga", () => {

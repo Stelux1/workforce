@@ -34,7 +34,23 @@ export const PERMISSIONS = Object.freeze({
   USERS_MANAGE: "users.manage",
   SETTINGS_MANAGE: "settings.manage",
   AUDIT_VIEW: "audit.view",
+  // Sekcije menija (D31, migracija 20261125190000): sve uloge ih podrazumevano imaju, admin ih skida po korisniku.
+  VIEW_EMPLOYEES: "view.employees",
+  VIEW_VENDORS: "view.vendors",
+  VIEW_DOCUMENTS: "view.documents",
+  VIEW_ATTENDANCE: "view.attendance",
+  VIEW_SCHEDULE: "view.schedule",
+  VIEW_TASKS: "view.tasks",
+  VIEW_LEAVE: "view.leave",
+  VIEW_REPORTS: "view.reports",
+  VIEW_PROJECTS: "view.projects",
+  VIEW_ASSIGNMENTS: "view.assignments",
+  VIEW_WORKFORCE: "view.workforce",
+  VIEW_TIMESHEETS: "view.timesheets",
+  VIEW_CLIENTS: "view.clients",
 });
+
+export const SECTION_PERMISSIONS = Object.freeze(Object.values(PERMISSIONS).filter((c) => c.startsWith("view.")));
 
 export const ALL_PERMISSIONS = Object.freeze(Object.values(PERMISSIONS));
 
@@ -56,22 +72,25 @@ export const ROLE_DEFAULTS = Object.freeze({
   project_manager: Object.freeze([
     P.PROJECTS_MANAGE, P.ASSIGNMENTS_MANAGE, P.RATES_VIEW_B2B, P.TIMESHEETS_EDIT, P.TIMESHEETS_APPROVE,
     P.COSTS_VIEW, P.COSTS_MANAGE, P.ONBOARDING_MANAGE, P.ONBOARDING_EXPORT, P.WORKFORCE_MANAGE,
-    P.LEAVE_APPROVE, P.LEAVE_APPROVE_SHORTAGE,
+    P.LEAVE_APPROVE, P.LEAVE_APPROVE_SHORTAGE, ...SECTION_PERMISSIONS,
   ]),
   hr: Object.freeze([
     P.PROJECTS_MANAGE, P.ASSIGNMENTS_MANAGE, P.TIMESHEETS_EDIT, P.EMPLOYEES_MANAGE, P.EMPLOYEES_PRIVATE_VIEW,
     P.EMPLOYEES_PRIVATE_EDIT, P.DOCUMENTS_MANAGE, P.DOCUMENTS_VIEW_SENSITIVE, P.ONBOARDING_MANAGE,
-    P.ONBOARDING_EXPORT, P.WORKFORCE_MANAGE, P.LEAVE_APPROVE,
+    P.ONBOARDING_EXPORT, P.WORKFORCE_MANAGE, P.LEAVE_APPROVE, ...SECTION_PERMISSIONS,
   ]),
   finance: Object.freeze([
     P.RATES_VIEW_B2B, P.RATES_VIEW_B2C, P.RATES_MANAGE, P.TIMESHEETS_EDIT, P.TIMESHEETS_APPROVE,
     P.TIMESHEETS_CORRECT, P.PAYROLL_VIEW, P.PAYROLL_MANAGE, P.PAYMENTS_RECORD, P.COSTS_VIEW, P.COSTS_MANAGE,
     P.BILLING_VIEW, P.BILLING_MANAGE, P.REPORTS_FINANCIAL, P.EMPLOYEES_PRIVATE_VIEW, P.ENGAGEMENT_MANAGE,
+    ...SECTION_PERMISSIONS,
   ]),
 });
 
 // Grupe za ekran Users → Permissions (redosled i nazivi za prikaz).
 export const PERMISSION_GROUPS = Object.freeze([
+  { key: "sections", label: { en: "Visible sections", rs: "Sekcije koje vidi", sk: "Viditeľné sekcie" },
+    codes: SECTION_PERMISSIONS },
   { key: "projects", label: { en: "Projects", rs: "Projekti", sk: "Projekty" },
     codes: [P.PROJECTS_MANAGE, P.ASSIGNMENTS_MANAGE] },
   { key: "rates", label: { en: "Rates", rs: "Tarife", sk: "Sadzby" },
@@ -121,6 +140,19 @@ export const PERMISSION_LABELS = Object.freeze({
   [P.USERS_MANAGE]: { en: "Users and permissions", rs: "Korisnici i prava", sk: "Používatelia a oprávnenia" },
   [P.SETTINGS_MANAGE]: { en: "Other settings", rs: "Ostala podešavanja", sk: "Ostatné nastavenia" },
   [P.AUDIT_VIEW]: { en: "Full audit log", rs: "Pun audit log", sk: "Úplný audit log" },
+  [P.VIEW_EMPLOYEES]: { en: "Employees", rs: "Zaposleni", sk: "Zamestnanci" },
+  [P.VIEW_VENDORS]: { en: "Vendors", rs: "Dobavljači", sk: "Dodávatelia" },
+  [P.VIEW_DOCUMENTS]: { en: "Documents", rs: "Dokumenti", sk: "Dokumenty" },
+  [P.VIEW_ATTENDANCE]: { en: "Attendance", rs: "Prisustvo", sk: "Dochádzka" },
+  [P.VIEW_SCHEDULE]: { en: "Schedule", rs: "Raspored", sk: "Rozvrh" },
+  [P.VIEW_TASKS]: { en: "Tasks", rs: "Zadaci", sk: "Úlohy" },
+  [P.VIEW_LEAVE]: { en: "Leave Requests", rs: "Odsustva", sk: "Žiadosti o voľno" },
+  [P.VIEW_REPORTS]: { en: "Reports", rs: "Izveštaji", sk: "Prehľady" },
+  [P.VIEW_PROJECTS]: { en: "Project Overview", rs: "Pregled projekata", sk: "Prehľad projektov" },
+  [P.VIEW_ASSIGNMENTS]: { en: "Project Assignments", rs: "Angažmani na projektima", sk: "Pridelenia na projektoch" },
+  [P.VIEW_WORKFORCE]: { en: "Workforce Planning", rs: "Planiranje radne snage", sk: "Plánovanie pracovnej sily" },
+  [P.VIEW_TIMESHEETS]: { en: "Timesheets", rs: "Radni sati", sk: "Pracovné výkazy" },
+  [P.VIEW_CLIENTS]: { en: "Clients / Billing Overview", rs: "Klijenti / Billing Overview", sk: "Klienti / Billing Overview" },
 });
 
 const toSet = (perms) => (perms instanceof Set ? perms : new Set(Array.isArray(perms) ? perms : []));

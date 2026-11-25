@@ -11,9 +11,22 @@ export const ROUTE_PERMISSIONS = {
   "/timesheet-dashboard": [P.RATES_VIEW_B2B, P.RATES_VIEW_B2C],
   "/project-costs": P.COSTS_VIEW,
   "/rates": [P.RATES_VIEW_B2B, P.RATES_VIEW_B2C, P.RATES_MANAGE], // stara adresa → /assignments?tab=rates
-  // "/assignments": bez posebnog prava — angažmane čita svako ko vidi projekat (RLS); A2 akcije traže assignments.manage,
-  // B2B/B2C kolone rates.view_b2b / rates.view_b2c (T26).
-  // "/workforce": bez posebnog prava — plan radne snage čita svako ko vidi projekat (RLS); izmene traže workforce.manage.
+  // "/assignments" i "/workforce": podaci po projektu (RLS); A2 akcije traže assignments.manage, B2B/B2C kolone
+  // rates.view_b2b / rates.view_b2c (T26), izmene plana workforce.manage. Samu sekciju sakriva view.* ispod.
+  // Sekcije koje admin može da sakrije po korisniku (D31; podrazumevano ih vide sve uloge).
+  "/employees": P.VIEW_EMPLOYEES,
+  "/vendors": P.VIEW_VENDORS,
+  "/documents": P.VIEW_DOCUMENTS,
+  "/attendance": P.VIEW_ATTENDANCE,
+  "/schedule": P.VIEW_SCHEDULE,
+  "/tasks": P.VIEW_TASKS,
+  "/leave-requests": P.VIEW_LEAVE,
+  "/reports": P.VIEW_REPORTS,
+  "/projects": P.VIEW_PROJECTS,
+  "/assignments": P.VIEW_ASSIGNMENTS,
+  "/workforce": P.VIEW_WORKFORCE,
+  "/timesheets": P.VIEW_TIMESHEETS,
+  "/clients": P.VIEW_CLIENTS,
   "/email-notifications": P.SETTINGS_MANAGE,
   "/settings": P.SETTINGS_MANAGE,
   "/settings/users": P.USERS_MANAGE,

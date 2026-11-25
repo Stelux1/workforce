@@ -306,6 +306,16 @@ const DB_MESSAGES_EN = [
   [/^Svoja prava i projekte ne možete da menjate$/, "You can't change your own permissions or projects."],
   [/^Admin ima sva prava; pojedinačna prava mu se ne menjaju$/, "An admin has all permissions; individual permissions can't be changed."],
   [/^Audit log se ne menja i ne briše$/, "The audit log can't be changed or deleted."],
+  // Kreiranje korisnika (migracija 20261125190000, D31).
+  [/^Samo admin može da otvori nov nalog$/, "Only an admin can create a new account."],
+  [/^Email adresa nije ispravna$/, "The email address isn't valid."],
+  [/^Lozinka mora da ima bar 10 znakova$/, "The password must have at least 10 characters."],
+  [/^Nepoznata uloga: (.+)$/, "Unknown role: $1."],
+  [/^Opseg projekata mora biti „all" ili „assigned"$/, "Project access must be “all” or “assigned”."],
+  [/^Nepoznato pravo: (.+)$/, "Unknown permission: $1."],
+  [/^Admin ima sva prava; ne mogu mu se oduzeti$/, "An admin has all permissions; they can't be removed."],
+  [/^Nepoznat projekat: (.+)$/, "Unknown project: $1."],
+  [/^Nalog sa adresom (.+) već postoji$/, "An account with the address $1 already exists."],
   [/^Obračun može da se napravi samo za zaključan mesec$/, "A payroll can only be created for a locked month."],
   // Mesečni obračun (migracija 20261114200000): spisak problema ostaje na srpskom, kao u bazi.
   [/^Bez kursa EUR\/RSD nema obračuna — unesite kurs za mesec$/, "No payroll without an EUR/RSD exchange rate — enter the rate for the month."],

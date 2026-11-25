@@ -53,3 +53,18 @@ export function overrideChange(code, wanted, roleDefaults = []) {
 // Efektivna prava korisnika za prikaz (admin = sva).
 export const userPermissions = (profile, overrides = [], roleDefaults) =>
   effectivePermissions(profile?.role, overrides.filter((o) => o.user_id === profile?.id), roleDefaults);
+
+// Novi korisnik (D31): ista pravila kao admin_create_user u bazi — ispravan email, lozinka bar 10 znakova.
+export const MIN_PASSWORD_LENGTH = 10;
+export function validateNewUser({ email, password } = {}) {
+  const errors = {};
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(email || "").trim())) errors.email = true;
+  if (String(password || "").length < MIN_PASSWORD_LENGTH) errors.password = true;
+  return errors;
+}
+
+// Početna lozinka: 14 znakova bez sličnih (0/O, 1/l/I), iz crypto.getRandomValues.
+const PASSWORD_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
+export function generatePassword(length = 14, random = (n) => crypto.getRandomValues(new Uint32Array(n))) {
+  return Array.from(random(length), (x) => PASSWORD_CHARS[x % PASSWORD_CHARS.length]).join("");
+}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { canAccessPath, normalizePath, requiredPermission, visibleNavItems } from "./access";
-import { ALL_PERMISSIONS, ROLE_DEFAULTS } from "./permissions";
+import { ALL_PERMISSIONS, ROLE_DEFAULTS, effectivePermissions } from "./permissions";
 
 const ADMIN = ALL_PERMISSIONS;
 const PM = ROLE_DEFAULTS.project_manager;
@@ -21,7 +21,11 @@ describe("ROUTE_PERMISSIONS / canAccessPath", () => {
     expect(requiredPermission("/project-costs")).toBe("costs.view");
     expect(requiredPermission("/settings/users")).toBe("users.manage");
     expect(requiredPermission("/settings/departments")).toBe("settings.manage");
-    expect(requiredPermission("/employees")).toBeNull();
+    expect(requiredPermission("/employees")).toBe("view.employees");
+    expect(requiredPermission("/employees/abc")).toBe("view.employees");
+    expect(requiredPermission("/timesheet-dashboard")).toEqual(["rates.view_b2b", "rates.view_b2c"]);
+    expect(requiredPermission("/")).toBeNull();
+    expect(requiredPermission("/notifications")).toBeNull();
   });
 
   it("ne može da se zaobiđe velikim slovima, kodiranjem ni kosim crtama (QA 14.11.2026)", () => {
@@ -42,9 +46,20 @@ describe("ROUTE_PERMISSIONS / canAccessPath", () => {
     expect(normalizePath("/%E0%A4%A")).toBe("/%e0%a4%a");
   });
 
-  it("bez prava (neaktivan / prazan spisak) vide se samo opšte stranice", () => {
-    expect(menu([])).not.toContain("/payroll");
-    expect(menu([])).toContain("/employees");
+  it("bez prava (neaktivan / prazan spisak) vide se samo početna i obaveštenja", () => {
+    expect(menu([])).toEqual(["/", "/notifications"]);
+  });
+
+  it("sakrivena sekcija (override view.* = false) nestaje iz menija i adresa se ne otvara (D31)", () => {
+    const perms = effectivePermissions("hr", [
+      { permission: "view.tasks", granted: false },
+      { permission: "view.projects", granted: false },
+    ]);
+    expect(menu(perms)).not.toContain("/tasks");
+    expect(menu(perms)).not.toContain("/projects");
+    expect(menu(perms)).toContain("/employees");
+    expect(canAccessPath("/projects/123", perms)).toBe(false);
+    expect(canAccessPath("/Tasks", perms)).toBe(false);
   });
 });
 
