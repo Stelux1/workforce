@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import PageHeader from "@/components/shared/PageHeader";
 import EmptyState from "@/components/shared/EmptyState";
 import ConfirmDeleteDialog from "@/components/shared/ConfirmDeleteDialog";
+import { useAuth } from "@/lib/AuthContext";
 import VendorDialog from "@/components/vendors/VendorDialog";
 import ImportVendorsDialog from "@/components/vendors/ImportVendorsDialog";
 import VendorDetail from "@/components/vendors/VendorDetail";
@@ -52,6 +53,8 @@ export default function Vendors() {
   const { lang } = useLang();
   const L = LABELS[lang] || LABELS.en;
   const T = useT();
+  const { can } = useAuth();
+  const canManage = can("vendors.manage") || can("engagement.manage");
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -130,13 +133,15 @@ export default function Vendors() {
       <PageHeader
         title={L.title}
         subtitle={L.subtitle}
-        actionLabel={L.add}
+        actionLabel={canManage ? L.add : undefined}
         onAction={() => { setForm({ status: "active", default_currency: "EUR", payroll_cycle: "monthly" }); setDialogOpen(true); }}
       >
-        <Button variant="outline" className="gap-2" onClick={() => setImportOpen(true)}>
-          <Upload className="w-4 h-4" />
-          {T("Import CSV")}
-        </Button>
+        {canManage && (
+          <Button variant="outline" className="gap-2" onClick={() => setImportOpen(true)}>
+            <Upload className="w-4 h-4" />
+            {T("Import CSV")}
+          </Button>
+        )}
       </PageHeader>
 
       <div className="relative max-w-md">
@@ -150,7 +155,7 @@ export default function Vendors() {
         <EmptyState
           icon={Handshake}
           title={L.empty}
-          actionLabel={L.add}
+          actionLabel={canManage ? L.add : undefined}
           onAction={() => { setForm({ status: "active", default_currency: "EUR" }); setDialogOpen(true); }}
         />
       ) : (
@@ -214,14 +219,16 @@ export default function Vendors() {
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-1 justify-end" onClick={(e) => e.stopPropagation()}>
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setForm(vendor); setDialogOpen(true); }}>
-                          <Edit className="w-3.5 h-3.5" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setDeleteId(vendor.id)}>
-                          <Trash2 className="w-3.5 h-3.5 text-destructive" />
-                        </Button>
-                      </div>
+                      {canManage && (
+                        <div className="flex items-center gap-1 justify-end" onClick={(e) => e.stopPropagation()}>
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setForm(vendor); setDialogOpen(true); }}>
+                            <Edit className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setDeleteId(vendor.id)}>
+                            <Trash2 className="w-3.5 h-3.5 text-destructive" />
+                          </Button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -245,7 +252,7 @@ export default function Vendors() {
         vendor={detailVendor}
         open={!!detailVendor}
         onOpenChange={(o) => { if (!o) setDetailId(null); }}
-        onEdit={() => { setForm(detailVendor); setDialogOpen(true); }}
+        onEdit={canManage ? () => { setForm(detailVendor); setDialogOpen(true); } : undefined}
         lang={lang}
       />
 

@@ -86,6 +86,7 @@ export default function LeaveRequests() {
   const { can, loading: permsLoading } = useMyPermissions(useAuth());
   const staff = useStaffDirectory();
   const canDecide = can("leave.approve");
+  const canManage = can("leave.manage");
   const canApproveShortage = can("leave.approve_shortage");
   const canAssign = can("workforce.manage");
   const canViewB2C = can("rates.view_b2c");
@@ -149,7 +150,7 @@ export default function LeaveRequests() {
       <PageHeader
         title={pageTitle("Leave Requests", lang)}
         subtitle={t("Manage time-off requests")}
-        actionLabel={t("New Request")}
+        actionLabel={canManage ? t("New Request") : undefined}
         onAction={() => setDialogOpen(true)}
       >
         <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -170,7 +171,7 @@ export default function LeaveRequests() {
       ) : requestsQ.error ? (
         <ErrorNote error={requestsQ.error} />
       ) : filtered.length === 0 ? (
-        <EmptyState icon={Calendar} title={t("No leave requests")} actionLabel={t("New Request")} onAction={() => setDialogOpen(true)} />
+        <EmptyState icon={Calendar} title={t("No leave requests")} actionLabel={canManage ? t("New Request") : undefined} onAction={() => setDialogOpen(true)} />
       ) : (
         <div className="space-y-2">
           {filtered.map((req) => {
@@ -237,7 +238,7 @@ export default function LeaveRequests() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      {canManage && <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle>{t("New Leave Request")}</DialogTitle></DialogHeader>
           <div className="space-y-4">
@@ -287,7 +288,7 @@ export default function LeaveRequests() {
             <Button onClick={handleSave} disabled={createMutation.isPending}>{t("Submit")}</Button>
           </DialogFooter>
         </DialogContent>
-      </Dialog>
+      </Dialog>}
     </div>
   );
 }

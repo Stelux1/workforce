@@ -128,6 +128,7 @@ export default function ProjectDetail() {
             <p className="text-muted-foreground text-sm mt-0.5">{project.client_name}</p>
           )}
         </div>
+        {can("projects.manage") && (
         <div className="flex gap-2">
            <Button variant="outline" size="sm" onClick={() => setShowEdit(true)}>
              <Edit className="w-4 h-4" />
@@ -154,7 +155,8 @@ export default function ProjectDetail() {
                </AlertDialogFooter>
              </AlertDialogContent>
            </AlertDialog>
-         </div>
+        </div>
+        )}
       </div>
 
       {/* Info cards */}

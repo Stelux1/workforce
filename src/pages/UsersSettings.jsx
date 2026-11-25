@@ -10,7 +10,6 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -21,9 +20,11 @@ import { useL } from "@/lib/translations";
 import { useLang } from "@/lib/LanguageContext";
 import { useAuth } from "@/lib/AuthContext";
 import { formatDate, longDatePattern } from "@/lib/dateFormat";
-import { PERMISSION_GROUPS, PERMISSIONS, permissionLabel, roleLabel } from "@/lib/permissions";
+import { PERMISSIONS, roleLabel } from "@/lib/permissions";
+import PermissionMatrix from "@/components/users/PermissionMatrix";
+import { Input } from "@/components/ui/input";
 import {
-  ROLES, isLastActiveAdmin, needsSelfConfirm, overrideChange, permissionState, roleDefaultsFrom,
+  ROLES, isLastActiveAdmin, needsSelfConfirm, roleDefaultsFrom, userPermissions,
 } from "@/lib/userAccounts";
 
 // Podešavanja → „Korisnici" (users.manage; podrazumevano samo admin). Aktivacija, uloga (Admin, Project Manager, HR,
@@ -284,6 +285,7 @@ export default function UsersSettings() {
       {creating && (
         <CreateUserDialog
           projects={projects}
+          roleDefaults={roleDefaults}
           onClose={() => setCreating(false)}
           onCreated={() => {
             setCreating(false);
@@ -331,24 +333,26 @@ function AccessDialog({ profile, roleDefaults, overrides, assigned, projects, pr
   const { lang } = useLang();
   const [pending, setPending] = useState(null); // kod prava ili id projekta koji se upisuje
 
-  const togglePermission = useMutation({
-    mutationFn: async ({ code, wanted }) => {
-      const ch = overrideChange(code, wanted, roleDefaults);
-      if (ch.action === "delete") {
-        await run(sb().from("user_permission_overrides").delete().eq("user_id", profile.id).eq("permission", code), "UserPermissionOverride.delete");
-      } else {
-        await run(
-          sb().from("user_permission_overrides").upsert({ user_id: profile.id, permission: code, granted: ch.granted }, { onConflict: "user_id,permission" }),
-          "UserPermissionOverride.upsert"
-        );
-      }
+  // Matrica prava: lokalno stanje, snima se odjednom (set_user_permissions → override-i u odnosu na ulogu).
+  const effective = useMemo(() => [...userPermissions(profile, overrides, roleDefaults)].sort(), [profile, overrides, roleDefaults]);
+  const [codes, setCodes] = useState(effective);
+  const dirty = codes.length !== effective.length || codes.some((c) => !effective.includes(c));
+  const savePermissions = useMutation({
+    mutationFn: async () => {
+      const { error } = await sb().rpc("set_user_permissions", { p_user: profile.id, p_codes: codes });
+      if (error) throw dataError(error, "set_user_permissions");
     },
-    onMutate: ({ code }) => setPending(code),
+    onSuccess: () => toast.success(L("Permissions saved", "Prava su sačuvana", "Oprávnenia boli uložené")),
     onError: (e) => toast.error(e.message),
-    onSettled: () => {
-      setPending(null);
-      onChanged();
-    },
+    onSettled: onChanged,
+  });
+
+  const [name, setName] = useState(profile.full_name || "");
+  const saveName = useMutation({
+    mutationFn: () => base44.entities.Profile.update(profile.id, { full_name: name.trim() }),
+    onSuccess: () => toast.success(L("Name saved", "Ime je sačuvano", "Meno bolo uložené")),
+    onError: (e) => toast.error(e.message),
+    onSettled: onChanged,
   });
 
   const toggleProject = useMutation({
@@ -371,17 +375,28 @@ function AccessDialog({ profile, roleDefaults, overrides, assigned, projects, pr
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{profile.full_name || profile.email}</DialogTitle>
           <DialogDescription>
             {L(
-              `Role: ${roleLabel(profile.role, "en")}. Switches show the final permission; a change from the role default is marked “changed”.`,
-              `Uloga: ${roleLabel(profile.role, "rs")}. Prekidači pokazuju konačno pravo; razlika u odnosu na ulogu je označena „izmenjeno".`,
-              `Rola: ${roleLabel(profile.role, "sk")}. Prepínače ukazujú výsledné oprávnenie; zmena oproti role je označená „zmenené".`
+              `Role: ${roleLabel(profile.role, "en")}. Boxes show the final permissions; a dot marks a change from the role.`,
+              `Uloga: ${roleLabel(profile.role, "rs")}. Polja pokazuju konačna prava; tačka označava razliku u odnosu na ulogu.`,
+              `Rola: ${roleLabel(profile.role, "sk")}. Polia ukazujú výsledné oprávnenia; bodka označuje zmenu oproti role.`
             )}
           </DialogDescription>
         </DialogHeader>
+
+        <section className="space-y-2" data-testid="user-name">
+          <h3 className="text-sm font-semibold">{L("Name", "Ime i prezime", "Meno a priezvisko")}</h3>
+          <div className="flex gap-2">
+            <Input value={name} onChange={(e) => setName(e.target.value)} className="h-9 max-w-sm" aria-label={L("Name", "Ime i prezime", "Meno a priezvisko")} />
+            <Button variant="outline" size="sm" className="h-9" disabled={!name.trim() || name.trim() === (profile.full_name || "") || saveName.isPending}
+              onClick={() => saveName.mutate()}>
+              {L("Save name", "Sačuvaj ime", "Uložiť meno")}
+            </Button>
+          </div>
+        </section>
 
         <section className="space-y-3" data-testid="user-projects">
           <h3 className="text-sm font-semibold">{L("Project access", "Pristup projektima", "Prístup k projektom")}</h3>
@@ -421,36 +436,17 @@ function AccessDialog({ profile, roleDefaults, overrides, assigned, projects, pr
           )}
         </section>
 
-        <section className="space-y-4 pt-2" data-testid="user-permissions">
-          <h3 className="text-sm font-semibold">{L("Permissions", "Prava", "Oprávnenia")}</h3>
-          {PERMISSION_GROUPS.map((g) => (
-            <div key={g.key} className="space-y-1">
-              <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{g.label[lang] || g.label.en}</div>
-              {g.codes.map((code) => {
-                const st = permissionState(code, roleDefaults, overrides);
-                return (
-                  <div key={code} className="flex items-center justify-between gap-3 rounded px-2 py-1.5 hover:bg-muted/40">
-                    <div className="min-w-0">
-                      <div className="text-sm">{permissionLabel(code, lang)}</div>
-                      <div className="text-xs text-muted-foreground">
-                        <code>{code}</code>
-                        {st.override !== null && (
-                          <Badge variant="outline" className="ml-2 h-5 border-primary/30 text-primary">{L("changed", "izmenjeno", "zmenené")}</Badge>
-                        )}
-                      </div>
-                    </div>
-                    <Switch
-                      checked={st.effective}
-                      disabled={pending === code}
-                      onCheckedChange={(wanted) => togglePermission.mutate({ code, wanted })}
-                      aria-label={permissionLabel(code, lang)}
-                      data-testid={`perm-${code}`}
-                    />
-                  </div>
-                );
-              })}
-            </div>
-          ))}
+        <section className="space-y-3 pt-2" data-testid="user-permissions">
+          <h3 className="text-sm font-semibold">{L("What the user sees and can do", "Šta korisnik vidi i šta sme da radi", "Čo používateľ vidí a čo smie robiť")}</h3>
+          <PermissionMatrix value={codes} onChange={setCodes} roleDefaults={roleDefaults} lang={lang} disabled={savePermissions.isPending} />
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" disabled={!dirty || savePermissions.isPending} onClick={() => setCodes(effective)}>
+              {L("Discard changes", "Poništi izmene", "Zahodiť zmeny")}
+            </Button>
+            <Button disabled={!dirty || savePermissions.isPending} onClick={() => savePermissions.mutate()} data-testid="save-permissions">
+              {L("Save permissions", "Sačuvaj prava", "Uložiť oprávnenia")}
+            </Button>
+          </div>
         </section>
       </DialogContent>
     </Dialog>

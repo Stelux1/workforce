@@ -34,6 +34,11 @@ export const PERMISSIONS = Object.freeze({
   USERS_MANAGE: "users.manage",
   SETTINGS_MANAGE: "settings.manage",
   AUDIT_VIEW: "audit.view",
+  // Izmena oblasti koje su ranije menjali svi (D31): prisustvo, zadaci, odsustva; dobavljači (ranije employees.manage).
+  ATTENDANCE_MANAGE: "attendance.manage",
+  TASKS_MANAGE: "tasks.manage",
+  LEAVE_MANAGE: "leave.manage",
+  VENDORS_MANAGE: "vendors.manage",
   // Sekcije menija (D31, migracija 20261125190000): sve uloge ih podrazumevano imaju, admin ih skida po korisniku.
   VIEW_EMPLOYEES: "view.employees",
   VIEW_VENDORS: "view.vendors",
@@ -68,46 +73,115 @@ export const PROJECT_SCOPES = Object.freeze(["all", "assigned"]);
 // Podrazumevana prava po ulozi — isto kao seed `role_permissions` (migracija 20261125010000, §2.1).
 // Admin nije ovde: ima sva prava u bazi (has_permission), bez obzira na role_permissions i override.
 const P = PERMISSIONS;
+const STAFF_EDIT = [P.ATTENDANCE_MANAGE, P.TASKS_MANAGE, P.LEAVE_MANAGE]; // kao is_staff ranije — sve uloge
 export const ROLE_DEFAULTS = Object.freeze({
   project_manager: Object.freeze([
     P.PROJECTS_MANAGE, P.ASSIGNMENTS_MANAGE, P.RATES_VIEW_B2B, P.TIMESHEETS_EDIT, P.TIMESHEETS_APPROVE,
     P.COSTS_VIEW, P.COSTS_MANAGE, P.ONBOARDING_MANAGE, P.ONBOARDING_EXPORT, P.WORKFORCE_MANAGE,
-    P.LEAVE_APPROVE, P.LEAVE_APPROVE_SHORTAGE, ...SECTION_PERMISSIONS,
+    P.LEAVE_APPROVE, P.LEAVE_APPROVE_SHORTAGE, ...SECTION_PERMISSIONS, ...STAFF_EDIT,
   ]),
   hr: Object.freeze([
     P.PROJECTS_MANAGE, P.ASSIGNMENTS_MANAGE, P.TIMESHEETS_EDIT, P.EMPLOYEES_MANAGE, P.EMPLOYEES_PRIVATE_VIEW,
     P.EMPLOYEES_PRIVATE_EDIT, P.DOCUMENTS_MANAGE, P.DOCUMENTS_VIEW_SENSITIVE, P.ONBOARDING_MANAGE,
-    P.ONBOARDING_EXPORT, P.WORKFORCE_MANAGE, P.LEAVE_APPROVE, ...SECTION_PERMISSIONS,
+    P.ONBOARDING_EXPORT, P.WORKFORCE_MANAGE, P.LEAVE_APPROVE, ...SECTION_PERMISSIONS, ...STAFF_EDIT, P.VENDORS_MANAGE,
   ]),
   finance: Object.freeze([
     P.RATES_VIEW_B2B, P.RATES_VIEW_B2C, P.RATES_MANAGE, P.TIMESHEETS_EDIT, P.TIMESHEETS_APPROVE,
     P.TIMESHEETS_CORRECT, P.PAYROLL_VIEW, P.PAYROLL_MANAGE, P.PAYMENTS_RECORD, P.COSTS_VIEW, P.COSTS_MANAGE,
     P.BILLING_VIEW, P.BILLING_MANAGE, P.REPORTS_FINANCIAL, P.EMPLOYEES_PRIVATE_VIEW, P.ENGAGEMENT_MANAGE,
-    ...SECTION_PERMISSIONS,
+    ...SECTION_PERMISSIONS, ...STAFF_EDIT,
   ]),
 });
 
-// Grupe za ekran Users → Permissions (redosled i nazivi za prikaz).
-export const PERMISSION_GROUPS = Object.freeze([
-  { key: "sections", label: { en: "Visible sections", rs: "Sekcije koje vidi", sk: "Viditeľné sekcie" },
-    codes: SECTION_PERMISSIONS },
-  { key: "projects", label: { en: "Projects", rs: "Projekti", sk: "Projekty" },
-    codes: [P.PROJECTS_MANAGE, P.ASSIGNMENTS_MANAGE] },
-  { key: "rates", label: { en: "Rates", rs: "Tarife", sk: "Sadzby" },
-    codes: [P.RATES_VIEW_B2B, P.RATES_VIEW_B2C, P.RATES_MANAGE] },
-  { key: "timesheets", label: { en: "Timesheets", rs: "Satnice", sk: "Pracovné výkazy" },
-    codes: [P.TIMESHEETS_EDIT, P.TIMESHEETS_APPROVE, P.TIMESHEETS_CORRECT] },
-  { key: "finance", label: { en: "Payroll & finance", rs: "Obračun i finansije", sk: "Mzdy a financie" },
-    codes: [P.PAYROLL_VIEW, P.PAYROLL_MANAGE, P.PAYMENTS_RECORD, P.COSTS_VIEW, P.COSTS_MANAGE, P.BILLING_VIEW,
-      P.BILLING_MANAGE, P.REPORTS_FINANCIAL] },
-  { key: "people", label: { en: "Employees & documents", rs: "Radnici i dokumenta", sk: "Zamestnanci a dokumenty" },
-    codes: [P.EMPLOYEES_MANAGE, P.EMPLOYEES_PRIVATE_VIEW, P.EMPLOYEES_PRIVATE_EDIT, P.ENGAGEMENT_MANAGE,
-      P.DOCUMENTS_MANAGE, P.DOCUMENTS_VIEW_SENSITIVE, P.ONBOARDING_MANAGE, P.ONBOARDING_EXPORT] },
-  { key: "workforce", label: { en: "Workforce & leave", rs: "Radna snaga i odsustva", sk: "Pracovná sila a voľno" },
-    codes: [P.WORKFORCE_MANAGE, P.LEAVE_APPROVE, P.LEAVE_APPROVE_SHORTAGE] },
-  { key: "admin", label: { en: "Administration", rs: "Administracija", sk: "Administrácia" },
-    codes: [P.USERS_MANAGE, P.SETTINGS_MANAGE, P.AUDIT_VIEW] },
+// Matrica prava za ekran Korisnici (D31, kao u Blitzkriegu): oblast × Vidi / Menja / Odobrava / Dodatno.
+// Svaki kod iz kataloga je tačno u jednoj ćeliji (test). null = ta radnja za oblast ne postoji.
+const lbl = (en, rs, sk) => ({ en, rs, sk });
+export const MATRIX_COLUMNS = Object.freeze([
+  { key: "view", label: lbl("View", "Vidi", "Vidí") },
+  { key: "edit", label: lbl("Add & edit", "Dodaje i menja", "Pridáva a mení") },
+  { key: "approve", label: lbl("Approve", "Odobrava", "Schvaľuje") },
+  { key: "extra", label: lbl("Extra", "Dodatno", "Navyše") },
 ]);
+const area = (key, label, view, edit, approve = null, extra = []) =>
+  Object.freeze({ key, label, view, edit, approve, extra: Object.freeze(extra) });
+const x = (code, label) => Object.freeze({ code, label });
+export const PERMISSION_MATRIX = Object.freeze([
+  { key: "staff", label: lbl("Staff Management", "Kadrovi", "Správa personálu"), areas: [
+    area("employees", lbl("Employees", "Zaposleni", "Zamestnanci"), P.VIEW_EMPLOYEES, P.EMPLOYEES_MANAGE),
+    area("private", lbl("Personal data (ID, passport, bank)", "Lični podaci (JMBG, pasoš, banka)", "Osobné údaje (ID, pas, banka)"),
+      P.EMPLOYEES_PRIVATE_VIEW, P.EMPLOYEES_PRIVATE_EDIT),
+    area("engagement", lbl("Engagement history (payee)", "Istorija angažovanja (primalac isplate)", "História pracovných vzťahov"),
+      null, P.ENGAGEMENT_MANAGE),
+    area("vendors", lbl("Vendors", "Dobavljači", "Dodávatelia"), P.VIEW_VENDORS, P.VENDORS_MANAGE),
+    area("documents", lbl("Documents", "Dokumenti", "Dokumenty"), P.VIEW_DOCUMENTS, P.DOCUMENTS_MANAGE, null,
+      [x(P.DOCUMENTS_VIEW_SENSITIVE, lbl("Sensitive files", "Osetljivi fajlovi", "Citlivé súbory"))]),
+    area("onboarding", lbl("Onboarding packages", "Onboarding paketi", "Onboarding balíky"), null, P.ONBOARDING_MANAGE, null,
+      [x(P.ONBOARDING_EXPORT, lbl("Download ZIP", "Preuzimanje ZIP-a", "Stiahnutie ZIP"))]),
+    area("attendance", lbl("Attendance", "Prisustvo", "Dochádzka"), P.VIEW_ATTENDANCE, P.ATTENDANCE_MANAGE),
+    area("schedule", lbl("Schedule (changes follow Workforce Planning)", "Raspored (izmene prate Planiranje)", "Rozvrh (zmeny podľa plánovania)"),
+      P.VIEW_SCHEDULE, null),
+    area("tasks", lbl("Tasks", "Zadaci", "Úlohy"), P.VIEW_TASKS, P.TASKS_MANAGE),
+    area("leave", lbl("Leave Requests", "Odsustva", "Žiadosti o voľno"), P.VIEW_LEAVE, P.LEAVE_MANAGE, P.LEAVE_APPROVE,
+      [x(P.LEAVE_APPROVE_SHORTAGE, lbl("Approve despite shortage", "Odobrava uprkos manjku", "Schváli aj pri nedostatku"))]),
+    area("reports", lbl("Reports", "Izveštaji", "Prehľady"), P.VIEW_REPORTS, null),
+  ] },
+  { key: "projects", label: lbl("Projects", "Projekti", "Projekty"), areas: [
+    area("projects", lbl("Projects and job roles", "Projekti i pozicije", "Projekty a pozície"), P.VIEW_PROJECTS, P.PROJECTS_MANAGE),
+    area("assignments", lbl("Project Assignments", "Angažmani na projektima", "Pridelenia na projektoch"), P.VIEW_ASSIGNMENTS, P.ASSIGNMENTS_MANAGE),
+    area("workforce", lbl("Workforce Planning (shifts, schedule, replacements)", "Planiranje radne snage (smene, raspored, zamene)", "Plánovanie pracovnej sily"),
+      P.VIEW_WORKFORCE, P.WORKFORCE_MANAGE),
+    area("costs", lbl("Project Costs", "Troškovi projekata", "Náklady projektov"), P.COSTS_VIEW, P.COSTS_MANAGE),
+  ] },
+  { key: "finance", label: lbl("Payroll & finance", "Obračun i finansije", "Mzdy a financie"), areas: [
+    area("timesheets", lbl("Timesheets", "Radni sati", "Pracovné výkazy"), P.VIEW_TIMESHEETS, P.TIMESHEETS_EDIT, P.TIMESHEETS_APPROVE,
+      [x(P.TIMESHEETS_CORRECT, lbl("Correct approved (with reason)", "Korekcija odobrenih (uz razlog)", "Oprava schválených"))]),
+    area("rates", lbl("Rates", "Tarife", "Sadzby"), P.RATES_VIEW_B2B, P.RATES_MANAGE, null,
+      [x(P.RATES_VIEW_B2C, lbl("B2C: labour cost and worker pay", "B2C: trošak rada i isplata radniku", "B2C: náklady práce"))]),
+    area("payroll", lbl("Payroll, payables and payments", "Obračun, obaveze i isplate", "Mzdy, záväzky a platby"), P.PAYROLL_VIEW, P.PAYROLL_MANAGE, null,
+      [x(P.PAYMENTS_RECORD, lbl("Record payments", "Unos isplata", "Zadávanie platieb"))]),
+    area("clients", lbl("Clients / Billing Overview", "Klijenti / Billing Overview", "Klienti / Billing Overview"), P.VIEW_CLIENTS, P.BILLING_MANAGE, null,
+      [x(P.BILLING_VIEW, lbl("Billing amounts and client payments", "Iznosi fakturisanja i uplate", "Sumy fakturácie a platby"))]),
+    area("financialReports", lbl("Financial reports and KPIs", "Finansijski izveštaji i KPI", "Finančné prehľady a KPI"), P.REPORTS_FINANCIAL, null),
+  ] },
+  { key: "admin", label: lbl("Administration", "Administracija", "Administrácia"), areas: [
+    area("settings", lbl("Settings", "Podešavanja", "Nastavenia"), null, P.SETTINGS_MANAGE),
+    area("users", lbl("Users and permissions", "Korisnici i prava", "Používatelia a oprávnenia"), null, P.USERS_MANAGE),
+    area("audit", lbl("Audit log", "Audit log", "Audit log"), P.AUDIT_VIEW, null),
+  ] },
+]);
+
+// Kodovi jedne kolone (za „označi celu kolonu") i svi kodovi matrice.
+export function matrixColumnCodes(column) {
+  return PERMISSION_MATRIX.flatMap((g) => g.areas.flatMap((a) =>
+    column === "extra" ? a.extra.map((e) => e.code) : a[column] ? [a[column]] : []));
+}
+export const MATRIX_CODES = Object.freeze(MATRIX_COLUMNS.flatMap((c) => matrixColumnCodes(c.key)));
+
+// Presetovi: „samo pregled svega" = kolona Vidi + B2C pregled + iznosi fakturisanja (bez izmena, odobravanja i
+// osetljivih fajlova); „sve osim administracije"; „ništa".
+export const VIEW_ONLY_CODES = Object.freeze([...matrixColumnCodes("view"), P.RATES_VIEW_B2C, P.BILLING_VIEW]);
+export const PERMISSION_PRESETS = Object.freeze([
+  { key: "role", label: lbl("As role", "Kao uloga", "Ako rola") },
+  { key: "viewAll", label: lbl("View everything", "Samo pregled svega", "Iba prezeranie všetkého") },
+  { key: "all", label: lbl("Everything except administration", "Sve osim administracije", "Všetko okrem administrácie") },
+  { key: "none", label: lbl("Nothing", "Ništa", "Nič") },
+]);
+export function presetCodes(key, roleDefaults = []) {
+  if (key === "role") return [...roleDefaults];
+  if (key === "viewAll") return [...VIEW_ONLY_CODES];
+  if (key === "all") return MATRIX_CODES.filter((c) => ![P.USERS_MANAGE, P.SETTINGS_MANAGE, P.AUDIT_VIEW].includes(c));
+  return [];
+}
+
+// Konačna prava → izmene u odnosu na ulogu (za kreiranje naloga).
+export function diffFromRole(codes, roleDefaults = []) {
+  const set = new Set(codes);
+  const def = new Set(roleDefaults);
+  return {
+    granted: [...set].filter((c) => !def.has(c)).sort(),
+    denied: [...def].filter((c) => !set.has(c)).sort(),
+  };
+}
 
 export const PERMISSION_LABELS = Object.freeze({
   [P.PROJECTS_MANAGE]: { en: "Manage projects and job roles", rs: "Projekti i Job Roles", sk: "Projekty a pracovné pozície" },
@@ -126,7 +200,7 @@ export const PERMISSION_LABELS = Object.freeze({
   [P.BILLING_VIEW]: { en: "View billing and client payments", rs: "Pregled fakturisanja i uplata klijenata", sk: "Zobrazenie fakturácie a platieb klientov" },
   [P.BILLING_MANAGE]: { en: "Manage billing, client payments and clients", rs: "Fakturisanje, uplate klijenata i klijenti", sk: "Fakturácia, platby klientov a klienti" },
   [P.REPORTS_FINANCIAL]: { en: "Financial reports and KPIs", rs: "Finansijski izveštaji i KPI", sk: "Finančné prehľady a KPI" },
-  [P.EMPLOYEES_MANAGE]: { en: "Manage employee profiles and vendors", rs: "Profil radnika i dobavljači", sk: "Profily zamestnancov a dodávatelia" },
+  [P.EMPLOYEES_MANAGE]: { en: "Manage employee profiles", rs: "Profil radnika (unos i izmena)", sk: "Profily zamestnancov" },
   [P.EMPLOYEES_PRIVATE_VIEW]: { en: "View personal data (ID, passport, bank)", rs: "Pregled ličnih podataka (JMBG, lična karta, pasoš, banka)", sk: "Zobrazenie osobných údajov (ID, pas, banka)" },
   [P.EMPLOYEES_PRIVATE_EDIT]: { en: "Edit personal data (ID, passport, bank)", rs: "Izmena ličnih podataka (JMBG, lična karta, pasoš, banka)", sk: "Úprava osobných údajov (ID, pas, banka)" },
   [P.ENGAGEMENT_MANAGE]: { en: "Manage engagement history (payee)", rs: "Istorija angažovanja (primalac isplate)", sk: "História pracovných vzťahov (príjemca platby)" },
@@ -140,6 +214,10 @@ export const PERMISSION_LABELS = Object.freeze({
   [P.USERS_MANAGE]: { en: "Users and permissions", rs: "Korisnici i prava", sk: "Používatelia a oprávnenia" },
   [P.SETTINGS_MANAGE]: { en: "Other settings", rs: "Ostala podešavanja", sk: "Ostatné nastavenia" },
   [P.AUDIT_VIEW]: { en: "Full audit log", rs: "Pun audit log", sk: "Úplný audit log" },
+  [P.ATTENDANCE_MANAGE]: { en: "Enter and change attendance", rs: "Unos i izmena prisustva", sk: "Zadávanie a zmena dochádzky" },
+  [P.TASKS_MANAGE]: { en: "Create and change tasks", rs: "Unos i izmena zadataka", sk: "Vytváranie a zmena úloh" },
+  [P.LEAVE_MANAGE]: { en: "Create and change leave requests", rs: "Unos i izmena zahteva za odsustvo", sk: "Zadávanie a zmena žiadostí o voľno" },
+  [P.VENDORS_MANAGE]: { en: "Manage vendors and vendor contracts", rs: "Dobavljači i ugovori dobavljača", sk: "Dodávatelia a zmluvy dodávateľov" },
   [P.VIEW_EMPLOYEES]: { en: "Employees", rs: "Zaposleni", sk: "Zamestnanci" },
   [P.VIEW_VENDORS]: { en: "Vendors", rs: "Dobavljači", sk: "Dodávatelia" },
   [P.VIEW_DOCUMENTS]: { en: "Documents", rs: "Dokumenti", sk: "Dokumenty" },

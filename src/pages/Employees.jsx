@@ -22,12 +22,15 @@ import { useViewPreference } from "@/hooks/useViewPreference";
 import { toast } from "sonner";
 import { useT } from "@/lib/translations";
 import { useLang } from "@/lib/LanguageContext";
+import { useAuth } from "@/lib/AuthContext";
 import ImportEmployeesDialog from "@/components/employees/ImportEmployeesDialog";
 
 export default function Employees() {
   const queryClient = useQueryClient();
   const t = useT();
   const { lang } = useLang();
+  const { can } = useAuth();
+  const canManage = can("employees.manage");
   const [search, setSearch] = useState("");
   // Dashboard vodi ovde sa ?status=active (src/lib/listLinks.js).
   const [searchParams] = useSearchParams();
@@ -128,20 +131,22 @@ export default function Employees() {
       <PageHeader
         title={t("Employees")}
         subtitle={`${employees.length} ${t("total employees")}`}
-        actionLabel={t("Add Employee")}
+        actionLabel={canManage ? t("Add Employee") : undefined}
         onAction={() => (window.location.href = "/employees/new")}
       >
-        {selected.size > 0 && (
+        {canManage && selected.size > 0 && (
           <Button variant="outline" className="gap-2 border-primary text-primary" onClick={() => setMassEditOpen(true)}>
             <Pencil className="w-3.5 h-3.5" /> {t("Edit %d selected").replace("%d", selected.size)}
           </Button>
         )}
         <ViewToggle view={view} onViewChange={setView} />
-        <Button variant="outline" className="gap-2" onClick={() => setImportOpen(true)}>
-          <Upload className="w-4 h-4" /> {t("Import CSV")}
-        </Button>
+        {canManage && (
+          <Button variant="outline" className="gap-2" onClick={() => setImportOpen(true)}>
+            <Upload className="w-4 h-4" /> {t("Import CSV")}
+          </Button>
+        )}
       </PageHeader>
-      <ImportEmployeesDialog open={importOpen} onOpenChange={setImportOpen} />
+      {canManage && <ImportEmployeesDialog open={importOpen} onOpenChange={setImportOpen} />}
 
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3">
@@ -196,7 +201,7 @@ export default function Employees() {
           icon={Users}
           title={t("No employees found")}
           description={search ? t("Try adjusting your search") : t("Add your first employee to get started")}
-          actionLabel={!search ? t("Add Employee") : undefined}
+          actionLabel={!search && canManage ? t("Add Employee") : undefined}
           onAction={() => (window.location.href = "/employees/new")}
         />
       ) : view === "grid" ? (
@@ -204,11 +209,13 @@ export default function Employees() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map((emp) => (
             <Card key={emp.id} className={`p-5 hover:shadow-lg transition-all duration-200 hover:border-primary/30 h-full group relative ${selected.has(emp.id) ? "ring-2 ring-primary border-primary" : ""}`}>
-              <div className="absolute top-3 left-3">
-                <Checkbox checked={selected.has(emp.id)} onCheckedChange={() => toggleSelect(emp.id)} />
-              </div>
+              {canManage && (
+                <div className="absolute top-3 left-3">
+                  <Checkbox checked={selected.has(emp.id)} onCheckedChange={() => toggleSelect(emp.id)} />
+                </div>
+              )}
               <Link to={`/employees/${emp.id}`} className="block">
-                <div className="flex items-start gap-4 pl-6">
+                <div className={`flex items-start gap-4 ${canManage ? "pl-6" : ""}`}>
                   {emp.profile_photo ? (
                     <img src={emp.profile_photo} alt="" className="w-14 h-14 rounded-full object-cover ring-2 ring-border" />
                   ) : (
@@ -253,9 +260,11 @@ export default function Employees() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-muted/50">
-                  <th className="px-4 py-3 w-10">
-                    <Checkbox checked={selected.size === filtered.length && filtered.length > 0} onCheckedChange={toggleSelectAll} />
-                  </th>
+                  {canManage && (
+                    <th className="px-4 py-3 w-10">
+                      <Checkbox checked={selected.size === filtered.length && filtered.length > 0} onCheckedChange={toggleSelectAll} />
+                    </th>
+                  )}
                   <th className="text-left px-4 py-3 font-medium">
                     <button onClick={() => toggleSort("name")} className="flex items-center gap-1 hover:text-primary transition-colors">{t("Employee")}<SortIcon col="name" /></button>
                   </th>
@@ -277,9 +286,11 @@ export default function Employees() {
               <tbody>
                 {filtered.map((emp) => (
                   <tr key={emp.id} className={`border-b hover:bg-muted/30 transition-colors ${selected.has(emp.id) ? "bg-primary/5" : ""}`}>
-                    <td className="px-4 py-3 w-10">
-                      <Checkbox checked={selected.has(emp.id)} onCheckedChange={() => toggleSelect(emp.id)} />
-                    </td>
+                    {canManage && (
+                      <td className="px-4 py-3 w-10">
+                        <Checkbox checked={selected.has(emp.id)} onCheckedChange={() => toggleSelect(emp.id)} />
+                      </td>
+                    )}
                     <td className="px-4 py-3">
                       <Link to={`/employees/${emp.id}`} className="flex items-center gap-3 group">
                         {emp.profile_photo ? (

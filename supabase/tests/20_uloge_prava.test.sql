@@ -53,19 +53,19 @@ insert into public.payroll_params (valid_from, tax_rate, non_taxable_rsd, min_ba
 values ('2040-01-01', 0.1, 1, 1, 2, 0.1, 0.1, 0.01, 0.1, 0.1);
 
 -- ═════════════════════════════ katalog i seed ═════════════════════════════
-select is((select count(*)::int from public.permissions), 43, 'katalog ima 30 prava (§2.1) + 13 sekcija view.* (D31)');
+select is((select count(*)::int from public.permissions), 47, 'katalog ima 30 prava (§2.1) + 13 sekcija view.* + 4 izmene (D31)');
 select is((select array_agg(code order by code) from public.roles), array['admin', 'finance', 'hr', 'project_manager'],
   'četiri uloge');
-select is((select array_agg(permission order by permission) from public.role_permissions where role = 'project_manager' and permission not like 'view.%'),
+select is((select array_agg(permission order by permission) from public.role_permissions where role = 'project_manager' and permission not like 'view.%' and permission not in ('attendance.manage', 'tasks.manage', 'leave.manage', 'vendors.manage')),
   array['assignments.manage', 'costs.manage', 'costs.view', 'leave.approve', 'leave.approve_shortage', 'onboarding.export',
         'onboarding.manage', 'projects.manage', 'rates.view_b2b', 'timesheets.approve', 'timesheets.edit', 'workforce.manage'],
   'PM: podrazumevana prava kao u §2.1 (isto kao ROLE_DEFAULTS u src/lib/permissions.js)');
-select is((select array_agg(permission order by permission) from public.role_permissions where role = 'hr' and permission not like 'view.%'),
+select is((select array_agg(permission order by permission) from public.role_permissions where role = 'hr' and permission not like 'view.%' and permission not in ('attendance.manage', 'tasks.manage', 'leave.manage', 'vendors.manage')),
   array['assignments.manage', 'documents.manage', 'documents.view_sensitive', 'employees.manage', 'employees.private.edit',
         'employees.private.view', 'leave.approve', 'onboarding.export', 'onboarding.manage', 'projects.manage',
         'timesheets.edit', 'workforce.manage'],
   'HR: podrazumevana prava kao u §2.1 (sve što je imao operater, bez novca — K1, R7)');
-select is((select array_agg(permission order by permission) from public.role_permissions where role = 'finance' and permission not like 'view.%'),
+select is((select array_agg(permission order by permission) from public.role_permissions where role = 'finance' and permission not like 'view.%' and permission not in ('attendance.manage', 'tasks.manage', 'leave.manage', 'vendors.manage')),
   array['billing.manage', 'billing.view', 'costs.manage', 'costs.view', 'employees.private.view', 'engagement.manage',
         'payments.record', 'payroll.manage', 'payroll.view', 'rates.manage', 'rates.view_b2b', 'rates.view_b2c',
         'reports.financial', 'timesheets.approve', 'timesheets.correct', 'timesheets.edit'],
@@ -83,7 +83,7 @@ select ok(not has_function_privilege('anon', 'public.has_permission(text)', 'exe
 set local role authenticated;
 set local request.jwt.claims to '{"sub":"b2011111-1111-4111-8111-111111111111","role":"authenticated"}';
 select is(public.current_app_role(), 'admin', 'admin: current_app_role');
-select is(cardinality(public.my_permissions()), 43, 'admin: my_permissions = sva prava');
+select is(cardinality(public.my_permissions()), 47, 'admin: my_permissions = sva prava');
 select ok(public.has_permission('users.manage') and public.has_permission('audit.view'), 'admin ima users.manage i audit.view');
 select ok(public.can_see_project('b20b0000-0000-4000-8000-00000000000b'), 'admin vidi svaki projekat');
 select is((select count(*)::int from public.rates where id::text like 'b20c%'), 3, 'admin R: sve tarife');
@@ -196,7 +196,7 @@ select throws_ok($$insert into public.user_project_access (user_id, project_id)
   'HR W: ne dodeljuje projekte');
 select throws_ok($$insert into public.role_permissions (role, permission) values ('hr', 'rates.view_b2c')$$, '42501', null,
   'HR W: ne menja prava uloga');
-select is((select count(*)::int from public.permissions), 43, 'HR R: katalog prava');
+select is((select count(*)::int from public.permissions), 47, 'HR R: katalog prava');
 select lives_ok($$insert into public.leave_requests (employee_id, leave_type, start_date, end_date)
   values ('b20e0000-0000-4000-8000-0000000000e1', 'vacation', '2030-03-02', '2030-03-03')$$, 'HR W: zahtev za odsustvo');
 select throws_ok($$insert into public.exchange_rates (rate_date, currency, units_per_eur) values ('2040-02-01', 'RSD', 117)$$,

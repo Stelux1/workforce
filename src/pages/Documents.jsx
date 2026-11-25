@@ -147,7 +147,7 @@ export default function Documents() {
       <PageHeader
         title={t("Documents")}
         subtitle={`${documents.length} ${t("documents")}`}
-        actionLabel={t("Upload Document")}
+        actionLabel={can("documents.manage") ? t("Upload Document") : undefined}
         onAction={() => { setForm({}); setUploadFailed(false); setDialogOpen(true); }}
       >
         {can("settings.manage") && (
@@ -182,7 +182,7 @@ export default function Documents() {
           {Array(5).fill(0).map((_, i) => <Skeleton key={i} className="h-16 rounded-xl" />)}
         </div>
       ) : filtered.length === 0 ? (
-        <EmptyState icon={FileText} title={t("No documents found")} actionLabel={t("Upload Document")} onAction={() => { setForm({}); setUploadFailed(false); setDialogOpen(true); }} />
+        <EmptyState icon={FileText} title={t("No documents found")} actionLabel={can("documents.manage") ? t("Upload Document") : undefined} onAction={() => { setForm({}); setUploadFailed(false); setDialogOpen(true); }} />
       ) : view === "grid" ? (
         /* ── GRID VIEW ── */
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -221,9 +221,11 @@ export default function Documents() {
                       </Button>
                     </a>
                   )}
-                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setDeleteDocId(doc.id)}>
-                    <Trash2 className="w-3.5 h-3.5 text-destructive" />
-                  </Button>
+                  {can("documents.manage") && (
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setDeleteDocId(doc.id)}>
+                      <Trash2 className="w-3.5 h-3.5 text-destructive" />
+                    </Button>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -278,9 +280,11 @@ export default function Documents() {
                             <Button variant="ghost" size="icon" className="h-7 w-7"><Download className="w-3.5 h-3.5" /></Button>
                           </a>
                         )}
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setDeleteDocId(doc.id)}>
-                          <Trash2 className="w-3.5 h-3.5 text-destructive" />
-                        </Button>
+                        {can("documents.manage") && (
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setDeleteDocId(doc.id)}>
+                            <Trash2 className="w-3.5 h-3.5 text-destructive" />
+                          </Button>
+                        )}
                       </div>
                     </td>
                   </tr>

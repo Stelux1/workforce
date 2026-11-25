@@ -17,11 +17,14 @@ import PageHeader from "@/components/shared/PageHeader";
 import StatusBadge from "@/components/shared/StatusBadge";
 import EmptyState from "@/components/shared/EmptyState";
 import { useT } from "@/lib/translations";
+import { useAuth } from "@/lib/AuthContext";
 
 export default function Tasks() {
   const queryClient = useQueryClient();
   const t = useT();
   const { lang } = useLang();
+  const { can } = useAuth();
+  const canManage = can("tasks.manage");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -84,7 +87,7 @@ export default function Tasks() {
       <PageHeader
         title={showArchive ? t("Archive") : t("Tasks")}
         subtitle={showArchive ? t("Completed tasks") : t("Assign and track tasks")}
-        actionLabel={showArchive ? null : t("Add Task")}
+        actionLabel={showArchive || !canManage ? null : t("Add Task")}
         onAction={() => setDialogOpen(true)}
       />
 
@@ -126,7 +129,7 @@ export default function Tasks() {
       {isLoading ? (
         <div className="space-y-3">{Array(4).fill(0).map((_, i) => <div key={i} className="h-16 rounded-xl bg-muted animate-pulse" />)}</div>
       ) : filtered.length === 0 ? (
-        <EmptyState icon={CheckSquare} title={t("No tasks found")} actionLabel={t("Add Task")} onAction={() => setDialogOpen(true)} />
+        <EmptyState icon={CheckSquare} title={t("No tasks found")} actionLabel={canManage ? t("Add Task") : undefined} onAction={() => setDialogOpen(true)} />
       ) : (
         <div className="space-y-2">
           {filtered.map((task) => (
@@ -143,6 +146,9 @@ export default function Tasks() {
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
+                  {!canManage ? (
+                    <StatusBadge status={task.status} />
+                  ) : (
                   <Select
                     value={task.status}
                     onValueChange={(v) => updateMutation.mutate({ id: task.id, data: { status: v } })}
@@ -157,6 +163,7 @@ export default function Tasks() {
                       <SelectItem value="completed">{t("Completed")}</SelectItem>
                     </SelectContent>
                   </Select>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -164,7 +171,7 @@ export default function Tasks() {
         </div>
       )}
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      {canManage && <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle>{t("Create Task")}</DialogTitle></DialogHeader>
           <div className="space-y-4">
@@ -211,7 +218,7 @@ export default function Tasks() {
             <Button onClick={handleSave} disabled={createMutation.isPending}>{t("Save")}</Button>
           </DialogFooter>
         </DialogContent>
-      </Dialog>
+      </Dialog>}
     </div>
   );
 }

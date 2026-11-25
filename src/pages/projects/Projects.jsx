@@ -12,6 +12,7 @@ import ProjectFormModal from "@/components/projects/ProjectFormModal";
 import { format } from "date-fns";
 import { useL } from "@/lib/translations";
 import { useLang } from "@/lib/LanguageContext";
+import { useAuth } from "@/lib/AuthContext";
 import { pageTitle } from "@/lib/pageTitles";
 import { projectAddress } from "@/lib/projectSite";
 import { workersByProject } from "@/lib/assignments";
@@ -30,6 +31,8 @@ const STATUS_COLORS = {
 export default function Projects() {
   const L = useL();
   const { lang } = useLang();
+  const { can } = useAuth();
+  const canManage = can("projects.manage");
   const statusLabel = (s) => (STATUS_LABELS[s] ? L(STATUS_LABELS[s].en, STATUS_LABELS[s].rs, STATUS_LABELS[s].sk) : s);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -78,10 +81,12 @@ export default function Projects() {
           <h1 className="text-2xl font-bold text-foreground">{pageTitle("Projects", lang)}</h1>
           <p className="text-muted-foreground text-sm mt-1">{L("Manage projects and employees", "Upravljanje projektima i zaposlenima", "Správa projektov a zamestnancov")}</p>
         </div>
-        <Button onClick={() => setShowForm(true)}>
-          <Plus className="w-4 h-4" />
-          {L("New project", "Novi projekat", "Nový projekt")}
-        </Button>
+        {canManage && (
+          <Button onClick={() => setShowForm(true)}>
+            <Plus className="w-4 h-4" />
+            {L("New project", "Novi projekat", "Nový projekt")}
+          </Button>
+        )}
       </div>
 
       <div className="flex items-center gap-3 mb-6">

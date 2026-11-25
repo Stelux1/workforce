@@ -100,7 +100,9 @@ export default function EmployeeDetail() {
   const { id: empId } = useParams();
   const t = useT();
   const { lang } = useLang();
-  const { isAdmin } = useAuth();
+  const { isAdmin, can } = useAuth();
+  const canManage = can("employees.manage");
+  const canDocs = can("documents.manage");
 
   const translateGender = (g) => {
     if (lang === "sk") return g === "male" ? "Muž" : g === "female" ? "Žena" : g === "other" ? "Iné" : g;
@@ -271,14 +273,16 @@ export default function EmployeeDetail() {
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" className="gap-2" onClick={() => navigate(`/employees/edit?id=${empId}`)}>
-            <Edit className="w-4 h-4" /> {t("Edit")}
-          </Button>
-          <Button variant="destructive" size="icon" onClick={() => setConfirmDeleteEmp(true)}>
-            <Trash2 className="w-4 h-4" />
-          </Button>
-        </div>
+        {canManage && (
+          <div className="flex items-center gap-2">
+            <Button variant="outline" className="gap-2" onClick={() => navigate(`/employees/edit?id=${empId}`)}>
+              <Edit className="w-4 h-4" /> {t("Edit")}
+            </Button>
+            <Button variant="destructive" size="icon" onClick={() => setConfirmDeleteEmp(true)}>
+              <Trash2 className="w-4 h-4" />
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Tabs */}
@@ -392,9 +396,11 @@ export default function EmployeeDetail() {
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base flex items-center gap-2"><FileText className="w-4 h-4" /> {t("Documents")}</CardTitle>
-                <Button size="sm" className="gap-2" onClick={() => { setDocForm({}); setDocDialogOpen(true); }}>
-                  <Plus className="w-4 h-4" /> {t("Upload Document")}
-                </Button>
+                {canDocs && (
+                  <Button size="sm" className="gap-2" onClick={() => { setDocForm({}); setDocDialogOpen(true); }}>
+                    <Plus className="w-4 h-4" /> {t("Upload Document")}
+                  </Button>
+                )}
               </div>
             </CardHeader>
             <CardContent>
@@ -423,9 +429,11 @@ export default function EmployeeDetail() {
                             <Button variant="ghost" size="icon" className="h-7 w-7"><Download className="w-3.5 h-3.5" /></Button>
                           </a>
                         )}
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setDeleteDocId(doc.id)}>
-                          <Trash2 className="w-3.5 h-3.5 text-destructive" />
-                        </Button>
+                        {canDocs && (
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setDeleteDocId(doc.id)}>
+                            <Trash2 className="w-3.5 h-3.5 text-destructive" />
+                          </Button>
+                        )}
                       </div>
                     </div>
                   ))}

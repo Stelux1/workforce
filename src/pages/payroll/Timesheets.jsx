@@ -322,6 +322,7 @@ export default function Timesheets() {
   const canCorrect = can("timesheets.correct");
   const seeB2C = can("rates.view_b2c");
   const seeB2B = can("rates.view_b2b");
+  const canSelect = canEdit || canApprovePerm;
   const perms = { canEdit, canApprove: canApprovePerm, canCorrect, seeB2C, seeB2B };
   const L = useL();
   const T = UI[lang] || UI.en;
@@ -732,17 +733,19 @@ export default function Timesheets() {
       <PageHeader
          title={pageTitle("Timesheets", lang)}
          subtitle={T.subtitle}
-         actionLabel={T.addRow}
+         actionLabel={canEdit ? T.addRow : undefined}
          onAction={() => { setDialogOpen(true); setManualProject(false); setNewRowForm({}); }}
        >
-        {selected.size > 0 && (
+        {canSelect && selected.size > 0 && (
           <>
             <Button variant="outline" className="gap-2 border-primary text-primary" onClick={() => setMassEditOpen(true)}>
                <Pencil className="w-3.5 h-3.5" /> {T.editSelected(selected.size)}
              </Button>
-             <Button variant="outline" className="gap-2 border-red-300 text-red-500" onClick={() => setConfirmMassDelete(true)}>
-               <Trash2 className="w-3.5 h-3.5" /> {T.deleteSelected(selected.size)}
-             </Button>
+             {canEdit && (
+               <Button variant="outline" className="gap-2 border-red-300 text-red-500" onClick={() => setConfirmMassDelete(true)}>
+                 <Trash2 className="w-3.5 h-3.5" /> {T.deleteSelected(selected.size)}
+               </Button>
+             )}
           </>
         )}
         <SortSelect value={sort} onValueChange={setSort} options={TS_SORT_OPTIONS} />
@@ -913,9 +916,11 @@ export default function Timesheets() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-muted/50">
-                  <th className="px-3 py-3 w-10">
-                    <Checkbox checked={selected.size === weekTimesheets.length && weekTimesheets.length > 0} onCheckedChange={toggleSelectAllTs} />
-                  </th>
+                  {canSelect && (
+                    <th className="px-3 py-3 w-10">
+                      <Checkbox checked={selected.size === weekTimesheets.length && weekTimesheets.length > 0} onCheckedChange={toggleSelectAllTs} />
+                    </th>
+                  )}
                   <th className="text-left px-3 py-3 font-medium min-w-[140px] text-xs">{T.refId}</th>
                   <th className="text-left px-3 py-3 font-medium min-w-[140px]">{T.employee}</th>
                   <th className="text-left px-3 py-3 font-medium min-w-[120px]">{T.projectClient}</th>
@@ -949,9 +954,11 @@ export default function Timesheets() {
                     const ref = ts.week_ref || makeWeekRef(weekDate, emp);
                     return (
                       <tr key={ts.id} className={`border-b hover:bg-muted/30 transition-colors ${isEditing ? "bg-blue-50/50" : ""} ${selected.has(ts.id) ? "bg-primary/5" : ""}`}>
-                        <td className="px-3 py-2 w-10">
-                          <Checkbox checked={selected.has(ts.id)} onCheckedChange={() => toggleSelectTs(ts.id)} />
-                        </td>
+                        {canSelect && (
+                          <td className="px-3 py-2 w-10">
+                            <Checkbox checked={selected.has(ts.id)} onCheckedChange={() => toggleSelectTs(ts.id)} />
+                          </td>
+                        )}
                         <td className="px-3 py-2 font-mono text-xs text-muted-foreground whitespace-nowrap">{ref}</td>
                         <td className="px-3 py-2 font-medium text-sm">
                           <div className="flex items-center gap-1.5">

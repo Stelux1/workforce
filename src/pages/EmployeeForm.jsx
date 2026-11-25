@@ -12,6 +12,7 @@ import { useT } from "@/lib/translations";
 import { useAuth } from "@/lib/AuthContext";
 import { privateFieldErrors, normalizePrivate } from "@/lib/employeePrivate";
 import { nextEmployeeId } from "@/lib/csvEmployees";
+import { PermissionDenied } from "@/components/ProtectedRoute";
 import LegacyPayrollNotice from "@/components/employees/LegacyPayrollNotice";
 import PhotoCropDialog from "@/components/employees/PhotoCropDialog";
 import {
@@ -23,7 +24,7 @@ export default function EmployeeForm() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const T = useT();
-  const { isAdmin } = useAuth();
+  const { isAdmin, can } = useAuth();
   const urlParams = new URLSearchParams(window.location.search);
   const editId = urlParams.get("id");
 
@@ -131,6 +132,8 @@ export default function EmployeeForm() {
     ] : []),
     { title: T("Emergency Contact"), icon: Heart, content: <EmergencyContactFields form={form} setForm={setForm} /> },
   ];
+
+  if (!can("employees.manage")) return <PermissionDenied />;
 
   return (
     <div className="space-y-6 max-w-4xl">

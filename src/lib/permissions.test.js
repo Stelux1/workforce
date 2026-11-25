@@ -1,16 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
-  ALL_PERMISSIONS, PERMISSION_GROUPS, PERMISSION_LABELS, PERMISSIONS, ROLE_DEFAULTS, ROLE_LABELS, ROLES,
+  ALL_PERMISSIONS, MATRIX_CODES, PERMISSION_MATRIX, VIEW_ONLY_CODES, diffFromRole, presetCodes, PERMISSION_LABELS, PERMISSIONS, ROLE_DEFAULTS, ROLE_LABELS, ROLES,
   SECTION_PERMISSIONS, can, canAll, effectivePermissions, permissionLabel, roleLabel,
 } from "./permissions";
 
 describe("katalog prava (§2.1)", () => {
-  it("30 kodova + 13 sekcija (D31), svi u grupama i sa nazivom na tri jezika", () => {
-    expect(ALL_PERMISSIONS).toHaveLength(43);
+  it("30 kodova + 13 sekcija + 4 izmene (D31); svaki kod tačno jednom u matrici, sa nazivom na tri jezika", () => {
+    expect(ALL_PERMISSIONS).toHaveLength(47);
     expect(SECTION_PERMISSIONS).toHaveLength(13);
-    const grouped = PERMISSION_GROUPS.flatMap((g) => g.codes);
-    expect(new Set(grouped)).toEqual(new Set(ALL_PERMISSIONS));
-    expect(grouped).toHaveLength(ALL_PERMISSIONS.length);
+    expect(new Set(MATRIX_CODES)).toEqual(new Set(ALL_PERMISSIONS));
+    expect(MATRIX_CODES).toHaveLength(ALL_PERMISSIONS.length);
+    for (const g of PERMISSION_MATRIX) for (const a of g.areas) {
+      expect(a.label.en && a.label.rs && a.label.sk).toBeTruthy();
+      for (const e of a.extra) expect(e.label.en && e.label.rs && e.label.sk).toBeTruthy();
+    }
     for (const code of ALL_PERMISSIONS) {
       expect(PERMISSION_LABELS[code]?.en && PERMISSION_LABELS[code]?.rs && PERMISSION_LABELS[code]?.sk).toBeTruthy();
     }
@@ -26,6 +29,25 @@ describe("katalog prava (§2.1)", () => {
 
   it("sve uloge podrazumevano vide sve sekcije (isto kao seed u migraciji 20261125190000)", () => {
     for (const codes of Object.values(ROLE_DEFAULTS)) for (const c of SECTION_PERMISSIONS) expect(codes).toContain(c);
+  });
+
+  it("presetovi: samo pregled nema nijednu izmenu ni odobravanje; „kao uloga\" vraća podrazumevana", () => {
+    const view = presetCodes("viewAll");
+    expect(view).toEqual(VIEW_ONLY_CODES);
+    for (const c of view) expect(c).not.toMatch(/manage|edit|approve|record|correct|export/);
+    expect(view).toContain("view.employees");
+    expect(view).toContain("payroll.view");
+    expect(view).toContain("rates.view_b2c");
+    expect(presetCodes("role", ROLE_DEFAULTS.hr)).toEqual([...ROLE_DEFAULTS.hr]);
+    expect(presetCodes("none")).toEqual([]);
+    const all = presetCodes("all");
+    expect(all).not.toContain("users.manage");
+    expect(all).toContain("payroll.manage");
+  });
+
+  it("diffFromRole: šta se dodaje i oduzima u odnosu na ulogu", () => {
+    expect(diffFromRole(["a", "c"], ["a", "b"])).toEqual({ granted: ["c"], denied: ["b"] });
+    expect(diffFromRole(["a"], ["a"])).toEqual({ granted: [], denied: [] });
   });
 
   it("podrazumevana prava koriste samo kodove iz kataloga", () => {

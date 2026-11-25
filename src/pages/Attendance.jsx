@@ -17,11 +17,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useT } from "@/lib/translations";
 import { useLang } from "@/lib/LanguageContext";
 import { formatDate } from "@/lib/dateFormat";
+import { useAuth } from "@/lib/AuthContext";
 
 export default function Attendance() {
   const queryClient = useQueryClient();
   const t = useT();
   const { lang } = useLang();
+  const { can } = useAuth();
+  const canManage = can("attendance.manage");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [form, setForm] = useState({ date: format(new Date(), "yyyy-MM-dd"), status: "present" });
@@ -84,7 +87,7 @@ export default function Attendance() {
       <PageHeader
         title={t("Attendance")}
         subtitle={t("Track employee working hours")}
-        actionLabel={t("Record Attendance")}
+        actionLabel={canManage ? t("Record Attendance") : undefined}
         onAction={() => setDialogOpen(true)}
       />
 
@@ -98,7 +101,7 @@ export default function Attendance() {
           {Array(5).fill(0).map((_, i) => <Skeleton key={i} className="h-16 rounded-xl" />)}
         </div>
       ) : filtered.length === 0 ? (
-        <EmptyState icon={Clock} title={t("No attendance records")} actionLabel={t("Record Attendance")} onAction={() => setDialogOpen(true)} />
+        <EmptyState icon={Clock} title={t("No attendance records")} actionLabel={canManage ? t("Record Attendance") : undefined} onAction={() => setDialogOpen(true)} />
       ) : (
         <div className="space-y-2">
           {filtered.map((rec) => (
@@ -126,7 +129,7 @@ export default function Attendance() {
         </div>
       )}
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      {canManage && <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle>{t("Record Attendance")}</DialogTitle></DialogHeader>
           <div className="space-y-4">
@@ -184,7 +187,7 @@ export default function Attendance() {
             <Button onClick={handleSave} disabled={createMutation.isPending}>{t("Save")}</Button>
           </DialogFooter>
         </DialogContent>
-      </Dialog>
+      </Dialog>}
     </div>
   );
 }

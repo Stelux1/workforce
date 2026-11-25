@@ -63,7 +63,7 @@ export default function VendorDetail({ vendor, open, onOpenChange, onEdit, lang 
   const { T: PT } = usePayablesLabels();
   const { can } = useAuth();
   const queryClient = useQueryClient();
-  const canManage = can("employees.manage") || can("engagement.manage");
+  const canManage = can("vendors.manage") || can("engagement.manage");
   const canPayables = can("payroll.view");
   const today = todayIso();
   const vendorId = vendor?.id;

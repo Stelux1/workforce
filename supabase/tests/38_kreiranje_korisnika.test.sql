@@ -4,7 +4,7 @@
 -- vide sve sekcije. Sopstveni podaci sa oznakom QA-38; sve se vraća (rollback).
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(24);
+select plan(40);
 
 insert into auth.users (id, email, instance_id, aud, role) values
   ('b3811111-1111-4111-8111-111111111111', 'qa38-admin@radnici.local', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated'),
@@ -20,7 +20,11 @@ insert into public.projects (id, name) values ('b38a0000-0000-4000-8000-00000000
 select is((select count(*)::int from public.permissions where code like 'view.%'), 13, '13 sekcija view.*');
 select is((select count(*)::int from public.role_permissions where permission like 'view.%'), 39,
   'sve tri uloge podrazumevano vide sve sekcije (ništa se ne menja za postojeće naloge)');
-select ok(not has_function_privilege('anon', 'public.admin_create_user(text, text, text, text, text, uuid[], text[])', 'execute'),
+select is((select count(*)::int from public.role_permissions where permission in ('attendance.manage', 'tasks.manage', 'leave.manage')), 9,
+  'izmena prisustva/zadataka/odsustava: sve tri uloge, kao do sada');
+select is((select array_agg(role order by role) from public.role_permissions where permission = 'vendors.manage'), array['hr'],
+  'vendors.manage ima ko je imao employees.manage (HR)');
+select ok(not has_function_privilege('anon', 'public.admin_create_user(text, text, text, text, text, uuid[], text[], text[])', 'execute'),
   'anon ne može da pozove admin_create_user');
 
 -- ═════════════════════════════ ne-admin ═════════════════════════════
@@ -93,6 +97,56 @@ set local role authenticated;
 set local request.jwt.claims to '{"sub":"b3811111-1111-4111-8111-111111111111","role":"authenticated"}';
 select lives_ok($$select public.admin_create_user('qa38-svi@radnici.local', 'lozinka12345', '', 'finance', 'all',
   array['b38a0000-0000-4000-8000-00000000000a']::uuid[])$$, 'finance sa svim projektima, bez imena');
+reset role;
+
+-- p_granted: finance dobija pravo koje uloga nema.
+set local role authenticated;
+set local request.jwt.claims to '{"sub":"b3811111-1111-4111-8111-111111111111","role":"authenticated"}';
+select lives_ok($$select public.admin_create_user('qa38-fin@radnici.local', 'lozinka12345', 'QA38 Fin', 'finance', 'all', '{}',
+  array['view.tasks'], array['documents.manage', 'view.tasks'])$$, 'finance sa dodatim pravom (p_granted)');
+reset role;
+select is((select array_agg(o.permission || ':' || o.granted order by o.permission) from public.user_permission_overrides o
+  join public.profiles p on p.id = o.user_id where p.email = 'qa38-fin@radnici.local'),
+  array['documents.manage:true', 'view.tasks:false'], 'dodato pravo = granted true; oduzeto ima prednost nad dodatim');
+
+-- set_user_permissions: „samo pregled svega" za HR korisnika qa38-hr.
+set local role authenticated;
+set local request.jwt.claims to '{"sub":"b3822222-2222-4222-8222-222222222222","role":"authenticated"}';
+select throws_ok($$select public.set_user_permissions('b3822222-2222-4222-8222-222222222222', '{}')$$, '42501', null,
+  'ne menja svoja prava (osim admina)');
+reset role;
+set local role authenticated;
+set local request.jwt.claims to '{"sub":"b3811111-1111-4111-8111-111111111111","role":"authenticated"}';
+select throws_ok($$select public.set_user_permissions('b3811111-1111-4111-8111-111111111111', '{}')$$, '42501', null,
+  'adminu se prava ne menjaju');
+select throws_ok($$select public.set_user_permissions('b3822222-2222-4222-8222-222222222222', array['view.nepostoji'])$$, '22023', null,
+  'nepoznato pravo se odbija');
+select lives_ok($$select public.set_user_permissions('b3822222-2222-4222-8222-222222222222',
+  (select array_agg(code) from public.permissions where code like 'view.%' or code like '%.view%' or code = 'reports.financial'))$$,
+  'admin snima matricu „samo pregled"');
+reset role;
+select is((select count(*)::int from public.user_permission_overrides where user_id = 'b3822222-2222-4222-8222-222222222222' and permission = 'users.manage'), 0,
+  'stari override users.manage je obrisan (matrica se snima cela)');
+
+set local role authenticated;
+set local request.jwt.claims to '{"sub":"b3822222-2222-4222-8222-222222222222","role":"authenticated"}';
+select ok(public.has_permission('view.employees') and public.has_permission('payroll.view') and not public.has_permission('employees.manage')
+  and not public.has_permission('tasks.manage'), 'samo pregled: vidi sve, ne menja ništa');
+select is((select count(*)::int from public.projects where id = 'b38a0000-0000-4000-8000-00000000000a'), 1, 'samo pregled: čita projekte');
+select throws_ok($$insert into public.tasks (title) values ('QA-38 zadatak')$$, '42501', null, 'samo pregled: ne pravi zadatak (RLS)');
+select throws_ok($$insert into public.employees (first_name, last_name, employee_id) values ('QA38', 'X', 'QA-38-1')$$, '42501', null,
+  'samo pregled: ne dodaje radnika (RLS)');
+select throws_ok($$insert into public.vendors (name) values ('QA-38 vendor')$$, '42501', null, 'samo pregled: ne dodaje dobavljača (RLS)');
+reset role;
+
+-- HR sa podrazumevanim pravima i dalje pravi zadatak i dobavljača.
+insert into auth.users (id, email, instance_id, aud, role) values
+  ('b3833333-3333-4333-8333-333333333333', 'qa38-hr2@radnici.local', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated');
+update public.profiles set role = 'hr', active = true where id = 'b3833333-3333-4333-8333-333333333333';
+set local role authenticated;
+set local request.jwt.claims to '{"sub":"b3833333-3333-4333-8333-333333333333","role":"authenticated"}';
+select lives_ok($$insert into public.tasks (title) values ('QA-38 zadatak')$$, 'HR (uloga) pravi zadatak');
+select lives_ok($$insert into public.vendors (name) values ('QA-38 vendor')$$, 'HR (uloga) dodaje dobavljača (vendors.manage)');
 reset role;
 
 select * from finish();

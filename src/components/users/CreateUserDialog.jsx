@@ -12,24 +12,32 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useL } from "@/lib/translations";
 import { useLang } from "@/lib/LanguageContext";
-import { SECTION_PERMISSIONS, permissionLabel, roleLabel } from "@/lib/permissions";
+import { ROLE_DEFAULTS, diffFromRole, roleLabel } from "@/lib/permissions";
+import PermissionMatrix from "@/components/users/PermissionMatrix";
 import { ROLES, generatePassword, validateNewUser } from "@/lib/userAccounts";
 
 // Novi korisnik (D31): otvara ga samo admin — baza (admin_create_user) to proverava i pravi nalog, profil, projekte i
-// sakrivene sekcije u jednoj transakciji. Nalog je odmah aktivan; lozinku admin predaje osobi.
-export default function CreateUserDialog({ projects = [], onCreated, onClose }) {
+// celu matricu prava (razlika u odnosu na ulogu) u jednoj transakciji. Nalog je odmah aktivan; lozinku admin predaje osobi.
+// `roleDefaults` = { uloga: [kodovi] } iz baze (role_permissions); bez njih seed ROLE_DEFAULTS.
+export default function CreateUserDialog({ projects = [], roleDefaults = {}, onCreated, onClose }) {
   const L = useL();
   const { lang } = useLang();
   const [form, setForm] = useState({ full_name: "", email: "", password: generatePassword(), role: "hr", project_scope: "all" });
   const [projectIds, setProjectIds] = useState([]);
-  const [hidden, setHidden] = useState([]); // sekcije koje korisnik NE vidi
+  const defaultsOf = (role) => roleDefaults[role] || ROLE_DEFAULTS[role] || [];
+  const [codes, setCodes] = useState(() => defaultsOf("hr")); // konačna prava korisnika
   const [showPassword, setShowPassword] = useState(true);
   const [errors, setErrors] = useState({});
   const set = (k) => (v) => setForm((f) => ({ ...f, [k]: v }));
+  const changeRole = (role) => {
+    setForm((f) => ({ ...f, role }));
+    setCodes(defaultsOf(role)); // nova uloga = polazna prava te uloge
+  };
   const isAdminRole = form.role === "admin";
 
   const create = useMutation({
     mutationFn: async () => {
+      const diff = diffFromRole(codes, defaultsOf(form.role));
       const { data, error } = await requireSupabase().rpc("admin_create_user", {
         p_email: form.email.trim(),
         p_password: form.password,
@@ -37,7 +45,8 @@ export default function CreateUserDialog({ projects = [], onCreated, onClose }) 
         p_role: form.role,
         p_project_scope: isAdminRole ? "all" : form.project_scope,
         p_project_ids: !isAdminRole && form.project_scope === "assigned" ? projectIds : [],
-        p_denied: isAdminRole ? [] : hidden,
+        p_denied: isAdminRole ? [] : diff.denied,
+        p_granted: isAdminRole ? [] : diff.granted,
       });
       if (error) {
         if (error.code === "23505") {
@@ -66,12 +75,10 @@ export default function CreateUserDialog({ projects = [], onCreated, onClose }) 
     password: L("The password must have at least 10 characters.", "Lozinka mora da ima bar 10 znakova.", "Heslo musí mať aspoň 10 znakov."),
   };
 
-  const toggleHidden = (code, visible) =>
-    setHidden((h) => (visible ? h.filter((c) => c !== code) : [...new Set([...h, code])]));
 
   return (
     <Dialog open onOpenChange={(open) => !open && !create.isPending && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="create-user-dialog">
+      <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto" data-testid="create-user-dialog">
         <DialogHeader>
           <DialogTitle>{L("New user", "Novi korisnik", "Nový používateľ")}</DialogTitle>
           <DialogDescription>
@@ -121,7 +128,7 @@ export default function CreateUserDialog({ projects = [], onCreated, onClose }) 
             </div>
             <div className="space-y-1.5">
               <Label>{L("Role", "Uloga", "Rola")}</Label>
-              <Select value={form.role} onValueChange={set("role")}>
+              <Select value={form.role} onValueChange={changeRole}>
                 <SelectTrigger aria-label={L("Role", "Uloga", "Rola")} data-testid="new-user-role"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {ROLES.map((r) => <SelectItem key={r} value={r}>{roleLabel(r, lang)}</SelectItem>)}
@@ -164,40 +171,20 @@ export default function CreateUserDialog({ projects = [], onCreated, onClose }) 
             </section>
           )}
 
-          <section className="space-y-2" data-testid="new-user-sections">
-            <div className="flex items-center justify-between gap-2">
-              <h3 className="text-sm font-semibold">{L("Sections the user sees", "Sekcije koje korisnik vidi", "Sekcie, ktoré používateľ vidí")}</h3>
-              {!isAdminRole && (
-                <div className="flex gap-1">
-                  <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setHidden([])}>
-                    {L("All", "Sve", "Všetky")}
-                  </Button>
-                  <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setHidden([...SECTION_PERMISSIONS])}>
-                    {L("None", "Nijedna", "Žiadne")}
-                  </Button>
-                </div>
-              )}
-            </div>
+          <section className="space-y-2" data-testid="new-user-permissions">
+            <h3 className="text-sm font-semibold">{L("What the user sees and can do", "Šta korisnik vidi i šta sme da radi", "Čo používateľ vidí a čo smie robiť")}</h3>
             {isAdminRole ? (
-              <p className="text-sm text-muted-foreground">{L("Admin sees everything.", "Admin vidi sve.", "Admin vidí všetko.")}</p>
+              <p className="text-sm text-muted-foreground">{L("Admin sees and can do everything.", "Admin vidi i sme sve.", "Admin vidí a smie všetko.")}</p>
             ) : (
               <>
-                <div className="grid sm:grid-cols-2 gap-1.5 rounded-lg border p-2">
-                  {SECTION_PERMISSIONS.map((code) => (
-                    <label key={code} className="flex items-center gap-2 rounded px-2 py-1.5 hover:bg-muted/50 cursor-pointer text-sm">
-                      <Checkbox checked={!hidden.includes(code)} onCheckedChange={(on) => toggleHidden(code, on === true)}
-                        data-testid={`new-user-${code}`} />
-                      <span>{permissionLabel(code, lang)}</span>
-                    </label>
-                  ))}
-                </div>
                 <p className="text-xs text-muted-foreground">
                   {L(
-                    "Money pages (payroll, rates, costs) and settings follow the role. After creating, “Permissions” in the list changes individual actions.",
-                    "Stranice sa novcem (obračun, tarife, troškovi) i podešavanja prate ulogu. Posle kreiranja, „Prava\" u listi menjaju pojedinačne radnje.",
-                    "Stránky s peniazmi (mzdy, sadzby, náklady) a nastavenia sa riadia rolou. Po vytvorení „Oprávnenia\" v zozname menia jednotlivé akcie."
+                    "The role is the starting point; change any box. “View everything” gives read-only access to all sections.",
+                    "Uloga je polazna tačka; svako polje možete da promenite. „Samo pregled svega\" daje samo čitanje svih sekcija.",
+                    "Rola je východiskový bod; každé pole môžete zmeniť. „Iba prezeranie všetkého\" dáva len čítanie všetkých sekcií."
                   )}
                 </p>
+                <PermissionMatrix value={codes} onChange={setCodes} roleDefaults={defaultsOf(form.role)} lang={lang} />
               </>
             )}
           </section>

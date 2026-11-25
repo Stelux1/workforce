@@ -315,6 +315,7 @@ const DB_MESSAGES_EN = [
   [/^Nepoznato pravo: (.+)$/, "Unknown permission: $1."],
   [/^Admin ima sva prava; ne mogu mu se oduzeti$/, "An admin has all permissions; they can't be removed."],
   [/^Nepoznat projekat: (.+)$/, "Unknown project: $1."],
+  [/^Korisnik ne postoji$/, "The user doesn't exist."],
   [/^Nalog sa adresom (.+) već postoji$/, "An account with the address $1 already exists."],
   [/^Obračun može da se napravi samo za zaključan mesec$/, "A payroll can only be created for a locked month."],
   // Mesečni obračun (migracija 20261114200000): spisak problema ostaje na srpskom, kao u bazi.
