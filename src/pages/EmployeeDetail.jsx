@@ -363,6 +363,7 @@ export default function EmployeeDetail() {
             <CardContent className="grid grid-cols-1 md:grid-cols-2">
               <div className="divide-y pr-4">
                 <InfoRow label={t("JMBG")} value={emp.jmbg} />
+                <InfoRow label={t("Foreign Personal Number")} value={emp.foreign_personal_number} />
                 <InfoRow label={t("ID Card Number")} value={emp.id_card_number} />
                 <InfoRow label={t("ID Card Expiry")} value={emp.id_card_expiry ? formatDate(parseISO(emp.id_card_expiry), longDatePattern(lang), lang) : null} />
               </div>

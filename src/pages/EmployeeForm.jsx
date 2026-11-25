@@ -13,6 +13,7 @@ import { useAuth } from "@/lib/AuthContext";
 import { privateFieldErrors, normalizePrivate } from "@/lib/employeePrivate";
 import { nextEmployeeId } from "@/lib/csvEmployees";
 import LegacyPayrollNotice from "@/components/employees/LegacyPayrollNotice";
+import PhotoCropDialog from "@/components/employees/PhotoCropDialog";
 import {
   PersonalInfoFields, ContactInfoFields, EmploymentInfoFields,
   FinancialInfoFields, PrivateInfoFields, EmergencyContactFields,
@@ -28,6 +29,7 @@ export default function EmployeeForm() {
 
   const [form, setForm] = useState({ status: "active" });
   const [uploading, setUploading] = useState(false);
+  const [cropFile, setCropFile] = useState(null); // izabrana slika čeka zoom/pomeranje pre otpremanja
 
   const { data: existing } = useQuery({
     queryKey: ["employee", editId],
@@ -68,18 +70,28 @@ export default function EmployeeForm() {
   // Kreira se posle mutacije da bi znao da li čuvanje traje (odbacivanje se tada odlaže).
   const photoUpload = useUnsavedUpload(saveMutation.isPending);
 
-  const handlePhotoUpload = async (e) => {
+  // Izbor fajla otvara podešavanje (zoom/pomeranje); otprema se tek isečena slika.
+  const handlePhotoPick = (e) => {
     const file = e.target.files?.[0];
+    e.target.value = ""; // isti fajl može ponovo da se izabere
     if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error(T("JPG, PNG. Max 5MB."));
+      return;
+    }
+    setCropFile(file);
+  };
+
+  const handlePhotoUpload = async (file) => {
     setUploading(true);
     try {
       // „Maks 5MB" sa ekrana se sada i proverava (ranije je prolazila i fotografija od 6 MB).
       const { file_url } = await base44.integrations.Core.UploadFile({ file, maxBytes: 5 * 1024 * 1024 });
       photoUpload.track(file_url); // prethodna nesačuvana fotografija se briše
       setForm((prev) => ({ ...prev, profile_photo: file_url }));
+      setCropFile(null);
     } finally {
       setUploading(false); // greška se prikazuje globalno (lib/errorToasts.js)
-      e.target.value = ""; // isti fajl može ponovo da se izabere posle greške
     }
   };
 
@@ -154,11 +166,12 @@ export default function EmployeeForm() {
                     {uploading ? T("Uploading...") : T("Upload Photo")}
                   </span>
                 </Button>
-                <input type="file" aria-label={T("Upload Photo")} accept="image/*" onChange={handlePhotoUpload} className="hidden" />
+                <input type="file" aria-label={T("Upload Photo")} accept="image/*" onChange={handlePhotoPick} className="hidden" />
               </label>
               <p className="text-xs text-muted-foreground mt-1">{T("JPG, PNG. Max 5MB.")}</p>
             </div>
           </div>
+          <PhotoCropDialog file={cropFile} busy={uploading} onCancel={() => setCropFile(null)} onConfirm={handlePhotoUpload} />
         </CardContent>
       </Card>
 

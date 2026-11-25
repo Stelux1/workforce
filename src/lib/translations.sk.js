@@ -425,6 +425,8 @@ export const SK = {
   "Employment Information": "Údaje o zamestnaní",
   "ID Documents & Payroll Basis": "Doklady a základ pre mzdy",
   "JMBG": "JMBG",
+  "Foreign Personal Number": "Zahraničné osobné číslo",
+  "OIB, rodné číslo or another country's personal number": "OIB, rodné číslo alebo osobné číslo inej krajiny",
   "JMBG must be 13 digits with a valid check digit": "JMBG musí mať 13 číslic so správnou kontrolnou číslicou",
   "ID Card Number": "Číslo občianskeho preukazu",
   "ID Card Expiry": "Platnosť občianskeho preukazu do",

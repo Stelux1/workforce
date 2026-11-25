@@ -211,6 +211,7 @@ export const TABLE_COLUMNS = {
   "employee_private": [
     "employee_id",
     "jmbg",
+    "foreign_personal_number",
     "id_card_number",
     "id_card_expiry",
     "passport_number",

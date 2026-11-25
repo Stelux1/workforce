@@ -47,6 +47,7 @@ export const EMPLOYEE_FIELDS = [
   { key: "emergency_contact_relationship", label: "Emergency Contact Relationship", aliases: ["Srodstvo", "Odnos hitnog kontakta"] },
   { key: "emergency_contact_phone", label: "Emergency Contact Phone", aliases: ["Telefon hitnog kontakta"] },
   { key: "jmbg", label: "JMBG", type: "jmbg", private: true, aliases: ["Matični broj", "JMBG broj", "Personal ID number"] },
+  { key: "foreign_personal_number", label: "Foreign Personal Number", private: true, aliases: ["Strani lični broj", "OIB", "Rodné číslo", "Rodne cislo", "Foreign ID number"] },
   { key: "id_card_number", label: "ID Card Number", private: true, aliases: ["Broj lične karte", "Lična karta", "ID card"] },
   { key: "id_card_expiry", label: "ID Card Expiry", type: "date", private: true, aliases: ["Važenje lične karte", "Lična karta važi do", "ID card expiry date"] },
   { key: "passport_number", label: "Passport Number", private: true, aliases: ["Broj pasoša", "Pasoš", "Passport"] },
@@ -67,7 +68,7 @@ export const EXAMPLE_ROW = {
   nationality: "Serbian", address: "Bulevar oslobođenja 12", city: "Novi Sad", postal_code: "21000", country: "Serbia",
   department: "", position: "", employment_type: "full_time", start_date: "01.03.2026", end_date: "", status: "active",
   emergency_contact_name: "Jelena Petrović", emergency_contact_relationship: "Supruga", emergency_contact_phone: "064 765 4321",
-  jmbg: "0101990710008", id_card_number: "", id_card_expiry: "", passport_number: "", passport_expiry: "",
+  jmbg: "0101990710008", foreign_personal_number: "", id_card_number: "", id_card_expiry: "", passport_number: "", passport_expiry: "",
   bank_name: "", iban: "", swift_bic: "", tax_number: "",
 };
 

@@ -158,6 +158,13 @@ const TRANSLATIONS = {
   "File": { rs: "Fajl" },
   "Click to upload": { rs: "Kliknite da otpremite" },
   "Uploading...": { rs: "Otpremanje..." },
+  "Adjust Photo": { rs: "Podesi fotografiju", sk: "Upraviť fotografiu" },
+  "Drag to move the photo, use the slider or mouse wheel to zoom.": { rs: "Prevucite da pomerite fotografiju, klizačem ili točkićem miša uvećajte/umanjite.", sk: "Ťahaním posuňte fotografiu, posuvníkom alebo kolieskom myši ju priblížte/oddiaľte." },
+  "Zoom": { rs: "Uvećanje", sk: "Priblíženie" },
+  "Zoom in": { rs: "Uvećaj", sk: "Priblížiť" },
+  "Zoom out": { rs: "Umanji", sk: "Oddialiť" },
+  "Reset": { rs: "Vrati", sk: "Obnoviť" },
+  "Use Photo": { rs: "Postavi fotografiju", sk: "Použiť fotografiu" },
   "Employee *": { rs: "Radnik *" },
 
   // ── Attendance ──────────────────────────────────────────
@@ -470,6 +477,8 @@ const TRANSLATIONS = {
   "Employment Information": { rs: "Informacije o zaposlenju" },
   "ID Documents & Payroll Basis": { rs: "Lični dokumenti i obračun" },
   "JMBG": { rs: "JMBG" },
+  "Foreign Personal Number": { rs: "Strani lični broj", sk: "Zahraničné osobné číslo" },
+  "OIB, rodné číslo or another country's personal number": { rs: "OIB, rodné číslo ili lični broj druge zemlje", sk: "OIB, rodné číslo alebo osobné číslo inej krajiny" },
   "JMBG must be 13 digits with a valid check digit": { rs: "JMBG mora imati 13 cifara sa ispravnom kontrolnom cifrom" },
   "ID Card Number": { rs: "Broj lične karte" },
   "ID Card Expiry": { rs: "Važenje lične karte do" },

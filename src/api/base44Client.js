@@ -368,10 +368,21 @@ function makeEntity(name, table) {
       warn("Bez prava employees.private.edit lični/platni podaci radnika se ne menjaju — preskočeno");
       return;
     }
-    const { error } = await requireSupabase()
-      .from("employee_private")
-      .upsert({ employee_id: id, ...priv }, { onConflict: "employee_id" });
+    // Ne upsert: INSERT … ON CONFLICT DO UPDATE traži SELECT na svim kolonama reda, a `salary` i tarife nemaju
+    // column grant (T26) → „permission denied for table employee_private" i za admina. Zato: izmena, pa unos ako
+    // red ne postoji (oba rade bez SELECT na zaštićenim kolonama; trigger čuva novac bez prava).
+    const sb = requireSupabase();
+    const { data: changed, error } = await sb.from("employee_private").update(priv).eq("employee_id", id).select("employee_id");
     if (error) throw toError(error, `${name}.private`);
+    if (changed?.length) return;
+    const ins = await sb.from("employee_private").insert({ employee_id: id, ...priv });
+    if (ins.error?.code === "23505") {
+      // Red je u međuvremenu nastao (dva čuvanja odjednom) — ponovi izmenu.
+      const retry = await sb.from("employee_private").update(priv).eq("employee_id", id);
+      if (retry.error) throw toError(retry.error, `${name}.private`);
+      return;
+    }
+    if (ins.error) throw toError(ins.error, `${name}.private`);
   };
 
   const getOne = async (id) => {

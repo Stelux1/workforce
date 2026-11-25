@@ -421,7 +421,16 @@ export function PrivateInfoFields({ form, setForm }) {
         />
         {jmbgBad && <p className="text-xs text-destructive">{T("JMBG must be 13 digits with a valid check digit")}</p>}
       </div>
-      <div />
+      <div className="space-y-2">
+        <Label htmlFor={`${uid}-foreign_personal_number`}>{T("Foreign Personal Number")}</Label>
+        <Input
+          id={`${uid}-foreign_personal_number`}
+          value={form.foreign_personal_number || ""}
+          placeholder={T("OIB, rodné číslo or another country's personal number")}
+          maxLength={40}
+          onChange={(e) => update("foreign_personal_number", e.target.value)}
+        />
+      </div>
       <div className="space-y-2">
         <Label htmlFor={`${uid}-id_card_number`}>{T("ID Card Number")}</Label>
         <Input id={`${uid}-id_card_number`} value={form.id_card_number || ""} onChange={(e) => update("id_card_number", e.target.value)} />
