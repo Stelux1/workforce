@@ -164,6 +164,8 @@ const TRANSLATIONS = {
   "Zoom in": { rs: "Uvećaj", sk: "Priblížiť" },
   "Zoom out": { rs: "Umanji", sk: "Oddialiť" },
   "Reset": { rs: "Vrati", sk: "Obnoviť" },
+  "The current photo could not be loaded. Upload it again.": { rs: "Trenutna fotografija nije mogla da se učita. Postavite je ponovo.", sk: "Aktuálnu fotografiu sa nepodarilo načítať. Nahrajte ju znova." },
+  "After choosing a photo you can zoom and move it.": { rs: "Posle izbora fotografiju možete uvećati i pomeriti.", sk: "Po výbere môžete fotografiu priblížiť a posunúť." },
   "Use Photo": { rs: "Postavi fotografiju", sk: "Použiť fotografiu" },
   "Employee *": { rs: "Radnik *" },
 

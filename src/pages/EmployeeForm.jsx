@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
-import { ArrowLeft, Save, Upload, User, Phone, Briefcase, Landmark, Heart, IdCard } from "lucide-react";
+import { ArrowLeft, Save, Upload, User, Crop, Phone, Briefcase, Landmark, Heart, IdCard } from "lucide-react";
 import { toast } from "sonner";
 import { useUnsavedUpload } from "@/lib/useUnsavedUpload";
 import { useT } from "@/lib/translations";
@@ -83,6 +83,23 @@ export default function EmployeeForm() {
     setCropFile(file);
   };
 
+  // Već postavljena fotografija može ponovo da se podesi (zoom/pomeranje) bez novog izbora fajla.
+  const [loadingPhoto, setLoadingPhoto] = useState(false);
+  const handleAdjustExisting = async () => {
+    if (!form.profile_photo) return;
+    setLoadingPhoto(true);
+    try {
+      const res = await fetch(form.profile_photo);
+      if (!res.ok) throw new Error(String(res.status));
+      const blob = await res.blob();
+      setCropFile(new File([blob], "photo.jpg", { type: blob.type || "image/jpeg" }));
+    } catch {
+      toast.error(T("The current photo could not be loaded. Upload it again."));
+    } finally {
+      setLoadingPhoto(false);
+    }
+  };
+
   const handlePhotoUpload = async (file) => {
     setUploading(true);
     try {
@@ -155,13 +172,17 @@ export default function EmployeeForm() {
         <CardContent className="p-6">
           <div className="flex items-center gap-6">
             {form.profile_photo ? (
-              <img src={form.profile_photo} alt="" className="w-20 h-20 rounded-full object-cover" />
+              <button type="button" onClick={handleAdjustExisting} disabled={uploading || loadingPhoto}
+                title={T("Adjust Photo")} className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                <img src={form.profile_photo} alt="" className="w-20 h-20 rounded-full object-cover" />
+              </button>
             ) : (
               <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center">
                 <User className="w-8 h-8 text-muted-foreground" />
               </div>
             )}
             <div>
+              <div className="flex flex-wrap gap-2">
               <label className="cursor-pointer">
                 <Button variant="outline" className="gap-2" disabled={uploading} asChild>
                   <span>
@@ -171,7 +192,14 @@ export default function EmployeeForm() {
                 </Button>
                 <input type="file" aria-label={T("Upload Photo")} accept="image/*" onChange={handlePhotoPick} className="hidden" />
               </label>
-              <p className="text-xs text-muted-foreground mt-1">{T("JPG, PNG. Max 5MB.")}</p>
+              {form.profile_photo && (
+                <Button type="button" variant="outline" className="gap-2" disabled={uploading || loadingPhoto} onClick={handleAdjustExisting}>
+                  <Crop className="w-4 h-4" />
+                  {T("Adjust Photo")}
+                </Button>
+              )}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">{T("JPG, PNG. Max 5MB.")} {T("After choosing a photo you can zoom and move it.")}</p>
             </div>
           </div>
           <PhotoCropDialog file={cropFile} busy={uploading} onCancel={() => setCropFile(null)} onConfirm={handlePhotoUpload} />
